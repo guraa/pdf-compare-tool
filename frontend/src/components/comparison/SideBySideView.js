@@ -37,7 +37,9 @@ const SideBySideView = ({ comparisonId, result }) => {
       
       try {
         setLoading(true);
+        setError(null);
         
+        // Call the updated API function with proper filter formatting
         const details = await getComparisonDetails(
           comparisonId, 
           state.selectedPage,
@@ -48,7 +50,14 @@ const SideBySideView = ({ comparisonId, result }) => {
         setLoading(false);
       } catch (err) {
         console.error('Error fetching page details:', err);
-        setError('Failed to load page comparison details.');
+        
+        // Handle "still processing" error differently from other errors
+        if (err.message === "Comparison still processing") {
+          setError('Comparison details are still being processed. Please wait a moment...');
+        } else {
+          setError('Failed to load page comparison details: ' + (err.message || 'Unknown error'));
+        }
+        
         setLoading(false);
       }
     };
@@ -157,7 +166,23 @@ const SideBySideView = ({ comparisonId, result }) => {
         </div>
         <h3>Error Loading Page Comparison</h3>
         <p>{error}</p>
-        <button onClick={() => window.location.reload()}>Retry</button>
+        <button onClick={() => {
+          setError(null);
+          setLoading(true);
+          // Try again after a short delay
+          setTimeout(() => {
+            getComparisonDetails(comparisonId, state.selectedPage, state.filters)
+              .then(details => {
+                setPageDetails(details);
+                setLoading(false);
+              })
+              .catch(err => {
+                console.error('Error retrying page details:', err);
+                setError('Failed to load page comparison details after retry. Please try again later.');
+                setLoading(false);
+              });
+          }, 1000);
+        }}>Retry</button>
       </div>
     );
   }

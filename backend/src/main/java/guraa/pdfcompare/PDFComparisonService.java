@@ -73,6 +73,9 @@ public class PDFComparisonService {
         // Generate comparison ID
         String comparisonId = UUID.randomUUID().toString();
 
+        // Add explicit logging to verify the ID
+        logger.info("Generated new comparison ID: {}", comparisonId);
+
         // Start async comparison process
         startAsyncComparison(comparisonId, baseFilePath, compareFilePath);
 
@@ -105,13 +108,13 @@ public class PDFComparisonService {
                 // Perform comparison with batching for large documents
                 PDFComparisonResult result = compareDocumentsInBatches(engine, baseDocument, compareDocument);
 
-                // Store result with expiration metadata
+                // Store result with expiration metadata - ensure this line executes correctly
                 comparisonResults.put(comparisonId, new ComparisonResultData(result));
+                logger.info("Comparison {} completed and stored successfully with {} differences",
+                        comparisonId, result.getTotalDifferences());
 
                 // Clean up expired results
                 cleanupExpiredResults();
-
-                logger.info("Completed async comparison {}", comparisonId);
             } catch (Exception e) {
                 logger.error("Error in async comparison {}: {}", comparisonId, e.getMessage(), e);
             }
@@ -263,6 +266,12 @@ public class PDFComparisonService {
      * @return Comparison result, or null if not found
      */
     public PDFComparisonResult getComparisonResult(String comparisonId) {
+        // Add logging to debug
+        logger.info("Retrieving comparison result for ID: {}", comparisonId);
+
+        // Dump all keys to help debug
+        logger.debug("Available comparison IDs: {}", comparisonResults.keySet());
+
         ComparisonResultData resultData = comparisonResults.get(comparisonId);
         if (resultData != null) {
             // Check if result is expired
@@ -271,8 +280,12 @@ public class PDFComparisonService {
                 logger.info("Removed expired comparison result: {}", comparisonId);
                 return null;
             }
+
+            logger.info("Found comparison result for ID: {}", comparisonId);
             return resultData.getResult();
         }
+
+        logger.warn("Comparison result not found for ID: {}", comparisonId);
         return null;
     }
 

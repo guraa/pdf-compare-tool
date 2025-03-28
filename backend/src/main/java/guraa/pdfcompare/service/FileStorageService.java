@@ -78,6 +78,7 @@ public class FileStorageService {
         return files[0].getAbsolutePath();
     }
 
+
     /**
      * Get file by ID
      * @param fileId The file ID
@@ -120,6 +121,11 @@ public class FileStorageService {
             ImageIO.write(image, "png", output);
 
             return new ByteArrayResource(output.toByteArray());
+        } catch (Exception e) {
+            throw new IOException("Error rendering PDF page: " + e.getMessage(), e);
         }
     }
+
+
+
 }

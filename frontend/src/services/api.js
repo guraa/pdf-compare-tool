@@ -95,28 +95,77 @@ export const compareDocuments = async (baseFileId, compareFileId, options = {}) 
 };
 
 export const getComparisonResult = async (comparisonId) => {
-  // Use a longer timeout for this specific request as it might take time
-  const response = await api.get(`/pdfs/comparison/${comparisonId}`, {
-    timeout: 60000 // 60 seconds timeout for comparison results
-  });
-  return response.data;
+  try {
+    // Use a longer timeout for this specific request as it might take time
+    const response = await api.get(`/pdfs/comparison/${comparisonId}`, {
+      timeout: 60000, // 60 seconds timeout for comparison results
+      validateStatus: function (status) {
+        // Accept 202 Accepted as a valid response (still processing)
+        return (status >= 200 && status < 300) || status === 202;
+      }
+    });
+    
+    // If status is 202, throw a "still processing" error that the retry logic can handle
+    if (response.status === 202) {
+      throw new Error("Comparison still processing");
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching comparison result:", error);
+    throw error;
+  }
 };
 
 export const getComparisonDetails = async (comparisonId, page, filters = {}) => {
-  const response = await api.get(`/pdfs/comparison/${comparisonId}/page/${page}`, {
-    params: filters
+  // Convert filter objects to simple string parameters
+  const params = {};
+  
+  // Handle filter parameters properly
+  if (filters.differenceTypes && filters.differenceTypes.length > 0) {
+    params.types = filters.differenceTypes.join(',');
+  }
+  
+  if (filters.minSeverity) {
+    params.severity = filters.minSeverity;
+  }
+  
+  if (filters.searchTerm) {
+    params.search = filters.searchTerm;
+  }
+  
+  const response = await api.get(`/pdfs/comparison/${comparisonId}/page/${page}`, { 
+    params,
+    validateStatus: function (status) {
+      // Accept 202 Accepted as a valid response (still processing)
+      return (status >= 200 && status < 300) || status === 202;
+    }
   });
+  
+  // If status is 202, throw a "still processing" error that the retry logic can handle
+  if (response.status === 202) {
+    throw new Error("Comparison still processing");
+  }
+  
   return response.data;
 };
 
 // Document retrieval functions
 export const getDocumentPage = async (fileId, page, options = {}) => {
-  const response = await api.get(`/pdfs/document/${fileId}/page/${page}`, {
-    params: options,
-    responseType: 'blob'
-  });
-  return response.data;
-};
+    try {
+      const response = await api.get(`/pdfs/document/${fileId}/page/${page}`, {
+        params: options,
+        responseType: 'blob',
+        headers: {
+          'Accept': 'image/png'  // Explicitly request PNG format
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching page ${page} of document ${fileId}:`, error);
+      throw error;
+    }
+  };
 
 // Report generation functions
 export const generateReport = async (comparisonId, format = 'pdf', options = {}) => {

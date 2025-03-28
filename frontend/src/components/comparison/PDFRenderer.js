@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePreferences } from '../../context/PreferencesContext';
-import { getDocumentPage } from '../../services/api';
-import Spinner from '../common/Spinner';
 import './PDFRenderer.css';
 
 // Import pdfjsLib if using in browser
@@ -25,10 +23,12 @@ const PDFRenderer = ({
   const [rendered, setRendered] = useState(false);
   const [renderError, setRenderError] = useState(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [isImage, setIsImage] = useState(false);
   
   const { preferences } = usePreferences();
   const canvasRef = useRef(null);
   const highlightLayerRef = useRef(null);
+  const imageRef = useRef(null);
   
   // Fetch PDF page data
   useEffect(() => {
@@ -37,16 +37,25 @@ const PDFRenderer = ({
       
       try {
         // Get the PDF page as a blob
-        const pageBlob = await getDocumentPage(fileId, page);
+        const response = await fetch(`/api/pdfs/document/${fileId}/page/${page}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch page: ${response.status} ${response.statusText}`);
+        }
+        
+        const contentType = response.headers.get('content-type');
+        const isImageType = contentType && contentType.startsWith('image/');
+        setIsImage(isImageType);
         
         // Create a URL for the blob
-        const pageUrl = URL.createObjectURL(pageBlob);
+        const blob = await response.blob();
+        const pageUrl = URL.createObjectURL(blob);
         
         setPdfData(pageUrl);
         setRenderError(null);
       } catch (err) {
         console.error('Error fetching PDF page:', err);
-        setRenderError('Failed to load PDF page');
+        setRenderError('Failed to load page: ' + err.message);
       }
     };
     
@@ -60,16 +69,45 @@ const PDFRenderer = ({
     };
   }, [fileId, page]);
   
+  // Handle image rendering
+  useEffect(() => {
+    if (isImage && pdfData && imageRef.current) {
+      const image = imageRef.current;
+      image.onload = () => {
+        setDimensions({
+          width: image.naturalWidth * zoom,
+          height: image.naturalHeight * zoom
+        });
+        setRendered(true);
+        setRenderError(null);
+      };
+      
+      image.onerror = (err) => {
+        console.error('Error loading image:', err);
+        setRenderError('Failed to load image');
+        setRendered(false);
+      };
+      
+      image.src = pdfData;
+    }
+  }, [pdfData, isImage, zoom]);
+  
   // Render PDF page to canvas
   useEffect(() => {
     const renderPdf = async () => {
-      if (!pdfData || !canvasRef.current) return;
+      if (!pdfData || !canvasRef.current || isImage) return;
       
       try {
         setRendered(false);
         
         // Load the PDF document
-        const pdfDoc = await pdfjsLib.getDocument(pdfData).promise;
+        const loadingTask = pdfjsLib.getDocument({
+          url: pdfData,
+          cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/cmaps/',
+          cMapPacked: true,
+        });
+        
+        const pdfDoc = await loadingTask.promise;
         
         // Get the specified page
         const pdfPage = await pdfDoc.getPage(1); // Always get first page since we're loading individual pages
@@ -106,7 +144,7 @@ const PDFRenderer = ({
     };
     
     renderPdf();
-  }, [pdfData, zoom]);
+  }, [pdfData, zoom, isImage]);
   
   // Draw difference highlights
   useEffect(() => {
@@ -236,15 +274,28 @@ const PDFRenderer = ({
       
       {loading && (
         <div className="renderer-loading">
-          <Spinner size="medium" />
+          <div className="spinner"></div>
         </div>
       )}
       
       <div className="canvas-container" style={{ opacity: rendered ? 1 : 0.3 }}>
-        <canvas 
-          ref={canvasRef} 
-          className="pdf-canvas"
-        />
+        {isImage ? (
+          <img 
+            ref={imageRef}
+            className="pdf-image"
+            alt="PDF page"
+            style={{ 
+              width: dimensions.width, 
+              height: dimensions.height,
+              display: rendered ? 'block' : 'none'
+            }}
+          />
+        ) : (
+          <canvas 
+            ref={canvasRef} 
+            className="pdf-canvas"
+          />
+        )}
         
         <canvas 
           ref={highlightLayerRef}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import { getComparisonResult, generateReport, downloadBlob } from '../../services/api';
 import SummaryPanel from './SummaryPanel';
@@ -23,15 +23,33 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
   const [exportLoading, setExportLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [maxRetries] = useState(5);
+  
+  // Use refs to prevent infinite loops
+  const retryCountRef = useRef(retryCount);
+  const timerRef = useRef(null);
+  
+  // Update ref when state changes
+  useEffect(() => {
+    retryCountRef.current = retryCount;
+  }, [retryCount]);
 
-  // Memoized fetchResults function with retry logic
-  const fetchResults = useCallback(async () => {
+  // Cleanup any pending timers when component unmounts
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
+  // Main fetch function - no useCallback to avoid dependency issues
+  const fetchResults = async () => {
     if (!comparisonId) return;
     
     try {
       setLoading(true);
       
-      console.log(`Fetching comparison results for ID: ${comparisonId} (Attempt ${retryCount + 1}/${maxRetries})`);
+      console.log(`Fetching comparison results for ID: ${comparisonId} (Attempt ${retryCountRef.current + 1}/${maxRetries})`);
       
       const result = await getComparisonResult(comparisonId);
       
@@ -43,26 +61,30 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
     } catch (err) {
       console.error('Error fetching comparison results:', err);
       
-      if (retryCount < maxRetries - 1) {
+      if (retryCountRef.current < maxRetries - 1) {
         // Increase the delay with each retry (exponential backoff)
-        const delay = Math.min(2000 * Math.pow(1.5, retryCount), 15000);
+        const delay = Math.min(2000 * Math.pow(1.5, retryCountRef.current), 15000);
         console.log(`Retrying in ${Math.round(delay/1000)} seconds...`);
         
         setError(`Comparison result not available yet. Retrying in ${Math.round(delay/1000)} seconds...`);
         setLoading(false);
         
-        // Increment retry count and set up next retry
-        setRetryCount(prevCount => prevCount + 1);
+        // Clear any existing timer
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+        }
         
-        setTimeout(() => {
-          fetchResults();
+        // Set up next retry using the ref
+        timerRef.current = setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          fetchResults(); // Call directly instead of relying on effect
         }, delay);
       } else {
         setError('Failed to load comparison results after multiple attempts. The comparison may still be processing or has failed.');
         setLoading(false);
       }
     }
-  }, [comparisonId, retryCount, maxRetries, setComparisonResult, setLoading, setError]);
+  };
 
   // Effect to fetch results when component mounts or comparison ID changes
   useEffect(() => {
@@ -72,10 +94,22 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
       setError(null);
       setComparisonResult(null);
       
+      // Clear any existing timer
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+      
       // Start fetching
       fetchResults();
     }
-  }, [comparisonId, fetchResults, setError, setComparisonResult]);
+    
+    // Cleanup function
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [comparisonId]); // Only depend on comparisonId
 
   const handleExport = async () => {
     try {
