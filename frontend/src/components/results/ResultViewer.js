@@ -265,13 +265,19 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
           />
         )}
         
+
         {activeTab === 'sideBySide' && (
+            {result.mode === 'smart' ? (
+                <SmartComparisonContainer 
+                  comparisonId={comparisonId}
+                />
+            ) : (
           <SideBySideView 
             comparisonId={comparisonId}
             result={state.comparisonResult}
           />
         )}
-        
+    )}
         {activeTab === 'differences' && (
           <DifferenceList 
             result={state.comparisonResult}

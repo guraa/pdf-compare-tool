@@ -17,18 +17,22 @@ const PDFRenderer = ({
   differences = [],
   selectedDifference = null,
   onDifferenceSelect,
-  loading = false
+  loading = false,
+  interactive = true,
+  opacity = 1
 }) => {
   const [pdfData, setPdfData] = useState(null);
   const [rendered, setRendered] = useState(false);
   const [renderError, setRenderError] = useState(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [isImage, setIsImage] = useState(false);
+  const [hoveredDiffId, setHoveredDiffId] = useState(null);
   
   const { preferences } = usePreferences();
   const canvasRef = useRef(null);
   const highlightLayerRef = useRef(null);
   const imageRef = useRef(null);
+  const tooltipRef = useRef(null);
   
   // Fetch PDF page data
   useEffect(() => {
@@ -170,49 +174,54 @@ const PDFRenderer = ({
       }
       
       // Get highlight color based on difference type
-      const color = getHighlightColor(diff.type);
+      const color = getHighlightColor(diff.type, diff.changeType);
       
       // Check if this is the selected difference
       const isSelected = selectedDifference && 
         selectedDifference.id === diff.id;
       
+      // Check if this is being hovered
+      const isHovered = hoveredDiffId === diff.id;
+      
       // Draw the highlight
-      drawHighlight(ctx, diff, color, isSelected);
+      drawHighlight(ctx, diff, color, isSelected, isHovered);
     });
-  }, [differences, highlightMode, rendered, dimensions, selectedDifference]);
+  }, [differences, highlightMode, rendered, dimensions, selectedDifference, hoveredDiffId, preferences.differenceColors]);
   
-  // Get color for highlight based on difference type
-  const getHighlightColor = (type) => {
-    // Use colors from preferences if available
-    if (preferences.differenceColors && preferences.differenceColors[type]) {
-      return preferences.differenceColors[type];
-    }
+  // Update tooltip position when hovering over a difference
+  useEffect(() => {
+    if (!tooltipRef.current || !hoveredDiffId) return;
     
-    // Default colors if preferences not available
-    switch (type) {
-      case 'text':
-        return 'rgba(255, 0, 0, 0.3)';
-      case 'image':
-        return 'rgba(0, 0, 255, 0.3)';
-      case 'font':
-        return 'rgba(0, 128, 0, 0.3)';
-      case 'style':
-        return 'rgba(255, 165, 0, 0.3)';
-      default:
-        return 'rgba(128, 0, 128, 0.3)';
+    const tooltip = tooltipRef.current;
+    const hoveredDiff = differences.find(d => d.id === hoveredDiffId);
+    
+    if (hoveredDiff && hoveredDiff.bounds) {
+      const { x, y, width } = hoveredDiff.bounds;
+      
+      // Position tooltip above the difference
+      tooltip.style.left = `${x + width/2}px`;
+      tooltip.style.top = `${y - 30}px`;
+      tooltip.style.display = 'block';
+    } else {
+      tooltip.style.display = 'none';
     }
-  };
+  }, [hoveredDiffId, differences]);
   
   // Draw highlight rectangle or outline
-  const drawHighlight = (ctx, diff, color, isSelected) => {
+  const drawHighlight = (ctx, diff, color, isSelected, isHovered) => {
     if (!diff.bounds) return;
     
     const { x, y, width, height } = diff.bounds;
     
     // Set highlight style
     ctx.fillStyle = color;
-    ctx.strokeStyle = isSelected ? 'rgba(255, 255, 0, 0.8)' : color.replace('0.3', '0.8');
-    ctx.lineWidth = isSelected ? 3 : 2;
+    ctx.strokeStyle = isSelected 
+      ? 'rgba(255, 255, 0, 0.8)' 
+      : isHovered 
+        ? 'rgba(255, 255, 255, 0.8)' 
+        : color.replace('0.3', '0.8');
+    
+    ctx.lineWidth = isSelected ? 3 : isHovered ? 2 : 1;
     
     // Draw the highlight
     ctx.fillRect(x, y, width, height);
@@ -220,16 +229,80 @@ const PDFRenderer = ({
     
     // If selected, add an indicator
     if (isSelected) {
-      ctx.fillStyle = 'rgba(255, 255, 0, 1)';
+      // Add a glow effect
+      ctx.shadowColor = 'rgba(255, 255, 0, 0.8)';
+      ctx.shadowBlur = 10;
       ctx.beginPath();
       ctx.arc(x + width / 2, y - 10, 5, 0, 2 * Math.PI);
       ctx.fill();
+      ctx.shadowBlur = 0;
+      
+      // Add a label if available
+      if (diff.type || diff.changeType) {
+        ctx.font = '10px Arial';
+        ctx.fillStyle = 'black';
+        ctx.textAlign = 'center';
+        const label = `${diff.type?.toUpperCase() || ''} ${diff.changeType?.toUpperCase() || ''}`;
+        ctx.fillText(label.trim(), x + width / 2, y - 15);
+      }
+    }
+    
+    // If hovered, draw an icon or indicator
+    if (isHovered && !isSelected) {
+      ctx.beginPath();
+      ctx.arc(x + width / 2, y - 5, 3, 0, 2 * Math.PI);
+      ctx.fillStyle = 'white';
+      ctx.fill();
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  };
+  
+  // Get color for highlight based on difference type and change type
+  const getHighlightColor = (type, changeType) => {
+    // Use colors from preferences if available
+    if (preferences.differenceColors && preferences.differenceColors[type]) {
+      let baseColor = preferences.differenceColors[type];
+      
+      // Modify alpha based on change type
+      switch(changeType) {
+        case 'added':
+          return baseColor.replace(')', ', 0.5)').replace('rgb', 'rgba');
+        case 'deleted':
+          return baseColor.replace(')', ', 0.5)').replace('rgb', 'rgba');
+        case 'modified':
+          return baseColor.replace(')', ', 0.5)').replace('rgb', 'rgba');
+        default:
+          return baseColor.replace(')', ', 0.3)').replace('rgb', 'rgba');
+      }
+    }
+    
+ switch (type) {
+      case 'text':
+        return changeType === 'added' ? 'rgba(76, 175, 80, 0.3)' : 
+               changeType === 'deleted' ? 'rgba(244, 67, 54, 0.3)' : 
+               'rgba(255, 152, 0, 0.3)';
+      case 'image':
+        return changeType === 'added' ? 'rgba(33, 150, 243, 0.3)' : 
+               changeType === 'deleted' ? 'rgba(244, 67, 54, 0.3)' : 
+               'rgba(33, 150, 243, 0.3)';
+      case 'font':
+        return changeType === 'added' ? 'rgba(156, 39, 176, 0.3)' : 
+               changeType === 'deleted' ? 'rgba(244, 67, 54, 0.3)' : 
+               'rgba(156, 39, 176, 0.3)';
+      case 'style':
+        return changeType === 'added' ? 'rgba(255, 152, 0, 0.3)' : 
+               changeType === 'deleted' ? 'rgba(244, 67, 54, 0.3)' : 
+               'rgba(255, 152, 0, 0.3)';
+      default:
+        return 'rgba(128, 128, 128, 0.3)';
     }
   };
   
   // Handle click on highlight layer to select a difference
   const handleHighlightClick = (e) => {
-    if (!differences.length || !onDifferenceSelect) return;
+    if (!interactive || !differences.length || !onDifferenceSelect) return;
     
     // Get click coordinates relative to canvas
     const canvas = highlightLayerRef.current;
@@ -260,9 +333,57 @@ const PDFRenderer = ({
       }
     }
   };
+  
+  // Handle mouse movement over highlight layer
+  const handleMouseMove = (e) => {
+    if (!interactive || !differences.length) return;
+    
+    // Get mouse coordinates relative to canvas
+    const canvas = highlightLayerRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Scale coordinates to account for any CSS scaling
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const scaledX = x * scaleX;
+    const scaledY = y * scaleY;
+    
+    // Check if mouse is over any difference
+    let foundDiff = null;
+    for (const diff of differences) {
+      if (diff.bounds) {
+        const { x: diffX, y: diffY, width, height } = diff.bounds;
+        
+        if (
+          scaledX >= diffX && 
+          scaledX <= diffX + width && 
+          scaledY >= diffY && 
+          scaledY <= diffY + height
+        ) {
+          foundDiff = diff;
+          break;
+        }
+      }
+    }
+    
+    // Update hovered difference ID
+    setHoveredDiffId(foundDiff ? foundDiff.id : null);
+    
+    // Update cursor style
+    if (canvas) {
+      canvas.style.cursor = foundDiff ? 'pointer' : 'default';
+    }
+  };
+  
+  // Handle mouse leaving the highlight layer
+  const handleMouseLeave = () => {
+    setHoveredDiffId(null);
+  };
 
   return (
-    <div className="pdf-renderer">
+    <div className="pdf-renderer" style={{ opacity }}>
       {renderError && (
         <div className="render-error">
           <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -301,8 +422,28 @@ const PDFRenderer = ({
           ref={highlightLayerRef}
           className="highlight-layer"
           onClick={handleHighlightClick}
+          onMouseMove={interactive ? handleMouseMove : undefined}
+          onMouseLeave={interactive ? handleMouseLeave : undefined}
         />
+        
+        {interactive && (
+          <div 
+            ref={tooltipRef} 
+            className="diff-tooltip"
+            style={{ display: 'none' }}
+          >
+            {hoveredDiffId && 
+              differences.find(d => d.id === hoveredDiffId)?.description}
+          </div>
+        )}
       </div>
+      
+      {/* Difference count badge */}
+      {differences.length > 0 && (
+        <div className="diff-count-badge">
+          {differences.length}
+        </div>
+      )}
     </div>
   );
 };

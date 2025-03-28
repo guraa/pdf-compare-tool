@@ -108,6 +108,15 @@ const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonEr
         <p className="upload-description">
           Upload two PDF documents to identify and analyze differences between them.
         </p>
+        <div className="upload-option">
+  <input 
+    type="checkbox" 
+    id="smartMatching" 
+    checked={settings.smartMatching}
+    onChange={(e) => handleSettingChange('smartMatching', e.target.checked)}
+  />
+  <label htmlFor="smartMatching">Enable Smart Document Matching (for multi-document PDFs)</label>
+</div>
         
         <div className="upload-grid">
           <div className="upload-item">

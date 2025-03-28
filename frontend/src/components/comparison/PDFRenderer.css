@@ -11,124 +11,191 @@
 .canvas-container {
   position: relative;
   display: inline-block;
-transition: opacity var(--transition-medium);
-box-shadow: var(--shadow-medium);
-margin: var(--spacing-m) 0;
+  transition: opacity var(--transition-medium);
+  box-shadow: var(--shadow-medium);
+  margin: var(--spacing-m) 0;
 }
 
 .pdf-canvas, .pdf-image {
-display: block;
-background-color: white;
+  display: block;
+  background-color: white;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
 }
 
 .highlight-layer {
-position: absolute;
-top: 0;
-left: 0;
-pointer-events: auto;
-cursor: pointer;
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+}
+
+.highlight-layer:hover {
+  cursor: pointer;
 }
 
 .render-error {
-position: absolute;
-top: 50%;
-left: 50%;
-transform: translate(-50%, -50%);
-padding: var(--spacing-m);
-background-color: rgba(255, 0, 0, 0.1);
-border: 1px solid var(--error-color);
-border-radius: var(--border-radius-m);
-color: var(--error-color);
-display: flex;
-align-items: center;
-gap: var(--spacing-s);
-z-index: 10;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: var(--spacing-m);
+  background-color: rgba(255, 0, 0, 0.1);
+  border: 1px solid var(--error-color);
+  border-radius: var(--border-radius-m);
+  color: var(--error-color);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  z-index: 10;
 }
 
 .render-error svg {
-width: 24px;
-height: 24px;
-fill: var(--error-color);
+  width: 24px;
+  height: 24px;
+  fill: var(--error-color);
 }
 
 .renderer-loading {
-position: absolute;
-top: 0;
-left: 0;
-width: 100%;
-height: 100%;
-display: flex;
-justify-content: center;
-align-items: center;
-background-color: rgba(255, 255, 255, 0.8);
-z-index: 5;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.8);
+  z-index: 5;
 }
-  /* Cursor styles for highlight areas */
-  .highlight-layer:hover {
-    cursor: pointer;
-  }
-  
-  /* PDF controls */
-  .pdf-controls {
-    position: absolute;
-    bottom: var(--spacing-m);
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-s);
-    background-color: rgba(0, 0, 0, 0.7);
-    padding: var(--spacing-xs) var(--spacing-s);
-    border-radius: var(--border-radius-m);
-    z-index: 20;
-    opacity: 0;
-    transition: opacity var(--transition-fast);
-  }
-  
-  .pdf-renderer:hover .pdf-controls {
-    opacity: 1;
-  }
-  
-  .pdf-controls button {
-    background: none;
-    border: none;
-    color: white;
-    cursor: pointer;
-    padding: var(--spacing-xs);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--border-radius-s);
-    transition: background-color var(--transition-fast);
-  }
-  
-  .pdf-controls button:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-  }
-  
-  .pdf-controls svg {
-    width: 20px;
-    height: 20px;
-    fill: white;
-  }
-  
-  .page-indicator {
-    color: white;
-    font-size: var(--font-size-s);
-    margin: 0 var(--spacing-s);
-  }
-  
-  /* Animation for highlight pulse */
-  @keyframes highlightPulse {
-    0% { opacity: 0.3; }
-    50% { opacity: 0.6; }
-    100% { opacity: 0.3; }
-  }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
+.spinner {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top-color: var(--primary-color);
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* PDF controls */
+.pdf-controls {
+  position: absolute;
+  bottom: var(--spacing-m);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: var(--spacing-xs) var(--spacing-s);
+  border-radius: var(--border-radius-m);
+  z-index: 20;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.pdf-renderer:hover .pdf-controls {
+  opacity: 1;
+}
+
+.pdf-controls button {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: var(--spacing-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--border-radius-s);
+  transition: background-color var(--transition-fast);
+}
+
+.pdf-controls button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.pdf-controls svg {
+  width: 20px;
+  height: 20px;
+  fill: white;
+}
+
+.page-indicator {
+  color: white;
+  font-size: var(--font-size-s);
+  margin: 0 var(--spacing-s);
+}
+
+/* Animation for highlight pulse */
+@keyframes highlightPulse {
+  0% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+  100% { opacity: 0.3; }
+}
+
+.selected-highlight {
+  animation: highlightPulse 1.5s infinite;
+}
+
+/* Difference count badge */
+.diff-count-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: var(--primary-color);
+  color: white;
+  font-size: var(--font-size-xs);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Tooltip styles */
+.diff-tooltip {
+  position: absolute;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: var(--spacing-xs) var(--spacing-s);
+  border-radius: var(--border-radius-s);
+  font-size: var(--font-size-xs);
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  z-index: 100;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.diff-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid rgba(0, 0, 0, 0.8);
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .pdf-controls {
+    width: 90%;
+    justify-content: space-between;
   }
-  
-  .selected-highlight {
-    animation: highlightPulse 1.5s infinite;
-  }
+}

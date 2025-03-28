@@ -215,7 +215,7 @@ public class PDFComparisonService {
     /**
      * Clean up expired results
      */
-    private void cleanupExpiredResults() {
+    public void cleanupExpiredResults() {
         List<String> expiredKeys = comparisonResults.entrySet().stream()
                 .filter(entry -> entry.getValue().isExpired())
                 .map(Map.Entry::getKey)

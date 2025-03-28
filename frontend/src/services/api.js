@@ -83,16 +83,22 @@ export const uploadPDF = async (file) => {
   return response.data;
 };
 
-// Comparison functions
 export const compareDocuments = async (baseFileId, compareFileId, options = {}) => {
-  const response = await api.post('/pdfs/compare', {
-    baseFileId,
-    compareFileId,
-    options
-  });
-  
-  return response.data;
-};
+    // Add smart matching option if enabled
+    const requestOptions = { ...options };
+    
+    if (options.smartMatching) {
+      requestOptions.smartMatching = true;
+    }
+    
+    const response = await api.post('/pdfs/compare', {
+      baseFileId,
+      compareFileId,
+      options: requestOptions
+    });
+    
+    return response.data;
+  };
 
 export const getComparisonResult = async (comparisonId) => {
   try {
@@ -149,6 +155,94 @@ export const getComparisonDetails = async (comparisonId, page, filters = {}) => 
   
   return response.data;
 };
+
+export const getDocumentPairs = async (comparisonId) => {
+    try {
+      // Use a longer timeout for this specific request as it might take time
+      const response = await api.get(`/pdfs/comparison/${comparisonId}/documents`, {
+        timeout: 60000, // 60 seconds timeout
+        validateStatus: function (status) {
+          // Accept 202 Accepted as a valid response (still processing)
+          return (status >= 200 && status < 300) || status === 202;
+        }
+      });
+      
+      // If status is 202, throw a "still processing" error that the retry logic can handle
+      if (response.status === 202) {
+        throw new Error("Document matching still processing");
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching document pairs:", error);
+      throw error;
+    }
+  };
+  
+  // Get comparison result for a specific document pair
+  export const getDocumentPairResult = async (comparisonId, pairIndex) => {
+    try {
+      const response = await api.get(`/pdfs/comparison/${comparisonId}/documents/${pairIndex}`, {
+        timeout: 60000, // 60 seconds timeout
+        validateStatus: function (status) {
+          // Accept 202 Accepted as a valid response (still processing)
+          return (status >= 200 && status < 300) || status === 202;
+        }
+      });
+      
+      // If status is 202, throw a "still processing" error that the retry logic can handle
+      if (response.status === 202) {
+        throw new Error("Comparison still processing");
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching comparison result for document pair ${pairIndex}:`, error);
+      throw error;
+    }
+  };
+  
+  // Get page details for a specific page in a document pair
+  export const getDocumentPageDetails = async (comparisonId, pairIndex, pageNumber, filters = {}) => {
+    // Convert filter objects to simple string parameters
+    const params = {};
+    
+    // Handle filter parameters properly
+    if (filters.differenceTypes && filters.differenceTypes.length > 0) {
+      params.types = filters.differenceTypes.join(',');
+    }
+    
+    if (filters.minSeverity) {
+      params.severity = filters.minSeverity;
+    }
+    
+    if (filters.searchTerm) {
+      params.search = filters.searchTerm;
+    }
+    
+    try {
+      const response = await api.get(
+        `/pdfs/comparison/${comparisonId}/documents/${pairIndex}/page/${pageNumber}`, 
+        { 
+          params,
+          validateStatus: function (status) {
+            // Accept 202 Accepted as a valid response (still processing)
+            return (status >= 200 && status < 300) || status === 202;
+          }
+        }
+      );
+      
+      // If status is 202, throw a "still processing" error that the retry logic can handle
+      if (response.status === 202) {
+        throw new Error("Comparison still processing");
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching page details for page ${pageNumber} of document pair ${pairIndex}:`, error);
+      throw error;
+    }
+  };
 
 // Document retrieval functions
 export const getDocumentPage = async (fileId, page, options = {}) => {

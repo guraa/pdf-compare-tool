@@ -2,10 +2,11 @@ package guraa.pdfcompare.controller;
 
 import guraa.pdfcompare.PDFComparisonService;
 import guraa.pdfcompare.comparison.PDFComparisonResult;
-import guraa.pdfcompare.comparison.PageComparisonResult;
+import guraa.pdfcompare.core.SmartDocumentMatcher.DocumentPair;
 import guraa.pdfcompare.model.ComparisonRequest;
 import guraa.pdfcompare.model.FileUploadResponse;
 import guraa.pdfcompare.service.FileStorageService;
+import guraa.pdfcompare.service.SmartDocumentComparisonService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,12 +18,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
- * Controller for PDF comparison operations
+ * Controller for PDF comparison operations with smart document matching
  */
 @RestController
 @RequestMapping("/api/pdfs")
@@ -31,11 +30,16 @@ public class PDFController {
     private static final Logger logger = LoggerFactory.getLogger(PDFController.class);
 
     private final PDFComparisonService comparisonService;
+    private final SmartDocumentComparisonService smartComparisonService;
     private final FileStorageService storageService;
 
     @Autowired
-    public PDFController(PDFComparisonService comparisonService, FileStorageService storageService) {
+    public PDFController(
+            PDFComparisonService comparisonService,
+            SmartDocumentComparisonService smartComparisonService,
+            FileStorageService storageService) {
         this.comparisonService = comparisonService;
+        this.smartComparisonService = smartComparisonService;
         this.storageService = storageService;
     }
 
@@ -64,6 +68,8 @@ public class PDFController {
             // Create response
             FileUploadResponse response = new FileUploadResponse();
             response.setFileId(fileId);
+            response.setFileName(file.getOriginalFilename());
+            response.setFileSize(file.getSize());
             response.setSuccess(true);
 
             return ResponseEntity.ok(response);
@@ -75,7 +81,7 @@ public class PDFController {
     }
 
     /**
-     * Compare two PDF documents
+     * Compare two PDF documents with optional smart matching
      * @param request The comparison request
      * @return Response with comparison ID
      */
@@ -94,13 +100,26 @@ public class PDFController {
             logger.info("Starting comparison between files: base={}, compare={}",
                     request.getBaseFileId(), request.getCompareFileId());
 
-            // Compare files
-            String comparisonId = comparisonService.compareFiles(baseFilePath, compareFilePath);
-            logger.info("Comparison started with ID: {}", comparisonId);
+            // Check if smart matching is requested
+            boolean useSmartMatching = request.getOptions() != null &&
+                    Boolean.TRUE.equals(request.getOptions().get("smartMatching"));
+
+            String comparisonId;
+            if (useSmartMatching) {
+                // Use smart comparison service
+                comparisonId = smartComparisonService.compareFiles(
+                        baseFilePath, compareFilePath, true);
+                logger.info("Smart comparison started with ID: {}", comparisonId);
+            } else {
+                // Use standard comparison service
+                comparisonId = comparisonService.compareFiles(baseFilePath, compareFilePath);
+                logger.info("Standard comparison started with ID: {}", comparisonId);
+            }
 
             // Create response
             Map<String, String> response = new HashMap<>();
             response.put("comparisonId", comparisonId);
+            response.put("mode", useSmartMatching ? "smart" : "standard");
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -116,35 +135,113 @@ public class PDFController {
      * @return The comparison result
      */
     @GetMapping("/comparison/{comparisonId}")
-    public ResponseEntity<PDFComparisonResult> getComparisonResult(@PathVariable String comparisonId) {
+    public ResponseEntity<?> getComparisonResult(@PathVariable String comparisonId) {
         logger.info("Received request for comparison result: {}", comparisonId);
 
-        PDFComparisonResult result = comparisonService.getComparisonResult(comparisonId);
+        // Try standard comparison first
+        PDFComparisonResult standardResult = comparisonService.getComparisonResult(comparisonId);
 
-        if (result == null) {
-            // Instead of returning 404, return 202 Accepted to indicate processing
-            logger.info("Comparison result not found or still processing: {}", comparisonId);
+        if (standardResult != null) {
+            logger.info("Returning standard comparison result for ID: {}", comparisonId);
+            return ResponseEntity.ok(standardResult);
+        }
+
+        // Check for smart comparison result
+        if (smartComparisonService.isComparisonReady(comparisonId)) {
+            logger.info("Returning smart comparison summary for ID: {}", comparisonId);
+            Map<String, Object> summary = smartComparisonService.getComparisonSummary(comparisonId);
+            return ResponseEntity.ok(summary);
+        }
+
+        // If neither is ready, return "processing" status
+        logger.info("Comparison result not found or still processing: {}", comparisonId);
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .header("X-Comparison-Status", "processing")
+                .build();
+    }
+
+    /**
+     * Get document pairs found by smart matching
+     * @param comparisonId The comparison ID
+     * @return List of document pairs
+     */
+    @GetMapping("/comparison/{comparisonId}/documents")
+    public ResponseEntity<?> getDocumentPairs(@PathVariable String comparisonId) {
+        List<DocumentPair> pairs = smartComparisonService.getDocumentPairs(comparisonId);
+
+        if (pairs == null || pairs.isEmpty()) {
             return ResponseEntity.status(HttpStatus.ACCEPTED)
                     .header("X-Comparison-Status", "processing")
                     .build();
         }
 
-        logger.info("Returning comparison result for ID: {}", comparisonId);
+        // Create a response with more details
+        List<Map<String, Object>> pairDetails = new ArrayList<>();
+        for (int i = 0; i < pairs.size(); i++) {
+            DocumentPair pair = pairs.get(i);
+            Map<String, Object> details = new HashMap<>();
+
+            details.put("pairIndex", i);
+            details.put("matched", pair.isMatched());
+            details.put("similarityScore", pair.getSimilarityScore());
+
+            if (pair.hasBaseDocument()) {
+                details.put("baseStartPage", pair.getBaseStartPage() + 1); // Convert to 1-based for API
+                details.put("baseEndPage", pair.getBaseEndPage() + 1);
+                details.put("basePageCount", pair.getBaseEndPage() - pair.getBaseStartPage() + 1);
+            }
+
+            if (pair.hasCompareDocument()) {
+                details.put("compareStartPage", pair.getCompareStartPage() + 1); // Convert to 1-based for API
+                details.put("compareEndPage", pair.getCompareEndPage() + 1);
+                details.put("comparePageCount", pair.getCompareEndPage() - pair.getCompareStartPage() + 1);
+            }
+
+            pairDetails.add(details);
+        }
+
+        return ResponseEntity.ok(pairDetails);
+    }
+
+    /**
+     * Get comparison result for a specific document pair
+     * @param comparisonId The comparison ID
+     * @param pairIndex The document pair index
+     * @return The comparison result for the document pair
+     */
+    @GetMapping("/comparison/{comparisonId}/documents/{pairIndex}")
+    public ResponseEntity<?> getDocumentPairResult(
+            @PathVariable String comparisonId,
+            @PathVariable int pairIndex) {
+
+        PDFComparisonResult result = smartComparisonService.getDocumentPairResult(comparisonId, pairIndex);
+
+        if (result == null) {
+            // Check if the pair exists but comparison is not ready
+            List<DocumentPair> pairs = smartComparisonService.getDocumentPairs(comparisonId);
+            if (pairs != null && pairIndex < pairs.size()) {
+                return ResponseEntity.status(HttpStatus.ACCEPTED)
+                        .header("X-Comparison-Status", "processing")
+                        .build();
+            }
+
+            return ResponseEntity.notFound().build();
+        }
+
         return ResponseEntity.ok(result);
     }
 
     /**
      * Get detailed comparison for a specific page
      * @param comparisonId The comparison ID
+     * @param pairIndex The document pair index
      * @param pageNumber The page number
-     * @param types Filter by difference types (comma separated)
-     * @param severity Filter by minimum severity
-     * @param search Search term
      * @return The page comparison details
      */
-    @GetMapping("/comparison/{comparisonId}/page/{pageNumber}")
-    public ResponseEntity<Map<String, Object>> getComparisonDetails(
+    @GetMapping("/comparison/{comparisonId}/documents/{pairIndex}/page/{pageNumber}")
+    public ResponseEntity<Map<String, Object>> getDocumentPageDetails(
             @PathVariable String comparisonId,
+            @PathVariable int pairIndex,
             @PathVariable int pageNumber,
             @RequestParam(required = false) String types,
             @RequestParam(required = false) String severity,
@@ -168,27 +265,42 @@ public class PDFController {
             logger.info("Filtering by search term: {}", search);
         }
 
-        logger.info("Received request for page {} of comparison {} with filters: {}",
-                pageNumber, comparisonId, filters);
+        logger.info("Received request for page {} of document pair {} in comparison {} with filters: {}",
+                pageNumber, pairIndex, comparisonId, filters);
 
-        PDFComparisonResult result = comparisonService.getComparisonResult(comparisonId);
+        // Get the document pair result
+        PDFComparisonResult result = smartComparisonService.getDocumentPairResult(comparisonId, pairIndex);
 
         if (result == null) {
-            // Instead of returning 404, return 202 Accepted to indicate processing
-            logger.info("Comparison result not found or still processing: {}", comparisonId);
-            return ResponseEntity.status(HttpStatus.ACCEPTED)
-                    .header("X-Comparison-Status", "processing")
-                    .build();
+            // Check if the pair exists but comparison is not ready
+            List<DocumentPair> pairs = smartComparisonService.getDocumentPairs(comparisonId);
+            if (pairs != null && pairIndex < pairs.size()) {
+                return ResponseEntity.status(HttpStatus.ACCEPTED)
+                        .header("X-Comparison-Status", "processing")
+                        .build();
+            }
+
+            logger.warn("Document pair {} not found in comparison {}", pairIndex, comparisonId);
+            return ResponseEntity.notFound().build();
         }
 
         // Find the page
-        PageComparisonResult pageResult = result.getPageDifferences().stream()
+        if (result.getPageDifferences() == null || pageNumber < 1 ||
+                pageNumber > result.getPageDifferences().size()) {
+            logger.warn("Page {} not found in document pair {} of comparison {}",
+                    pageNumber, pairIndex, comparisonId);
+            return ResponseEntity.notFound().build();
+        }
+
+        // Get the page comparison result
+        var pageResult = result.getPageDifferences().stream()
                 .filter(page -> page.getPageNumber() == pageNumber)
                 .findFirst()
                 .orElse(null);
 
         if (pageResult == null) {
-            logger.warn("Page {} not found in comparison {}", pageNumber, comparisonId);
+            logger.warn("Page {} details not found in document pair {} of comparison {}",
+                    pageNumber, pairIndex, comparisonId);
             return ResponseEntity.notFound().build();
         }
 
@@ -197,15 +309,16 @@ public class PDFController {
         response.put("baseDifferences", pageResult.extractPageDifferences(true));
         response.put("compareDifferences", pageResult.extractPageDifferences(false));
 
-        logger.info("Returning details for page {} of comparison {}", pageNumber, comparisonId);
+        logger.info("Returning details for page {} of document pair {} in comparison {}",
+                pageNumber, pairIndex, comparisonId);
         return ResponseEntity.ok(response);
     }
 
+    // Other existing controller methods remain the same...
+
     /**
      * Get document page as image
-     * @param fileId The file ID
-     * @param page The page number
-     * @return The page as an image
+     * For multi-document PDFs, this method can handle page ranges
      */
     @GetMapping("/document/{fileId}/page/{page}")
     public ResponseEntity<Resource> getDocumentPage(
@@ -243,35 +356,48 @@ public class PDFController {
             @RequestBody Map<String, Object> request) {
         try {
             String format = (String) request.getOrDefault("format", "pdf");
+            Integer pairIndex = request.containsKey("documentPairIndex") ?
+                    (Integer) request.get("documentPairIndex") : null;
 
-            logger.info("Generating {} report for comparison {}", format, comparisonId);
+            if (pairIndex != null) {
+                logger.info("Generating {} report for document pair {} in comparison {}",
+                        format, pairIndex, comparisonId);
 
-            // Generate report
-            Resource report = comparisonService.generateReport(comparisonId, format);
+                // TODO: Implement report generation for specific document pairs
+                // This would need to be added to the service layer
 
-            // Set headers
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentDispositionFormData("attachment", "comparison-report." + format);
+                return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
+                        .body(null);
+            } else {
+                logger.info("Generating {} report for comparison {}", format, comparisonId);
 
-            // Set content type based on format
-            MediaType mediaType;
-            switch (format) {
-                case "html":
-                    mediaType = MediaType.TEXT_HTML;
-                    break;
-                case "json":
-                    mediaType = MediaType.APPLICATION_JSON;
-                    break;
-                default: // pdf
-                    mediaType = MediaType.APPLICATION_PDF;
+                // Generate standard report
+                Resource report = comparisonService.generateReport(comparisonId, format);
+
+                // Set headers
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentDispositionFormData("attachment", "comparison-report." + format);
+
+                // Set content type based on format
+                MediaType mediaType;
+                switch (format) {
+                    case "html":
+                        mediaType = MediaType.TEXT_HTML;
+                        break;
+                    case "json":
+                        mediaType = MediaType.APPLICATION_JSON;
+                        break;
+                    default: // pdf
+                        mediaType = MediaType.APPLICATION_PDF;
+                }
+
+                headers.setContentType(mediaType);
+
+                logger.info("Report generated successfully for comparison {}", comparisonId);
+                return ResponseEntity.ok()
+                        .headers(headers)
+                        .body(report);
             }
-
-            headers.setContentType(mediaType);
-
-            logger.info("Report generated successfully for comparison {}", comparisonId);
-            return ResponseEntity.ok()
-                    .headers(headers)
-                    .body(report);
         } catch (Exception e) {
             logger.error("Error generating report: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
