@@ -1,17 +1,28 @@
 package guraa.pdfcompare;
 
 import guraa.pdfcompare.comparison.*;
+import guraa.pdfcompare.core.FontInfo;
 import guraa.pdfcompare.core.ImageElement;
 import guraa.pdfcompare.core.PDFDocumentModel;
 import guraa.pdfcompare.core.PDFPageModel;
 import guraa.pdfcompare.core.TextElement;
 
+import guraa.pdfcompare.comparison.MetadataDifference;
+import guraa.pdfcompare.comparison.TextComparisonResult;
+import guraa.pdfcompare.comparison.TextDifferenceItem;
+import guraa.pdfcompare.comparison.TextElementDifference;
+import guraa.pdfcompare.comparison.TextDifferenceType;
+
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Main class for comparing two PDF documents
  */
 public class PDFComparisonEngine {
+
+    private static final Logger logger = LoggerFactory.getLogger(PDFComparisonEngine.class);
 
     /**
      * Compare two PDF document models and generate comparison results
@@ -20,9 +31,13 @@ public class PDFComparisonEngine {
      * @return A comparison result containing all differences
      */
     public PDFComparisonResult compareDocuments(PDFDocumentModel baseDocument, PDFDocumentModel compareDocument) {
+        logger.info("Starting document comparison between {} and {}",
+                baseDocument.getFileName(), compareDocument.getFileName());
+
         PDFComparisonResult result = new PDFComparisonResult();
 
         // Compare metadata
+        logger.debug("Comparing document metadata");
         Map<String, MetadataDifference> metadataDiffs = compareMetadata(baseDocument.getMetadata(), compareDocument.getMetadata());
         result.setMetadataDifferences(metadataDiffs);
 
@@ -31,6 +46,9 @@ public class PDFComparisonEngine {
         result.setPageCountDifferent(pageCountDiff);
         result.setBasePageCount(baseDocument.getPageCount());
         result.setComparePageCount(compareDocument.getPageCount());
+
+        logger.debug("Base document page count: {}, Compare document page count: {}",
+                baseDocument.getPageCount(), compareDocument.getPageCount());
 
         // Compare pages
         List<PageComparisonResult> pageDiffs = new ArrayList<>();
@@ -41,14 +59,17 @@ public class PDFComparisonEngine {
 
             if (i < baseDocument.getPageCount() && i < compareDocument.getPageCount()) {
                 // Compare existing pages
+                logger.debug("Comparing page {}", i + 1);
                 pageResult = comparePage(baseDocument.getPages().get(i), compareDocument.getPages().get(i));
             } else if (i < baseDocument.getPageCount()) {
                 // Page exists only in base document
+                logger.debug("Page {} exists only in base document", i + 1);
                 pageResult = new PageComparisonResult();
                 pageResult.setPageNumber(i + 1);
                 pageResult.setOnlyInBase(true);
             } else {
                 // Page exists only in compare document
+                logger.debug("Page {} exists only in compare document", i + 1);
                 pageResult = new PageComparisonResult();
                 pageResult.setPageNumber(i + 1);
                 pageResult.setOnlyInCompare(true);
@@ -61,6 +82,9 @@ public class PDFComparisonEngine {
 
         // Calculate summary statistics
         calculateSummaryStatistics(result);
+
+        logger.info("Document comparison completed. Found {} total differences",
+                result.getTotalDifferences());
 
         return result;
     }
@@ -87,6 +111,7 @@ public class PDFComparisonEngine {
                 diff.setCompareValue(null);
                 diff.setOnlyInBase(true);
                 differences.put(key, diff);
+                logger.debug("Metadata key '{}' only exists in base document", key);
             } else if (!baseValue.equals(compareValue)) {
                 // Key exists in both but values differ
                 MetadataDifference diff = new MetadataDifference();
@@ -95,6 +120,8 @@ public class PDFComparisonEngine {
                 diff.setCompareValue(compareValue);
                 diff.setValueDifferent(true);
                 differences.put(key, diff);
+                logger.debug("Metadata key '{}' has different values: '{}' vs '{}'",
+                        key, baseValue, compareValue);
             }
         }
 
@@ -108,6 +135,7 @@ public class PDFComparisonEngine {
                 diff.setCompareValue(compareMetadata.get(key));
                 diff.setOnlyInCompare(true);
                 differences.put(key, diff);
+                logger.debug("Metadata key '{}' only exists in compare document", key);
             }
         }
 
@@ -131,21 +159,48 @@ public class PDFComparisonEngine {
         result.setBaseDimensions(new float[]{basePage.getWidth(), basePage.getHeight()});
         result.setCompareDimensions(new float[]{comparePage.getWidth(), comparePage.getHeight()});
 
+        if (dimensionsDifferent) {
+            logger.debug("Page {} dimensions differ: base [{}x{}], compare [{}x{}]",
+                    basePage.getPageNumber(),
+                    basePage.getWidth(), basePage.getHeight(),
+                    comparePage.getWidth(), comparePage.getHeight());
+        }
+
         // Compare text content using diff algorithm
         TextComparisonResult textDiff = compareText(basePage.getText(), comparePage.getText());
         result.setTextDifferences(textDiff);
+
+        if (textDiff.getDifferenceCount() > 0) {
+            logger.debug("Page {} has {} text differences",
+                    basePage.getPageNumber(), textDiff.getDifferenceCount());
+        }
 
         // Compare text elements (with style information)
         List<TextElementDifference> textElementDiffs = compareTextElements(basePage.getTextElements(), comparePage.getTextElements());
         result.setTextElementDifferences(textElementDiffs);
 
+        if (!textElementDiffs.isEmpty()) {
+            logger.debug("Page {} has {} text element differences",
+                    basePage.getPageNumber(), textElementDiffs.size());
+        }
+
         // Compare images
         List<ImageDifference> imageDiffs = compareImages(basePage.getImages(), comparePage.getImages());
         result.setImageDifferences(imageDiffs);
 
+        if (!imageDiffs.isEmpty()) {
+            logger.debug("Page {} has {} image differences",
+                    basePage.getPageNumber(), imageDiffs.size());
+        }
+
         // Compare fonts
         List<FontDifference> fontDiffs = compareFonts(basePage.getFonts(), comparePage.getFonts());
         result.setFontDifferences(fontDiffs);
+
+        if (!fontDiffs.isEmpty()) {
+            logger.debug("Page {} has {} font differences",
+                    basePage.getPageNumber(), fontDiffs.size());
+        }
 
         return result;
     }
@@ -179,6 +234,8 @@ public class PDFComparisonEngine {
                     diff.setCompareText(compareLines[i]);
                     diff.setDifferenceType(TextDifferenceType.MODIFIED);
                     differences.add(diff);
+                    logger.debug("Modified text at line {}: '{}' vs '{}'",
+                            i + 1, baseLines[i], compareLines[i]);
                 }
             } else if (i < baseLines.length) {
                 TextDifferenceItem diff = new TextDifferenceItem();
@@ -187,6 +244,7 @@ public class PDFComparisonEngine {
                 diff.setCompareText("");
                 diff.setDifferenceType(TextDifferenceType.DELETED);
                 differences.add(diff);
+                logger.debug("Deleted text at line {}: '{}'", i + 1, baseLines[i]);
             } else {
                 TextDifferenceItem diff = new TextDifferenceItem();
                 diff.setLineNumber(i + 1);
@@ -194,6 +252,7 @@ public class PDFComparisonEngine {
                 diff.setCompareText(compareLines[i]);
                 diff.setDifferenceType(TextDifferenceType.ADDED);
                 differences.add(diff);
+                logger.debug("Added text at line {}: '{}'", i + 1, compareLines[i]);
             }
         }
 
@@ -241,6 +300,8 @@ public class PDFComparisonEngine {
                 diff.setCompareElement(null);
                 diff.setOnlyInBase(true);
                 differences.add(diff);
+                logger.debug("Text element '{}' only exists in base document",
+                        baseElement.getText());
             } else {
                 // Element exists in both, check for style differences
                 boolean stylesDiffer = !compareTextElementStyles(baseElement, compareElement);
@@ -250,6 +311,7 @@ public class PDFComparisonEngine {
                     diff.setCompareElement(compareElement);
                     diff.setStyleDifferent(true);
                     differences.add(diff);
+                    logger.debug("Text element '{}' has style differences", baseElement.getText());
                 }
 
                 // Remove from compare map to track processed elements
@@ -264,6 +326,7 @@ public class PDFComparisonEngine {
             diff.setCompareElement(element);
             diff.setOnlyInCompare(true);
             differences.add(diff);
+            logger.debug("Text element '{}' only exists in compare document", element.getText());
         }
 
         return differences;
@@ -278,21 +341,28 @@ public class PDFComparisonEngine {
     private boolean compareTextElementStyles(TextElement baseElement, TextElement compareElement) {
         // Compare font name
         if (!Objects.equals(baseElement.getFontName(), compareElement.getFontName())) {
+            logger.debug("Font name differs: '{}' vs '{}'",
+                    baseElement.getFontName(), compareElement.getFontName());
             return false;
         }
 
         // Compare font size (with small tolerance for floating point differences)
         if (Math.abs(baseElement.getFontSize() - compareElement.getFontSize()) > 0.1) {
+            logger.debug("Font size differs: {} vs {}",
+                    baseElement.getFontSize(), compareElement.getFontSize());
             return false;
         }
 
         // Compare font style
         if (!Objects.equals(baseElement.getFontStyle(), compareElement.getFontStyle())) {
+            logger.debug("Font style differs: '{}' vs '{}'",
+                    baseElement.getFontStyle(), compareElement.getFontStyle());
             return false;
         }
 
         // Compare color
         if (!Arrays.equals(baseElement.getColor(), compareElement.getColor())) {
+            logger.debug("Text color differs");
             return false;
         }
 
@@ -337,6 +407,8 @@ public class PDFComparisonEngine {
                 diff.setCompareImage(null);
                 diff.setOnlyInBase(true);
                 differences.add(diff);
+                logger.debug("Image '{}' only exists in base document",
+                        baseImage.getName() != null ? baseImage.getName() : "unnamed");
             } else {
                 // Image exists in both, check for differences
                 boolean dimensionsDiffer = Math.abs(baseImage.getWidth() - compareImage.getWidth()) > 0.1 ||
@@ -353,6 +425,24 @@ public class PDFComparisonEngine {
                     diff.setPositionDifferent(positionDiffers);
                     diff.setFormatDifferent(formatDiffers);
                     differences.add(diff);
+
+                    if (dimensionsDiffer) {
+                        logger.debug("Image '{}' has different dimensions: [{}x{}] vs [{}x{}]",
+                                baseImage.getName() != null ? baseImage.getName() : "unnamed",
+                                baseImage.getWidth(), baseImage.getHeight(),
+                                compareImage.getWidth(), compareImage.getHeight());
+                    }
+                    if (positionDiffers) {
+                        logger.debug("Image '{}' has different position: [{},{}] vs [{},{}]",
+                                baseImage.getName() != null ? baseImage.getName() : "unnamed",
+                                baseImage.getX(), baseImage.getY(),
+                                compareImage.getX(), compareImage.getY());
+                    }
+                    if (formatDiffers) {
+                        logger.debug("Image '{}' has different format: '{}' vs '{}'",
+                                baseImage.getName() != null ? baseImage.getName() : "unnamed",
+                                baseImage.getFormat(), compareImage.getFormat());
+                    }
                 }
 
                 // Remove from compare map to track processed elements
@@ -367,6 +457,161 @@ public class PDFComparisonEngine {
             diff.setCompareImage(image);
             diff.setOnlyInCompare(true);
             differences.add(diff);
+            logger.debug("Image '{}' only exists in compare document",
+                    image.getName() != null ? image.getName() : "unnamed");
         }
 
         return differences;
+    }
+
+    /**
+     * Compare fonts between two pages
+     * @param baseFonts The base page fonts
+     * @param compareFonts The fonts to compare against the base
+     * @return List of font differences
+     */
+    private List<FontDifference> compareFonts(List<FontInfo> baseFonts, List<FontInfo> compareFonts) {
+        List<FontDifference> differences = new ArrayList<>();
+
+        // Match fonts by name
+        Map<String, FontInfo> baseFontMap = new HashMap<>();
+        for (FontInfo font : baseFonts) {
+            baseFontMap.put(font.getName(), font);
+        }
+
+        Map<String, FontInfo> compareFontMap = new HashMap<>();
+        for (FontInfo font : compareFonts) {
+            compareFontMap.put(font.getName(), font);
+        }
+
+        // Find differences in base fonts
+        for (String name : baseFontMap.keySet()) {
+            FontInfo baseFont = baseFontMap.get(name);
+            FontInfo compareFont = compareFontMap.get(name);
+
+            if (compareFont == null) {
+                // Font exists only in base document
+                FontDifference diff = new FontDifference();
+                diff.setBaseFont(baseFont);
+                diff.setCompareFont(null);
+                diff.setOnlyInBase(true);
+                differences.add(diff);
+                logger.debug("Font '{}' only exists in base document", baseFont.getName());
+            } else {
+                // Font exists in both, check for differences
+                boolean embeddingDiffers = baseFont.isEmbedded() != compareFont.isEmbedded();
+                boolean subsetDiffers = baseFont.isSubset() != compareFont.isSubset();
+
+                if (embeddingDiffers || subsetDiffers) {
+                    FontDifference diff = new FontDifference();
+                    diff.setBaseFont(baseFont);
+                    diff.setCompareFont(compareFont);
+                    diff.setEmbeddingDifferent(embeddingDiffers);
+                    diff.setSubsetDifferent(subsetDiffers);
+                    differences.add(diff);
+
+                    if (embeddingDiffers) {
+                        logger.debug("Font '{}' has different embedding: {} vs {}",
+                                baseFont.getName(),
+                                baseFont.isEmbedded(), compareFont.isEmbedded());
+                    }
+                    if (subsetDiffers) {
+                        logger.debug("Font '{}' has different subsetting: {} vs {}",
+                                baseFont.getName(),
+                                baseFont.isSubset(), compareFont.isSubset());
+                    }
+                }
+
+                // Remove from compare map to track processed elements
+                compareFontMap.remove(name);
+            }
+        }
+
+        // Add fonts that exist only in compare document
+        for (FontInfo font : compareFontMap.values()) {
+            FontDifference diff = new FontDifference();
+            diff.setBaseFont(null);
+            diff.setCompareFont(font);
+            diff.setOnlyInCompare(true);
+            differences.add(diff);
+            logger.debug("Font '{}' only exists in compare document", font.getName());
+        }
+
+        return differences;
+    }
+
+    /**
+     * Calculate summary statistics for comparison result
+     * @param result The comparison result to update with statistics
+     */
+    private void calculateSummaryStatistics(PDFComparisonResult result) {
+        int totalDifferences = 0;
+        int textDifferences = 0;
+        int imageDifferences = 0;
+        int fontDifferences = 0;
+        int styleDifferences = 0;
+
+        // Count metadata differences
+        if (result.getMetadataDifferences() != null) {
+            totalDifferences += result.getMetadataDifferences().size();
+        }
+
+        // Count page structure differences
+        if (result.isPageCountDifferent()) {
+            totalDifferences++;
+        }
+
+        // Count differences for each page
+        for (PageComparisonResult page : result.getPageDifferences()) {
+            // Count page structure differences
+            if (page.isOnlyInBase() || page.isOnlyInCompare()) {
+                totalDifferences++;
+            } else if (page.isDimensionsDifferent()) {
+                totalDifferences++;
+            }
+
+            // Count text differences
+            if (page.getTextDifferences() != null && page.getTextDifferences().getDifferences() != null) {
+                int pageDiffs = page.getTextDifferences().getDifferences().size();
+                textDifferences += pageDiffs;
+                totalDifferences += pageDiffs;
+            }
+
+            // Count text element differences
+            if (page.getTextElementDifferences() != null) {
+                for (TextElementDifference diff : page.getTextElementDifferences()) {
+                    if (diff.isStyleDifferent()) {
+                        styleDifferences++;
+                    } else {
+                        textDifferences++;
+                    }
+                    totalDifferences++;
+                }
+            }
+
+            // Count image differences
+            if (page.getImageDifferences() != null) {
+                int pageDiffs = page.getImageDifferences().size();
+                imageDifferences += pageDiffs;
+                totalDifferences += pageDiffs;
+            }
+
+            // Count font differences
+            if (page.getFontDifferences() != null) {
+                int pageDiffs = page.getFontDifferences().size();
+                fontDifferences += pageDiffs;
+                totalDifferences += pageDiffs;
+            }
+        }
+
+        // Set statistics
+        result.setTotalDifferences(totalDifferences);
+        result.setTotalTextDifferences(textDifferences);
+        result.setTotalImageDifferences(imageDifferences);
+        result.setTotalFontDifferences(fontDifferences);
+        result.setTotalStyleDifferences(styleDifferences);
+
+        logger.info("Comparison statistics: total={}, text={}, image={}, font={}, style={}",
+                totalDifferences, textDifferences, imageDifferences, fontDifferences, styleDifferences);
+    }
+}

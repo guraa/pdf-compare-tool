@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+
+/frontend/public/pdf.worker
+/frontend/node_modules
+/frontend/package-lock.json
+/frontend/yarn.lock

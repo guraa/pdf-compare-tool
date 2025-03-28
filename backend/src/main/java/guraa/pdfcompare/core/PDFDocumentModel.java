@@ -3,7 +3,7 @@ package guraa.pdfcompare.core;
 import java.util.List;
 import java.util.Map;
 
-class PDFDocumentModel {
+public class PDFDocumentModel {
     private String fileName;
     private int pageCount;
     private Map<String, String> metadata;

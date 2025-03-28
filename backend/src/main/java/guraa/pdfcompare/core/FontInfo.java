@@ -5,7 +5,7 @@ import java.util.Objects;
 /**
  * Class representing font information
  */
-class FontInfo {
+public class FontInfo {
     private String name;
     private String family;
     private boolean isEmbedded;

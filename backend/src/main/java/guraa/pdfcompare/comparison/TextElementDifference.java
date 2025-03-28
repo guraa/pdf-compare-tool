@@ -5,7 +5,7 @@ import guraa.pdfcompare.core.TextElement;
 /**
  * Class representing difference between text elements
  */
-class TextElementDifference {
+public class TextElementDifference {
     private TextElement baseElement;
     private TextElement compareElement;
     private boolean onlyInBase;

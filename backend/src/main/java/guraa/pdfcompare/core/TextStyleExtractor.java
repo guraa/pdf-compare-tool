@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * Helper class to extract text with style information
  */
-class TextStyleExtractor {
+public class TextStyleExtractor {
 
     /**
      * Extract text elements with style information

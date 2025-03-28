@@ -5,7 +5,7 @@ import java.util.Map;
 /**
  * Class representing an image element in a PDF
  */
-class ImageElement {
+public class ImageElement {
     private String name;
     private String format;
     private float x;

@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * Model class representing a page in a PDF document
  */
-class PDFPageModel {
+public class PDFPageModel {
     private int pageNumber;
     private float width;
     private float height;

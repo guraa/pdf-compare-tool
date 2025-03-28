@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * Class representing text comparison results
  */
-class TextComparisonResult {
+public class TextComparisonResult {
     private List<TextDifferenceItem> differences;
     private int differenceCount;
 

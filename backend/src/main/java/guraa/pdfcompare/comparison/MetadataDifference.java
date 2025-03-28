@@ -1,7 +1,7 @@
 package guraa.pdfcompare.comparison;
 
 
-class MetadataDifference {
+public class MetadataDifference {
     private String key;
     private String baseValue;
     private String compareValue;

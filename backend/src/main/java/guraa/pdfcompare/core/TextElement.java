@@ -3,7 +3,7 @@ package guraa.pdfcompare.core;
 /**
  * Class representing a text element with style information
  */
-class TextElement {
+public class TextElement {
     private String text;
     private float x;
     private float y;

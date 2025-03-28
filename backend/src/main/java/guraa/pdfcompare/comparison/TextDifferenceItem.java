@@ -4,7 +4,7 @@ package guraa.pdfcompare.comparison;
 /**
  * Class representing a single text difference item
  */
-class TextDifferenceItem {
+public class TextDifferenceItem {
     private int lineNumber;
     private String baseText;
     private String compareText;
