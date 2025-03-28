@@ -1,0 +1,91 @@
+.upload-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--spacing-l);
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  
+  .upload-container {
+    width: 100%;
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius-m);
+    box-shadow: var(--shadow-light);
+    padding: var(--spacing-xl);
+    text-align: center;
+  }
+  
+  .upload-container h2 {
+    margin-bottom: var(--spacing-m);
+    color: var(--primary-color);
+  }
+  
+  .upload-description {
+    margin-bottom: var(--spacing-xl);
+    color: var(--text-secondary);
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  
+  .upload-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacing-xl);
+    margin-bottom: var(--spacing-xl);
+  }
+  
+  @media (min-width: 768px) {
+    .upload-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  
+  .upload-item {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .upload-item h3 {
+    margin-bottom: var(--spacing-m);
+    font-size: var(--font-size-m);
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  
+  .upload-error {
+    margin: var(--spacing-m) auto;
+    max-width: 600px;
+    padding: var(--spacing-m);
+    background-color: rgba(244, 67, 54, 0.1);
+    border-radius: var(--border-radius-m);
+    color: var(--error-color);
+    text-align: center;
+  }
+  
+  .upload-actions {
+    margin-top: var(--spacing-l);
+  }
+  
+  .comparison-button {
+    padding: var(--spacing-m) var(--spacing-xl);
+    background-color: var(--secondary-color);
+    color: var(--text-on-secondary);
+    border: none;
+    border-radius: var(--border-radius-m);
+    font-size: var(--font-size-m);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+  }
+  
+  .comparison-button:hover {
+    background-color: var(--secondary-dark);
+  }
+  
+  .comparison-button:disabled {
+    background-color: var(--text-disabled);
+    cursor: not-allowed;
+  }
