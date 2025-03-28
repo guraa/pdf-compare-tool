@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { ComparisonProvider } from './context/ComparisonContext';
 import { PreferencesProvider } from './context/PreferencesContext';
 import MainLayout from './components/layout/MainLayout';
@@ -11,14 +11,14 @@ import { getAppConfiguration } from './services/api';
 import './styles/global.css';
 
 const App = () => {
-  const [appState, setAppState] = useState({
+  const [appState, setAppState] = React.useState({
     stage: 'upload', // 'upload', 'comparing', 'results'
     loading: true,
     error: null,
     config: null
   });
 
-  useEffect(() => {
+  React.useEffect(() => {
     const initializeApp = async () => {
       try {
         // Load app configuration from backend

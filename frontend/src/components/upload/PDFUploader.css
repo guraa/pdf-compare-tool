@@ -1,0 +1,177 @@
+.pdf-uploader {
+    width: 100%;
+    margin-bottom: var(--spacing-m);
+  }
+  
+  .drop-zone {
+    width: 100%;
+    height: 200px;
+    border: 2px dashed var(--border-color);
+    border-radius: var(--border-radius-m);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  
+  .drop-zone:hover {
+    border-color: var(--primary-color);
+    background-color: var(--primary-light);
+  }
+  
+  .drop-zone.active {
+    border-color: var(--primary-color);
+    background-color: var(--primary-light);
+  }
+  
+  .drop-zone.uploading {
+    background-color: var(--primary-light);
+    border-color: var(--primary-color);
+    pointer-events: none;
+  }
+  
+  .file-input {
+    display: none;
+  }
+  
+  .upload-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--spacing-m);
+  }
+  
+  .upload-icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: var(--spacing-m);
+  }
+  
+  .upload-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: var(--primary-color);
+  }
+  
+  .upload-text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+  
+  .upload-title {
+    font-size: var(--font-size-m);
+    font-weight: 500;
+    color: var(--primary-color);
+  }
+  
+  .upload-subtitle {
+    font-size: var(--font-size-s);
+    color: var(--text-secondary);
+  }
+  
+  .upload-progress {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-m);
+    color: var(--primary-color);
+  }
+  
+  .upload-error {
+    margin-top: var(--spacing-s);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-s);
+    padding: var(--spacing-s) var(--spacing-m);
+    background-color: rgba(244, 67, 54, 0.1);
+    border-radius: var(--border-radius-s);
+    color: var(--error-color);
+  }
+  
+  .upload-error svg {
+    width: 20px;
+    height: 20px;
+    fill: var(--error-color);
+  }
+  
+  /* File uploaded state */
+  .pdf-uploaded {
+    margin-top: var(--spacing-m);
+  }
+  
+  .file-info {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-m);
+    background-color: var(--primary-light);
+    border-radius: var(--border-radius-m);
+    border: 1px solid var(--primary-color);
+  }
+  
+  .file-icon {
+    width: 36px;
+    height: 36px;
+    margin-right: var(--spacing-m);
+    flex-shrink: 0;
+  }
+  
+  .file-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: var(--primary-color);
+  }
+  
+  .file-details {
+    flex: 1;
+  }
+  
+  .file-name {
+    font-weight: 500;
+    margin-bottom: var(--spacing-xs);
+    word-break: break-word;
+  }
+  
+  .file-size {
+    font-size: var(--font-size-s);
+    color: var(--text-secondary);
+  }
+  
+  .remove-button {
+    background: none;
+    border: none;
+    color: var(--error-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xs);
+    border-radius: var(--border-radius-circle);
+    transition: background-color var(--transition-fast);
+  }
+  
+  .remove-button:hover {
+    background-color: rgba(244, 67, 54, 0.1);
+  }
+  
+  .remove-button svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+  }
+  
+  /* Responsive styles */
+  @media (max-width: 600px) {
+    .drop-zone {
+      height: 150px;
+    }
+    
+    .upload-icon {
+      width: 36px;
+      height: 36px;
+    }
+  }
