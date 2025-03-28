@@ -1,0 +1,93 @@
+.error-boundary {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: var(--spacing-xl);
+    background-color: var(--background-color);
+  }
+  
+  .error-container {
+    max-width: 600px;
+    padding: var(--spacing-xl);
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius-m);
+    box-shadow: var(--shadow-medium);
+    text-align: center;
+  }
+  
+  .error-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto var(--spacing-l);
+  }
+  
+  .error-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: var(--error-color);
+  }
+  
+  .error-container h2 {
+    margin-bottom: var(--spacing-m);
+    color: var(--error-color);
+  }
+  
+  .error-container p {
+    margin-bottom: var(--spacing-l);
+    color: var(--text-secondary);
+  }
+  
+  .error-actions {
+    margin-bottom: var(--spacing-l);
+  }
+  
+  .error-actions button {
+    padding: var(--spacing-s) var(--spacing-l);
+    background-color: var(--primary-color);
+    color: var(--text-on-primary);
+    border: none;
+    border-radius: var(--border-radius-s);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+  }
+  
+  .error-actions button:hover {
+    background-color: var(--primary-dark);
+  }
+  
+  .error-details {
+    text-align: left;
+    margin-top: var(--spacing-l);
+    padding-top: var(--spacing-l);
+    border-top: 1px solid var(--border-color);
+  }
+  
+  .error-details h3 {
+    margin-bottom: var(--spacing-s);
+    font-size: var(--font-size-m);
+    color: var(--text-primary);
+  }
+  
+  .error-message {
+    margin-bottom: var(--spacing-s);
+    padding: var(--spacing-s) var(--spacing-m);
+    background-color: var(--error-color);
+    color: white;
+    border-radius: var(--border-radius-s);
+    font-family: monospace;
+    overflow-wrap: break-word;
+  }
+  
+  .error-stack {
+    padding: var(--spacing-s) var(--spacing-m);
+    background-color: var(--neutral-light);
+    border-radius: var(--border-radius-s);
+    font-family: monospace;
+    font-size: var(--font-size-xs);
+    white-space: pre-wrap;
+    overflow-x: auto;
+    max-height: 300px;
+    overflow-y: auto;
+  }
