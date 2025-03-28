@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer } from 'react';
+import React, { createContext, useContext, useReducer, useEffect } from 'react';
 
 // Initial state for the comparison context
 const initialState = {
@@ -40,6 +40,8 @@ const actions = {
 
 // Reducer function to handle state updates
 const comparisonReducer = (state, action) => {
+  console.log('Action:', action.type, action.payload);
+  
   switch (action.type) {
     case actions.SET_BASE_FILE:
       return { ...state, baseFile: action.payload };
@@ -48,6 +50,7 @@ const comparisonReducer = (state, action) => {
       return { ...state, compareFile: action.payload };
     
     case actions.SET_COMPARISON_ID:
+      console.log('Setting comparison ID:', action.payload);
       return { ...state, comparisonId: action.payload };
     
     case actions.SET_COMPARISON_RESULT:
@@ -102,7 +105,10 @@ export const ComparisonProvider = ({ children }) => {
     state,
     setBaseFile: (file) => dispatch({ type: actions.SET_BASE_FILE, payload: file }),
     setCompareFile: (file) => dispatch({ type: actions.SET_COMPARE_FILE, payload: file }),
-    setComparisonId: (id) => dispatch({ type: actions.SET_COMPARISON_ID, payload: id }),
+    setComparisonId: (id) => {
+      console.log('Dispatching SET_COMPARISON_ID with:', id);
+      dispatch({ type: actions.SET_COMPARISON_ID, payload: id });
+    },
     setComparisonResult: (result) => dispatch({ type: actions.SET_COMPARISON_RESULT, payload: result }),
     setLoading: (isLoading) => dispatch({ type: actions.SET_LOADING, payload: isLoading }),
     setError: (error) => dispatch({ type: actions.SET_ERROR, payload: error }),

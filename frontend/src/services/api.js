@@ -2,19 +2,23 @@ import axios from 'axios';
 
 // Create an axios instance with default config
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: '/api', // Base URL for all API requests
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  // Add timeout to prevent indefinite waiting
+  timeout: 30000 // 30 seconds
 });
 
 // Add request interceptor for error handling
 api.interceptors.request.use(
   config => {
-    // You can add authentication tokens here if needed
+    // Log request for debugging
+    console.log(`API Request: ${config.method.toUpperCase()} ${config.url}`, config);
     return config;
   },
   error => {
+    console.error('API Request Error:', error);
     return Promise.reject(error);
   }
 );
@@ -22,6 +26,8 @@ api.interceptors.request.use(
 // Add response interceptor for error handling
 api.interceptors.response.use(
   response => {
+    // Log successful responses for debugging
+    console.log('API Response:', response.status, response.statusText);
     return response;
   },
   error => {
@@ -45,6 +51,18 @@ api.interceptors.response.use(
   }
 );
 
+// API test function to check connectivity
+export const testAPIConnection = async () => {
+  try {
+    const response = await api.get('/config');
+    console.log('API connection test successful:', response);
+    return response;
+  } catch (error) {
+    console.error('API connection test failed:', error);
+    throw error;
+  }
+};
+
 // API functions
 export const getAppConfiguration = async () => {
   const response = await api.get('/config');
@@ -56,7 +74,7 @@ export const uploadPDF = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
   
-  const response = await axios.post('/api/pdfs/upload', formData, {
+  const response = await api.post('/pdfs/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data'
     }
@@ -77,7 +95,10 @@ export const compareDocuments = async (baseFileId, compareFileId, options = {}) 
 };
 
 export const getComparisonResult = async (comparisonId) => {
-  const response = await api.get(`/pdfs/comparison/${comparisonId}`);
+  // Use a longer timeout for this specific request as it might take time
+  const response = await api.get(`/pdfs/comparison/${comparisonId}`, {
+    timeout: 60000 // 60 seconds timeout for comparison results
+  });
   return response.data;
 };
 
@@ -103,7 +124,8 @@ export const generateReport = async (comparisonId, format = 'pdf', options = {})
     format,
     options
   }, {
-    responseType: 'blob'
+    responseType: 'blob',
+    timeout: 60000 // 60 seconds timeout for report generation
   });
   
   return response.data;
@@ -119,6 +141,17 @@ export const downloadBlob = (blob, filename) => {
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+};
+
+// Utility function to check if a comparison is ready
+// This can be used for polling without fetching the full result
+export const checkComparisonStatus = async (comparisonId) => {
+  try {
+    const response = await api.head(`/pdfs/comparison/${comparisonId}`);
+    return response.status === 200;
+  } catch (error) {
+    return false;
+  }
 };
 
 export default api;

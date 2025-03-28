@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ComparisonProvider } from './context/ComparisonContext';
 import { PreferencesProvider } from './context/PreferencesContext';
 import MainLayout from './components/layout/MainLayout';
@@ -11,16 +11,20 @@ import { getAppConfiguration } from './services/api';
 import './styles/global.css';
 
 const App = () => {
-  const [appState, setAppState] = React.useState({
+  const [appState, setAppState] = useState({
     stage: 'upload', // 'upload', 'comparing', 'results'
     loading: true,
     error: null,
-    config: null
+    config: null,
+    comparisonId: null,
+    comparisonStartTime: null
   });
 
-  React.useEffect(() => {
+  // Check if API is reachable on load
+  useEffect(() => {
     const initializeApp = async () => {
       try {
+      
         // Load app configuration from backend
         const config = await getAppConfiguration();
         setAppState(prev => ({
@@ -41,18 +45,49 @@ const App = () => {
     initializeApp();
   }, []);
 
+  // Handle timeout for comparison process
+  useEffect(() => {
+    // Only run this if we're in the comparing stage
+    if (appState.stage !== 'comparing' || !appState.comparisonStartTime) {
+      return;
+    }
+
+    // Check how long the comparison has been running
+    const checkComparisonProgress = () => {
+      const now = new Date();
+      const elapsedTime = now - appState.comparisonStartTime;
+      const maxWaitTime = 180000; // 3 minutes in milliseconds
+      
+      // If it's been too long, go to results anyway and let the result viewer handle the status
+      if (elapsedTime >= maxWaitTime && appState.comparisonId) {
+        console.log(`Comparison has been running for ${elapsedTime}ms, proceeding to results view`);
+        setAppState(prev => ({
+          ...prev,
+          stage: 'results'
+        }));
+      }
+    };
+
+    // Set up a check interval
+    const intervalId = setInterval(checkComparisonProgress, 10000); // Check every 10 seconds
+    return () => clearInterval(intervalId);
+  }, [appState.stage, appState.comparisonStartTime, appState.comparisonId]);
+
   const handleComparisonStart = () => {
     setAppState(prev => ({
       ...prev,
-      stage: 'comparing'
+      stage: 'comparing',
+      comparisonStartTime: new Date()
     }));
   };
 
   const handleComparisonComplete = (comparisonId) => {
+    console.log("Comparison complete with ID:", comparisonId);
+    
     setAppState(prev => ({
       ...prev,
-      stage: 'results',
-      comparisonId
+      comparisonId: comparisonId,
+      stage: 'results'
     }));
   };
 
@@ -60,7 +95,17 @@ const App = () => {
     setAppState(prev => ({
       ...prev,
       stage: 'upload',
-      comparisonId: null
+      comparisonId: null,
+      comparisonStartTime: null
+    }));
+  };
+
+  // Handle comparison error
+  const handleComparisonError = (errorMessage) => {
+    setAppState(prev => ({
+      ...prev,
+      stage: 'upload',
+      error: errorMessage
     }));
   };
 
@@ -95,6 +140,8 @@ const App = () => {
             {appState.stage === 'upload' && (
               <UploadSection 
                 onComparisonStart={handleComparisonStart}
+                onComparisonComplete={handleComparisonComplete}
+                onComparisonError={handleComparisonError}
                 config={appState.config}
               />
             )}
@@ -104,6 +151,17 @@ const App = () => {
                 <Spinner size="medium" />
                 <h2>Comparing Documents</h2>
                 <p>This may take a few moments depending on document size...</p>
+                <p className="comparison-time">
+                  {appState.comparisonStartTime && (
+                    `Started ${Math.floor((new Date() - appState.comparisonStartTime) / 1000)} seconds ago`
+                  )}
+                </p>
+                <button 
+                  className="cancel-button"
+                  onClick={resetComparison}
+                >
+                  Cancel
+                </button>
               </div>
             )}
             

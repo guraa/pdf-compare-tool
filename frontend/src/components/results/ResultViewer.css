@@ -146,6 +146,24 @@
     text-align: center;
   }
   
+  .retry-message {
+    margin-top: var(--spacing-m);
+    padding: var(--spacing-m);
+    border-radius: var(--border-radius-m);
+    background-color: var(--primary-light);
+    color: var(--primary-dark);
+    font-size: var(--font-size-s);
+    max-width: 500px;
+    text-align: center;
+    animation: pulse 2s infinite;
+  }
+  
+  @keyframes pulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
+  }
+  
   .error-icon {
     width: 64px;
     height: 64px;

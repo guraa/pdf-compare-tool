@@ -1,21 +1,11 @@
 package guraa.pdfcompare;
 
 import guraa.pdfcompare.comparison.*;
-import guraa.pdfcompare.core.FontInfo;
-import guraa.pdfcompare.core.ImageElement;
-import guraa.pdfcompare.core.PDFDocumentModel;
-import guraa.pdfcompare.core.PDFPageModel;
-import guraa.pdfcompare.core.TextElement;
-
-import guraa.pdfcompare.comparison.MetadataDifference;
-import guraa.pdfcompare.comparison.TextComparisonResult;
-import guraa.pdfcompare.comparison.TextDifferenceItem;
-import guraa.pdfcompare.comparison.TextElementDifference;
-import guraa.pdfcompare.comparison.TextDifferenceType;
-
-import java.util.*;
+import guraa.pdfcompare.core.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.*;
 
 /**
  * Main class for comparing two PDF documents
@@ -95,7 +85,7 @@ public class PDFComparisonEngine {
      * @param compareMetadata The comparison document metadata
      * @return Map of metadata differences
      */
-    private Map<String, MetadataDifference> compareMetadata(Map<String, String> baseMetadata, Map<String, String> compareMetadata) {
+    Map<String, MetadataDifference> compareMetadata(Map<String, String> baseMetadata, Map<String, String> compareMetadata) {
         Map<String, MetadataDifference> differences = new HashMap<>();
 
         // Check for all keys in base document
@@ -148,7 +138,7 @@ public class PDFComparisonEngine {
      * @param comparePage The page to compare against the base
      * @return A page comparison result containing all differences
      */
-    private PageComparisonResult comparePage(PDFPageModel basePage, PDFPageModel comparePage) {
+    PageComparisonResult comparePage(PDFPageModel basePage, PDFPageModel comparePage) {
         PageComparisonResult result = new PageComparisonResult();
         result.setPageNumber(basePage.getPageNumber());
 

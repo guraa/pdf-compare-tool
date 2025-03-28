@@ -6,7 +6,7 @@ const Footer = () => {
     <footer className="app-footer">
       <div className="footer-container">
         <div className="footer-copyright">
-          &copy; {new Date().getFullYear()} PDF Compare. All rights reserved.
+          &copy; {new Date().getFullYear()} DocuDuel
         </div>
         
         <div className="footer-links">

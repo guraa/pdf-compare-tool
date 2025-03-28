@@ -3,10 +3,10 @@ import { useComparison } from '../../context/ComparisonContext';
 import { usePreferences } from '../../context/PreferencesContext';
 import PDFUploader from './PDFUploader';
 import ComparisonSettings from '../comparison/ComparisonSettings';
-import { compareDocuments } from '../../services/api';
+import { compareDocuments, testApiConnection } from '../../services/api';
 import './UploadSection.css';
 
-const UploadSection = ({ onComparisonStart }) => {
+const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonError, config }) => {
   const { 
     state, 
     setBaseFile, 
@@ -27,6 +27,8 @@ const UploadSection = ({ onComparisonStart }) => {
     compareBookmarks: true,
     compareMetadata: true
   });
+  
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSettingsChange = (name, value) => {
     setSettings(prev => ({
@@ -36,17 +38,29 @@ const UploadSection = ({ onComparisonStart }) => {
   };
 
   const startComparison = async () => {
+    if (submitting) {
+      return; // Prevent multiple submissions
+    }
+    
     if (!state.baseFile || !state.compareFile) {
       setError('Please upload both PDF files before starting comparison');
       return;
     }
 
     try {
+      setSubmitting(true);
       setLoading(true);
       setError(null);
       
-      // Notify parent component to update UI state
+      
+      // Notify parent component to update UI state to "comparing"
       onComparisonStart();
+
+      console.log('Starting comparison with files:', {
+        baseFile: state.baseFile,
+        compareFile: state.compareFile,
+        settings
+      });
 
       // Call API to start comparison
       const result = await compareDocuments(
@@ -54,15 +68,36 @@ const UploadSection = ({ onComparisonStart }) => {
         state.compareFile.fileId, 
         settings
       );
+      
+      console.log('Comparison result:', result);
+
+      if (!result || !result.comparisonId) {
+        throw new Error('Invalid response from server. Missing comparisonId.');
+      }
 
       // Set the comparison ID in context
       setComparisonId(result.comparisonId);
       
+      // Notify parent component that comparison is complete and pass the ID
+      onComparisonComplete(result.comparisonId);
+      
       setLoading(false);
+      setSubmitting(false);
     } catch (err) {
       console.error('Error starting comparison:', err);
-      setError(err.response?.data?.error || 'Failed to start comparison. Please try again.');
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to start comparison. Please try again.';
+      
+      setError(errorMessage);
       setLoading(false);
+      setSubmitting(false);
+      
+      // Notify parent of the error
+      if (onComparisonError) {
+        onComparisonError(errorMessage);
+      }
+      
+      // Reset UI state since comparison failed
+      onComparisonStart(false);
     }
   };
 
@@ -111,9 +146,9 @@ const UploadSection = ({ onComparisonStart }) => {
           <button 
             className="comparison-button"
             onClick={startComparison}
-            disabled={!state.baseFile || !state.compareFile || state.loading}
+            disabled={!state.baseFile || !state.compareFile || state.loading || submitting}
           >
-            {state.loading ? 'Starting Comparison...' : 'Compare Documents'}
+            {submitting ? 'Starting Comparison...' : 'Compare Documents'}
           </button>
         </div>
       </div>

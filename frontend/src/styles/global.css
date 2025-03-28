@@ -345,3 +345,78 @@
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
+
+  
+.comparison-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  text-align: center;
+  min-height: 400px;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  background-color: var(--surface-color);
+  border-radius: var(--border-radius-m);
+  box-shadow: var(--shadow-light);
+  margin-top: var(--spacing-xl);
+}
+
+.comparison-progress h2 {
+  margin-top: var(--spacing-m);
+  color: var(--primary-color);
+}
+
+.comparison-progress p {
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-m);
+}
+
+.comparison-time {
+  font-size: var(--font-size-s);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-m);
+  padding: var(--spacing-s) var(--spacing-m);
+  background-color: var(--background-color);
+  border-radius: var(--border-radius-s);
+  display: inline-block;
+}
+
+.cancel-button {
+  margin-top: var(--spacing-l);
+  padding: var(--spacing-s) var(--spacing-l);
+  background-color: transparent;
+  color: var(--error-color);
+  border: 1px solid var(--error-color);
+  border-radius: var(--border-radius-s);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cancel-button:hover {
+  background-color: var(--error-color);
+  color: white;
+}
+
+/* Animation for the spinner */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.comparison-progress .spinner {
+  animation: pulse 2s infinite ease-in-out;
+}

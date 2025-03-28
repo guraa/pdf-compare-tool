@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import { getComparisonResult, generateReport, downloadBlob } from '../../services/api';
 import SummaryPanel from './SummaryPanel';
@@ -21,27 +21,61 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [exportFormat, setExportFormat] = useState('pdf');
   const [exportLoading, setExportLoading] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [maxRetries] = useState(5);
 
-  useEffect(() => {
-    const fetchResults = async () => {
-      if (!comparisonId) return;
+  // Memoized fetchResults function with retry logic
+  const fetchResults = useCallback(async () => {
+    if (!comparisonId) return;
+    
+    try {
+      setLoading(true);
       
-      try {
-        setLoading(true);
+      console.log(`Fetching comparison results for ID: ${comparisonId} (Attempt ${retryCount + 1}/${maxRetries})`);
+      
+      const result = await getComparisonResult(comparisonId);
+      
+      // If we got a result, reset everything and update state
+      setComparisonResult(result);
+      setLoading(false);
+      setRetryCount(0);
+      console.log('Comparison result received:', result);
+    } catch (err) {
+      console.error('Error fetching comparison results:', err);
+      
+      if (retryCount < maxRetries - 1) {
+        // Increase the delay with each retry (exponential backoff)
+        const delay = Math.min(2000 * Math.pow(1.5, retryCount), 15000);
+        console.log(`Retrying in ${Math.round(delay/1000)} seconds...`);
         
-        const result = await getComparisonResult(comparisonId);
-        setComparisonResult(result);
-        
+        setError(`Comparison result not available yet. Retrying in ${Math.round(delay/1000)} seconds...`);
         setLoading(false);
-      } catch (err) {
-        console.error('Error fetching comparison results:', err);
-        setError(err.response?.data?.error || 'Failed to load comparison results.');
+        
+        // Increment retry count and set up next retry
+        setRetryCount(prevCount => prevCount + 1);
+        
+        setTimeout(() => {
+          fetchResults();
+        }, delay);
+      } else {
+        setError('Failed to load comparison results after multiple attempts. The comparison may still be processing or has failed.');
         setLoading(false);
       }
-    };
+    }
+  }, [comparisonId, retryCount, maxRetries, setComparisonResult, setLoading, setError]);
 
-    fetchResults();
-  }, [comparisonId, setComparisonResult, setLoading, setError]);
+  // Effect to fetch results when component mounts or comparison ID changes
+  useEffect(() => {
+    if (comparisonId) {
+      // Reset state for new comparison
+      setRetryCount(0);
+      setError(null);
+      setComparisonResult(null);
+      
+      // Start fetching
+      fetchResults();
+    }
+  }, [comparisonId, fetchResults, setError, setComparisonResult]);
 
   const handleExport = async () => {
     try {
@@ -77,7 +111,7 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
     updateFilters(filters);
   };
 
-  if (state.loading) {
+  if (state.loading && retryCount === 0) {
     return (
       <div className="result-viewer-loading">
         <Spinner size="large" />
@@ -86,7 +120,7 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
     );
   }
 
-  if (state.error) {
+  if (state.error && retryCount >= maxRetries) {
     return (
       <div className="result-viewer-error">
         <div className="error-icon">
@@ -96,12 +130,25 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
         </div>
         <h3>Error Loading Results</h3>
         <p>{state.error}</p>
-        <button className="reload-button" onClick={() => window.location.reload()}>
-          Reload
+        <button className="reload-button" onClick={() => {
+          setRetryCount(0);
+          fetchResults();
+        }}>
+          Try Again
         </button>
         <button className="back-button" onClick={onNewComparison}>
           Start New Comparison
         </button>
+      </div>
+    );
+  }
+
+  if (!state.comparisonResult && retryCount < maxRetries) {
+    return (
+      <div className="result-viewer-loading">
+        <Spinner size="large" />
+        <p>Processing comparison... {retryCount > 0 ? `(Attempt ${retryCount}/${maxRetries})` : ''}</p>
+        {state.error && <p className="retry-message">{state.error}</p>}
       </div>
     );
   }
