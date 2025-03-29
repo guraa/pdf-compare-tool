@@ -8,6 +8,10 @@ public class FileUploadResponse {
     private boolean success;
     private String errorMessage;
 
+    private float fileSize;
+    private String fileName;
+
+
     public FileUploadResponse() {
         this.success = true;
     }
@@ -19,6 +23,22 @@ public class FileUploadResponse {
     }
 
     // Getters and setters
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String filename) {
+        this.fileName = filename;
+    }
+
+    public float getFileSize() {
+        return fileSize;
+    }
+
+    public void setFileSize(float fileSize) {
+        this.fileSize = fileSize;
+    }
     public String getFileId() {
         return fileId;
     }

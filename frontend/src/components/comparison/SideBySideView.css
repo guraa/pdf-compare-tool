@@ -372,6 +372,12 @@
   overflow: auto;
 }
 
+.overlay-layers {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
 .base-layer, .compare-layer {
   position: absolute;
   top: 0;
@@ -381,6 +387,16 @@
 }
 
 .compare-layer {
+  pointer-events: none;
+}
+
+.highlight-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
   pointer-events: none;
 }
 
@@ -441,11 +457,7 @@
 }
 
 .reference-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  position: relative;
   z-index: 1;
 }
 
@@ -477,17 +489,17 @@
 
 .diff-item.added {
   border-color: var(--success-color);
-  background-color: rgba(76, 175, 80, 0.1);
+  background-color: rgba(76, 175, 80, 0.2);
 }
 
 .diff-item.deleted {
   border-color: var(--error-color);
-  background-color: rgba(244, 67, 54, 0.1);
+  background-color: rgba(244, 67, 54, 0.2);
 }
 
 .diff-item.modified {
   border-color: var(--warning-color);
-  background-color: rgba(255, 152, 0, 0.1);
+  background-color: rgba(255, 152, 0, 0.2);
 }
 
 .diff-content {
@@ -575,6 +587,16 @@
   fill: var(--error-color);
 }
 
+/* Loading container */
+.loading-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: var(--spacing-xl);
+}
+
 /* Media queries for responsive design */
 @media (max-width: 1200px) {
   .documents-container.with-panel,
@@ -627,22 +649,5 @@
   
   .comparison-container {
     flex-direction: column;
-  }
-}
-
-@media (max-width: 768px) {
-  .view-settings {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-s);
-    width: 100%;
-  }
-  
-  .highlight-controls select {
-    width: 100%;
-  }
-  
-  .diff-indicator {
-    max-width: 200px;
   }
 }

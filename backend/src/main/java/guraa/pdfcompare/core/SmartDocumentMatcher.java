@@ -1,10 +1,9 @@
 package guraa.pdfcompare.core;
 
-import guraa.pdfcompare.comparison.PDFComparisonResult;
+import org.apache.commons.text.similarity.CosineSimilarity;
+import org.apache.commons.text.similarity.JaccardSimilarity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.commons.text.similarity.JaccardSimilarity;
-import org.apache.commons.text.similarity.CosineSimilarity;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -17,7 +16,7 @@ public class SmartDocumentMatcher {
     private static final Logger logger = LoggerFactory.getLogger(SmartDocumentMatcher.class);
 
     // Configurable parameters
-    private double similarityThreshold = 0.70; // Minimum similarity score to consider a match
+    private double similarityThreshold = 0.1; // Minimum similarity score to consider a match
     private int minDocumentPages = 1;          // Minimum pages to consider a document segment
     private int maxTitleDistance = 3;          // Max levenshtein distance for title matching
 
@@ -429,8 +428,21 @@ public class SmartDocumentMatcher {
             return 0;
         }
 
+        // Convert String keys to CharSequence
+        Map<CharSequence, Integer> charSeqMap1 = map1.entrySet().stream()
+                .collect(Collectors.toMap(
+                        e -> (CharSequence) e.getKey(),
+                        Map.Entry::getValue
+                ));
+
+        Map<CharSequence, Integer> charSeqMap2 = map2.entrySet().stream()
+                .collect(Collectors.toMap(
+                        e -> (CharSequence) e.getKey(),
+                        Map.Entry::getValue
+                ));
+
         CosineSimilarity cosineSimilarity = new CosineSimilarity();
-        return cosineSimilarity.cosineSimilarity(map1, map2);
+        return cosineSimilarity.cosineSimilarity(charSeqMap1, charSeqMap2);
     }
 
     /**

@@ -25,12 +25,13 @@ const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonEr
     ignorePositioning: false,
     compareAnnotations: true,
     compareBookmarks: true,
-    compareMetadata: true
+    compareMetadata: true,
+    smartMatching: false
   });
   
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSettingsChange = (name, value) => {
+  const handleSettingChange = (name, value) => {
     setSettings(prev => ({
       ...prev,
       [name]: value
@@ -109,14 +110,14 @@ const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonEr
           Upload two PDF documents to identify and analyze differences between them.
         </p>
         <div className="upload-option">
-  <input 
-    type="checkbox" 
-    id="smartMatching" 
-    checked={settings.smartMatching}
-    onChange={(e) => handleSettingChange('smartMatching', e.target.checked)}
-  />
-  <label htmlFor="smartMatching">Enable Smart Document Matching (for multi-document PDFs)</label>
-</div>
+          <input 
+            type="checkbox" 
+            id="smartMatching" 
+            checked={settings.smartMatching}
+            onChange={(e) => handleSettingChange('smartMatching', e.target.checked)}
+          />
+          <label htmlFor="smartMatching">Enable Smart Document Matching (for multi-document PDFs)</label>
+        </div>
         
         <div className="upload-grid">
           <div className="upload-item">
@@ -141,7 +142,7 @@ const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonEr
         {(state.baseFile || state.compareFile) && (
           <ComparisonSettings 
             settings={settings}
-            onSettingChange={handleSettingsChange}
+            onSettingChange={handleSettingChange}
           />
         )}
         

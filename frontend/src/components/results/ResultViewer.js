@@ -3,6 +3,7 @@ import { useComparison } from '../../context/ComparisonContext';
 import { getComparisonResult, generateReport, downloadBlob } from '../../services/api';
 import SummaryPanel from './SummaryPanel';
 import SideBySideView from '../comparison/SideBySideView';
+import SmartComparisonContainer from '../comparison/SmartComparisonContainer';
 import DifferenceList from '../comparison/DifferenceList';
 import Spinner from '../common/Spinner';
 import './ResultViewer.css';
@@ -265,19 +266,19 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
           />
         )}
         
-
         {activeTab === 'sideBySide' && (
-            {result.mode === 'smart' ? (
-                <SmartComparisonContainer 
-                  comparisonId={comparisonId}
-                />
-            ) : (
-          <SideBySideView 
-            comparisonId={comparisonId}
-            result={state.comparisonResult}
-          />
+          state.comparisonResult.mode === 'smart' ? (
+            <SmartComparisonContainer 
+              comparisonId={comparisonId}
+            />
+          ) : (
+            <SideBySideView 
+              comparisonId={comparisonId}
+              result={state.comparisonResult}
+            />
+          )
         )}
-    )}
+        
         {activeTab === 'differences' && (
           <DifferenceList 
             result={state.comparisonResult}
