@@ -1,12 +1,39 @@
+// File: frontend/src/components/results/ResultViewer.js
 import React, { useState, useEffect, useRef } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import { getComparisonResult, generateReport, downloadBlob } from '../../services/api';
-import SummaryPanel from './SummaryPanel';
+import ComparisonSummary from './ComparisonSummary';
 import SideBySideView from '../comparison/SideBySideView';
 import SmartComparisonContainer from '../comparison/SmartComparisonContainer';
 import DifferenceList from '../comparison/DifferenceList';
 import Spinner from '../common/Spinner';
 import './ResultViewer.css';
+
+// Error component for handling error states
+const ResultViewerError = ({ error, onRetry, onNewComparison }) => {
+  return (
+    <div className="result-viewer-error">
+      <div className="error-icon">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+        </svg>
+      </div>
+      <h3>Error Loading Page Comparison</h3>
+      <p className="error-message">{error}</p>
+      <p className="error-details">
+        Failed to load page comparison details. Request failed with status code 404.
+      </p>
+      <div className="error-actions">
+        <button className="reload-button" onClick={onRetry}>
+          Retry
+        </button>
+        <button className="back-button" onClick={onNewComparison}>
+          Start New Comparison
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const ResultViewer = ({ comparisonId, onNewComparison }) => {
   const { 
@@ -157,24 +184,14 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
 
   if (state.error && retryCount >= maxRetries) {
     return (
-      <div className="result-viewer-error">
-        <div className="error-icon">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-          </svg>
-        </div>
-        <h3>Error Loading Results</h3>
-        <p>{state.error}</p>
-        <button className="reload-button" onClick={() => {
+      <ResultViewerError 
+        error={state.error}
+        onRetry={() => {
           setRetryCount(0);
           fetchResults();
-        }}>
-          Try Again
-        </button>
-        <button className="back-button" onClick={onNewComparison}>
-          Start New Comparison
-        </button>
-      </div>
+        }}
+        onNewComparison={onNewComparison}
+      />
     );
   }
 
@@ -260,7 +277,7 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
       
       <div className="result-content">
         {activeTab === 'overview' && (
-          <SummaryPanel 
+          <ComparisonSummary 
             result={state.comparisonResult}
             onDifferenceClick={handleDifferenceClick}
           />

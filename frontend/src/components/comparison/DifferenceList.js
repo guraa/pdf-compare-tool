@@ -83,7 +83,15 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
   useEffect(() => {
     applyFilters(allDifferences, searchTerm, typeFilter, severityFilter);
   }, [allDifferences, searchTerm, typeFilter, severityFilter]);
-  
+  const EmptyDifferenceView = () => {
+    return (
+      <div className="no-differences-container">
+        <p className="no-differences-message">
+          No differences found matching your filters.
+        </p>
+      </div>
+    );
+  };
   
   const applyFilters = (diffs, search, type, severity) => {
     if (!diffs || diffs.length === 0) {
