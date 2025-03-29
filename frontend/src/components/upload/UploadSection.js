@@ -48,7 +48,7 @@ const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonEr
       setError('Please upload both PDF files before starting comparison');
       return;
     }
-
+  
     try {
       setSubmitting(true);
       setLoading(true);
@@ -56,7 +56,7 @@ const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonEr
       
       // Notify parent component to update UI state to "comparing"
       onComparisonStart();
-
+  
       console.log('Starting comparison with files:', {
         baseFile: state.baseFile,
         compareFile: state.compareFile,
@@ -65,7 +65,7 @@ const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonEr
           smartMatching: true // Always use smart matching
         }
       });
-
+  
       // Call API to start comparison with smart matching always enabled
       const result = await compareDocuments(
         state.baseFile.fileId, 
@@ -77,11 +77,11 @@ const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonEr
       );
       
       console.log('Comparison result:', result);
-
+  
       if (!result || !result.comparisonId) {
         throw new Error('Invalid response from server. Missing comparisonId.');
       }
-
+  
       // Set the comparison ID in context
       setComparisonId(result.comparisonId);
       
@@ -92,7 +92,15 @@ const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonEr
       setSubmitting(false);
     } catch (err) {
       console.error('Error starting comparison:', err);
-      const errorMessage = err.response?.data?.error || err.message || 'Failed to start comparison. Please try again.';
+      
+      // Get more specific error message if available
+      let errorMessage = 'Failed to start comparison. Please try again.';
+      
+      if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
       
       setError(errorMessage);
       setLoading(false);

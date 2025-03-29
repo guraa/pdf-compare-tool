@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
-import { getDocumentPairs, getDocumentPairResult } from '../../services/api';
+import { getDocumentPairs } from '../../services/api';
 import Spinner from '../common/Spinner';
 import './DocumentMatchingView.css';
 
@@ -20,23 +20,26 @@ const DocumentMatchingView = ({ comparisonId, onSelectDocumentPair }) => {
       try {
         setLoading(true);
         const pairs = await getDocumentPairs(comparisonId);
-        setDocumentPairs(pairs);
-        setLoading(false);
         
-        // Auto-select the first matched pair if available
-        if (pairs.length > 0) {
+        if (pairs && pairs.length > 0) {
+          setDocumentPairs(pairs);
+          setLoading(false);
+          
+          // Auto-select the first matched pair if available
           const matchedPairIndex = pairs.findIndex(pair => pair.matched);
           if (matchedPairIndex >= 0) {
             setSelectedPairIndex(matchedPairIndex);
           } else {
             setSelectedPairIndex(0);
           }
+        } else {
+          throw new Error("No document pairs returned");
         }
       } catch (err) {
         console.error('Error fetching document pairs:', err);
         
         // Check if we need to retry (could be still processing)
-        if (err.response && err.response.status === 202 && retryCount < maxRetries) {
+        if ((err.message.includes("still processing") || err.response?.status === 202) && retryCount < maxRetries) {
           setLoading(false);
           
           // Wait longer between retries as the count increases
@@ -289,7 +292,10 @@ const DocumentMatchingView = ({ comparisonId, onSelectDocumentPair }) => {
               
               {documentPairs[selectedPairIndex].matched && (
                 <div className="view-options">
-                  <button className="view-pair-button">
+                  <button 
+                    className="view-pair-button"
+                    onClick={() => onSelectDocumentPair(selectedPairIndex, documentPairs[selectedPairIndex])}
+                  >
                     View Comparison
                   </button>
                 </div>

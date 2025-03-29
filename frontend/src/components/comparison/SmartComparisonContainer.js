@@ -1,3 +1,4 @@
+// SmartComparisonContainer.js - optimized version
 import React, { useState, useEffect } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import DocumentMatchingView from './DocumentMatchingView';
@@ -21,6 +22,8 @@ const SmartComparisonContainer = ({ comparisonId }) => {
   const [pairResult, setPairResult] = useState(null);
   const [loadingPair, setLoadingPair] = useState(false);
   const [pairError, setPairError] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [maxRetries] = useState(5);
   
   // Handle selecting a document pair for comparison
   const handleSelectDocumentPair = async (pairIndex, pair) => {
@@ -43,7 +46,18 @@ const SmartComparisonContainer = ({ comparisonId }) => {
         setLoadingPair(false);
       } catch (err) {
         console.error('Error loading document pair result:', err);
-        setPairError('Failed to load comparison for this document pair.');
+        
+        // Check if we should retry - is it a "still processing" error?
+        if (err.message.includes("still processing") && retryCount < maxRetries) {
+          setPairError(`The comparison is still being processed. Retrying in ${Math.round(3 * Math.pow(1.5, retryCount))} seconds...`);
+          setTimeout(() => {
+            setRetryCount(prev => prev + 1);
+            // Try again with the same parameters
+            handleSelectDocumentPair(pairIndex, pair);
+          }, 3000 * Math.pow(1.5, retryCount));
+        } else {
+          setPairError('Failed to load comparison for this document pair. The server may still be processing or the comparison failed.');
+        }
         setLoadingPair(false);
       }
     }
@@ -99,8 +113,9 @@ const SmartComparisonContainer = ({ comparisonId }) => {
             <div className="pair-loading">
               <Spinner size="large" />
               <p>Loading document comparison...</p>
+              {pairError && <p className="retry-message">{pairError}</p>}
             </div>
-          ) : pairError ? (
+          ) : pairError && retryCount >= maxRetries ? (
             <div className="pair-error">
               <div className="error-icon">
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -111,7 +126,10 @@ const SmartComparisonContainer = ({ comparisonId }) => {
               <p>{pairError}</p>
               <button 
                 className="retry-button" 
-                onClick={() => handleSelectDocumentPair(selectedPairIndex, selectedPair)}
+                onClick={() => {
+                  setRetryCount(0);
+                  handleSelectDocumentPair(selectedPairIndex, selectedPair);
+                }}
               >
                 Try Again
               </button>

@@ -272,44 +272,71 @@ export const getDocumentPairs = async (comparisonId) => {
     }
   };
   
-  // Get page details for a specific page in a document pair
   export const getDocumentPageDetails = async (comparisonId, pairIndex, pageNumber, filters = {}) => {
     // Convert filter objects to simple string parameters
     const params = {};
     
     // Handle filter parameters properly
-    if (filters.differenceTypes && filters.differenceTypes.length > 0) {
+    if (filters && filters.differenceTypes && filters.differenceTypes.length > 0) {
       params.types = filters.differenceTypes.join(',');
     }
     
-    if (filters.minSeverity) {
+    if (filters && filters.minSeverity && filters.minSeverity !== 'all') {
       params.severity = filters.minSeverity;
     }
     
-    if (filters.searchTerm) {
+    if (filters && filters.searchTerm) {
       params.search = filters.searchTerm;
     }
+    
+    // Log debug info
+    console.log(`Getting document page details for comparison: ${comparisonId}, pair: ${pairIndex}, page: ${pageNumber}`);
     
     try {
       const response = await api.get(
         `/pdfs/comparison/${comparisonId}/documents/${pairIndex}/page/${pageNumber}`, 
-        { 
-          params,
-          validateStatus: function (status) {
-            // Accept 202 Accepted as a valid response (still processing)
-            return (status >= 200 && status < 300) || status === 202;
-          }
-        }
+        { params }
       );
       
-      // If status is 202, throw a "still processing" error that the retry logic can handle
-      if (response.status === 202) {
-        throw new Error("Comparison still processing");
+      // Add default empty arrays if missing
+      if (!response.data.baseDifferences) {
+        response.data.baseDifferences = [];
+      }
+      
+      if (!response.data.compareDifferences) {
+        response.data.compareDifferences = [];
       }
       
       return response.data;
     } catch (error) {
       console.error(`Error fetching page details for page ${pageNumber} of document pair ${pairIndex}:`, error);
+      
+      // Try fallback endpoint for backward compatibility
+      if (error.response && error.response.status === 404) {
+        try {
+          console.log("Trying fallback endpoint format...");
+          
+          const fallbackResponse = await api.get(
+            `/pdfs/comparison/${comparisonId}/page/${pageNumber}`,
+            { params }
+          );
+          
+          // Add default empty arrays if missing
+          if (!fallbackResponse.data.baseDifferences) {
+            fallbackResponse.data.baseDifferences = [];
+          }
+          
+          if (!fallbackResponse.data.compareDifferences) {
+            fallbackResponse.data.compareDifferences = [];
+          }
+          
+          return fallbackResponse.data;
+        } catch (fallbackError) {
+          console.error("Fallback endpoint also failed:", fallbackError);
+          throw fallbackError;
+        }
+      }
+      
       throw error;
     }
   };

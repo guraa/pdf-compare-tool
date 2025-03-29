@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import { usePreferences } from '../../context/PreferencesContext';
-import { getComparisonDetails } from '../../services/api';
+import { getDocumentPageDetails } from '../../services/api';
 import ViewToolbar from './components/ViewToolbar';
 import SideBySidePanel from './panels/SideBySidePanel';
 import OverlayPanel from './panels/OverlayPanel';
@@ -14,12 +14,10 @@ const SideBySideView = ({ comparisonId, result }) => {
   const { 
     state, 
     setSelectedPage, 
-    setSelectedDifference, 
+    setSelectedDifference,
     updateFilters,
     updateViewSettings
   } = useComparison();
-  
-  const { preferences } = usePreferences();
   
   // State variables
   const [pageDetails, setPageDetails] = useState(null);
@@ -31,43 +29,52 @@ const SideBySideView = ({ comparisonId, result }) => {
   const [activeDifference, setActiveDifference] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const [maxRetries] = useState(3);
+  const [selectedPairIndex, setSelectedPairIndex] = useState(0);
   
   // Refs
   const baseContainerRef = useRef(null);
   const compareContainerRef = useRef(null);
   
-  // Derived values
-  const totalPages = Math.max(
-    result?.basePageCount || 0,
-    result?.comparePageCount || 0
-  );
-
-  useEffect(() => {
-    // Set default view settings if not already set
-    if (!state.viewSettings) {
-      updateViewSettings({
-        highlightMode: 'all',
-        zoom: 1.0,
-        syncScroll: true,
-        showChangesOnly: false
-      });
+  // Check if we're in smart comparison mode - don't trigger error if pageDifferences is missing
+  const isSmartComparisonMode = result && result.documentPairs && result.documentPairs.length > 0;
+  
+  // Calculate derived values
+  let basePageCount = 0;
+  let comparePageCount = 0;
+  
+  if (isSmartComparisonMode && result.documentPairs && result.documentPairs.length > 0) {
+    const pair = result.documentPairs[selectedPairIndex];
+    if (pair) {
+      basePageCount = pair.basePageCount || 0;
+      comparePageCount = pair.comparePageCount || 0;
     }
+  } else if (result) {
+    basePageCount = result.basePageCount || 0;
+    comparePageCount = result.comparePageCount || 0;
+  }
+  
+  // Total pages is the maximum of base and compare
+  const totalPages = Math.max(basePageCount, comparePageCount);
+  
+  // Log the structure of the result object
+  useEffect(() => {
+    console.log("Comparison result structure:", result);
     
-    // Force re-initialization of selected page
-    setSelectedPage(state.selectedPage || 1);
-  }, []);
-  
-  // Check if result contains page differences
-  useEffect(() => {
-    // If result is loaded but no page differences, log error
-    if (result && !result.pageDifferences) {
-      console.error("Result does not contain pageDifferences array", result);
+    if (isSmartComparisonMode) {
+      console.log(`Found ${result.documentPairs.length} document pairs`);
+      // Initialize with the first pair
+      if (result.documentPairs.length > 0) {
+        setSelectedPairIndex(0);
+      }
+    } else if (result && !result.pageDifferences) {
+      // Only log this as a warning rather than error in smart mode
+      console.warn("Result does not contain pageDifferences array, but we're handling it in smart mode", result);
     } else if (result && result.pageDifferences) {
-      console.log(`Result contains ${result.pageDifferences.length} page differences entries`);
+      console.log(`Found ${result.pageDifferences.length} page differences entries`);
     }
-  }, [result]);
+  }, [result, isSmartComparisonMode]);
   
-  // Load page details when selected page changes
+  // Fetch page details when selected page changes
   useEffect(() => {
     const fetchPageDetails = async () => {
       if (!comparisonId || !state.selectedPage) return;
@@ -76,11 +83,12 @@ const SideBySideView = ({ comparisonId, result }) => {
         setLoading(true);
         setError(null);
         
-        console.log(`Fetching comparison details for ID: ${comparisonId}, page: ${state.selectedPage}`);
+        console.log(`Fetching comparison details for ID: ${comparisonId}, page: ${state.selectedPage}, pairIndex: ${selectedPairIndex}`);
         
-        // Call the API function with proper filter formatting
-        const details = await getComparisonDetails(
-          comparisonId, 
+        // Use document pair specific API for smart comparison mode
+        const details = await getDocumentPageDetails(
+          comparisonId,
+          selectedPairIndex,
           state.selectedPage,
           state.filters
         );
@@ -90,7 +98,7 @@ const SideBySideView = ({ comparisonId, result }) => {
         // Check if we got any differences in the response
         if (details && details.baseDifferences && details.baseDifferences.length === 0 &&
             details.compareDifferences && details.compareDifferences.length === 0) {
-          console.warn("No differences found in API response. This might be an issue with the backend API.");
+          console.warn("No differences found in API response for this page.");
         }
         
         setPageDetails(details);
@@ -100,7 +108,7 @@ const SideBySideView = ({ comparisonId, result }) => {
         console.error('Error fetching page details:', err);
         
         // Handle "still processing" error differently from other errors
-        if (err.message === "Comparison still processing" && retryCount < maxRetries) {
+        if (err.message && err.message.includes("still processing") && retryCount < maxRetries) {
           console.log(`Comparison still processing. Retry ${retryCount + 1}/${maxRetries} in 3 seconds...`);
           setError('Comparison details are still being processed. Please wait a moment...');
           setLoading(false);
@@ -110,31 +118,14 @@ const SideBySideView = ({ comparisonId, result }) => {
             setRetryCount(prev => prev + 1);
           }, 3000);
         } else {
-          setError('Failed to load page comparison details: ' + (err.message || 'Unknown error'));
+          setError('Failed to load page comparison details. Please try navigating to another page.');
           setLoading(false);
         }
       }
     };
     
     fetchPageDetails();
-  }, [comparisonId, state.selectedPage, state.filters, retryCount, maxRetries]);
-
-  const checkForRealDifferences = (pageDetails) => {
-    if (!pageDetails) return false;
-    
-    // Check base differences
-    if (pageDetails.baseDifferences && pageDetails.baseDifferences.length > 0) {
-      return true;
-    }
-    
-    // Check compare differences
-    if (pageDetails.compareDifferences && pageDetails.compareDifferences.length > 0) {
-      return true;
-    }
-    
-    return false;
-  };
-  
+  }, [comparisonId, state.selectedPage, state.filters, retryCount, maxRetries, selectedPairIndex]);
 
   // Handler for difference selection
   const handleDifferenceSelect = (difference) => {
@@ -190,7 +181,7 @@ const SideBySideView = ({ comparisonId, result }) => {
     setShowDifferencePanel(!showDifferencePanel);
   };
   
-  // Helper function to check if a page has differences - modified to handle possible missing or corrupted data
+  // Helper function to check if a page has differences
   const hasDifferences = (page) => {
     if (!page) return false;
     
@@ -252,7 +243,7 @@ const SideBySideView = ({ comparisonId, result }) => {
     }
   })();
 
-  // If result data is still loading and we don't have any comparison results yet
+  // If we're still loading result data
   if (!result) {
     return (
       <div className="side-by-side-view-loading">
@@ -322,6 +313,8 @@ const SideBySideView = ({ comparisonId, result }) => {
             handleScroll={handleScroll}
             handleDifferenceSelect={handleDifferenceSelect}
             showDifferencePanel={showDifferencePanel}
+            selectedPairIndex={selectedPairIndex}
+            isSmartMode={isSmartComparisonMode}
           />
         )}
         
@@ -334,6 +327,8 @@ const SideBySideView = ({ comparisonId, result }) => {
             handleDifferenceSelect={handleDifferenceSelect}
             showDifferencePanel={showDifferencePanel}
             overlayOpacity={overlayOpacity}
+            selectedPairIndex={selectedPairIndex}
+            isSmartMode={isSmartComparisonMode}
           />
         )}
         
@@ -346,6 +341,8 @@ const SideBySideView = ({ comparisonId, result }) => {
             state={state}
             handleDifferenceSelect={handleDifferenceSelect}
             showDifferencePanel={showDifferencePanel}
+            selectedPairIndex={selectedPairIndex}
+            isSmartMode={isSmartComparisonMode}
           />
         )}
         

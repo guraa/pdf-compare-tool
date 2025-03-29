@@ -1,4 +1,3 @@
-// File: frontend/src/components/results/ComparisonSummary.js
 import React from 'react';
 import './ComparisonSummary.css';
 
@@ -13,56 +12,55 @@ const ComparisonSummary = ({ result }) => {
 
   const timestamp = new Date().toLocaleString();
   
-  // Calculate difference breakdown
-  const calculateTextDifferenceBreakdown = () => {
-    if (!result.pageDifferences) return { added: 0, deleted: 0, modified: 0 };
-    
-    const breakdown = { added: 0, deleted: 0, modified: 0 };
-    
-    result.pageDifferences.forEach(page => {
-      if (page.textDifferences?.differences) {
-        page.textDifferences.differences.forEach(diff => {
-          if (diff.differenceType === 'ADDED') {
-            breakdown.added++;
-          } else if (diff.differenceType === 'DELETED') {
-            breakdown.deleted++;
-          } else if (diff.differenceType === 'MODIFIED') {
-            breakdown.modified++;
-          }
-        });
-      }
-    });
-    
-    return breakdown;
-  };
+  // Check if we're in smart comparison mode
+  const isSmartMode = result.documentPairs && result.documentPairs.length > 0;
   
-  const textBreakdown = calculateTextDifferenceBreakdown();
+  // Extract statistics from document pairs if in smart mode
+  let textDifferenceCount = 0;
+  let imageDifferenceCount = 0;
+  let fontDifferenceCount = 0;
+  let styleDifferenceCount = 0;
+  let basePageCount = 0;
+  let comparePageCount = 0;
+  let differentPagesCount = 0;
   
-  // Calculate page with most differences
-  const findPageWithMostDifferences = () => {
-    if (!result || !result.pageDifferences) return null;
-    
-    let maxDiffs = 0;
-    let maxPage = null;
-    
-    result.pageDifferences.forEach(page => {
-      const diffCount = (
-        (page.textDifferences?.differences?.length || 0) +
-        (page.textElementDifferences?.length || 0) +
-        (page.imageDifferences?.length || 0) +
-        (page.fontDifferences?.length || 0)
-      );
+  if (isSmartMode) {
+    // Aggregate stats from all document pairs
+    result.documentPairs.forEach(pair => {
+      textDifferenceCount += pair.textDifferences || 0;
+      imageDifferenceCount += pair.imageDifferences || 0;
+      fontDifferenceCount += pair.fontDifferences || 0;
+      styleDifferenceCount += pair.styleDifferences || 0;
       
-      if (diffCount > maxDiffs) {
-        maxDiffs = diffCount;
-        maxPage = page;
+      // Assuming the total page counts from all pairs
+      basePageCount += pair.basePageCount || 0;
+      comparePageCount += pair.comparePageCount || 0;
+      
+      // For now, just count all pages as different if there are differences
+      if (pair.totalDifferences > 0) {
+        differentPagesCount += Math.max(pair.basePageCount || 0, pair.comparePageCount || 0);
       }
     });
-    
-    return { page: maxPage, count: maxDiffs };
-  };
+  } else {
+    // Use traditional structure
+    textDifferenceCount = result.totalTextDifferences || 0;
+    imageDifferenceCount = result.totalImageDifferences || 0;
+    fontDifferenceCount = result.totalFontDifferences || 0;
+    styleDifferenceCount = result.totalStyleDifferences || 0;
+    basePageCount = result.basePageCount || 0;
+    comparePageCount = result.comparePageCount || 0;
+    differentPagesCount = result.pageDifferences?.filter(page => 
+      page.onlyInBase || 
+      page.onlyInCompare || 
+      page.textDifferences?.differences?.length > 0 ||
+      page.textElementDifferences?.length > 0 ||
+      page.imageDifferences?.length > 0 ||
+      page.fontDifferences?.length > 0
+    ).length || 0;
+  }
   
-  const pageWithMostDiffs = findPageWithMostDifferences();
+  // Total differences remains the same in both modes
+  const totalDifferences = result.totalDifferences || 0;
 
   return (
     <div className="comparison-summary">
@@ -80,11 +78,11 @@ const ComparisonSummary = ({ result }) => {
             <div className="stat-item">
               <div className="stat-label">Total Pages</div>
               <div className="stat-value">
-                <span className="base">{result.basePageCount}</span>
+                <span className="base">{basePageCount}</span>
                 <span className="separator">/</span>
-                <span className="compare">{result.comparePageCount}</span>
+                <span className="compare">{comparePageCount}</span>
               </div>
-              {result.pageCountDifferent && (
+              {basePageCount !== comparePageCount && (
                 <div className="stat-alert">Page count mismatch!</div>
               )}
             </div>
@@ -92,35 +90,16 @@ const ComparisonSummary = ({ result }) => {
             <div className="stat-item">
               <div className="stat-label">Total Differences</div>
               <div className="stat-value highlight">
-                {result.totalDifferences || 0}
+                {totalDifferences}
               </div>
             </div>
             
             <div className="stat-item">
               <div className="stat-label">Different Pages</div>
               <div className="stat-value">
-                {result.pageDifferences?.filter(page => 
-                  page.onlyInBase || 
-                  page.onlyInCompare || 
-                  page.textDifferences?.differences?.length > 0 ||
-                  page.textElementDifferences?.length > 0 ||
-                  page.imageDifferences?.length > 0 ||
-                  page.fontDifferences?.length > 0
-                ).length || 0}
+                {differentPagesCount}
               </div>
             </div>
-            
-            {pageWithMostDiffs && pageWithMostDiffs.count > 0 && (
-              <div className="stat-item">
-                <div className="stat-label">Most Different Page</div>
-                <div className="stat-value">
-                  Page {pageWithMostDiffs.page.pageNumber}
-                  <span className="stat-subtext">
-                    ({pageWithMostDiffs.count} differences)
-                  </span>
-                </div>
-              </div>
-            )}
           </div>
         </div>
         
@@ -133,32 +112,15 @@ const ComparisonSummary = ({ result }) => {
               <div className="category-icon text"></div>
               <div className="category-info">
                 <div className="category-label">Text Content</div>
-                <div className="category-count">{result.totalTextDifferences || 0} differences</div>
+                <div className="category-count">{textDifferenceCount} differences</div>
               </div>
-              
-              {result.totalTextDifferences > 0 && (
-                <div className="text-breakdown">
-                  <div className="breakdown-item">
-                    <div className="breakdown-label">Added</div>
-                    <div className="breakdown-value added">{textBreakdown.added}</div>
-                  </div>
-                  <div className="breakdown-item">
-                    <div className="breakdown-label">Deleted</div>
-                    <div className="breakdown-value deleted">{textBreakdown.deleted}</div>
-                  </div>
-                  <div className="breakdown-item">
-                    <div className="breakdown-label">Modified</div>
-                    <div className="breakdown-value modified">{textBreakdown.modified}</div>
-                  </div>
-                </div>
-              )}
             </div>
             
             <div className="category images">
               <div className="category-icon image"></div>
               <div className="category-info">
                 <div className="category-label">Images</div>
-                <div className="category-count">{result.totalImageDifferences || 0} differences</div>
+                <div className="category-count">{imageDifferenceCount} differences</div>
               </div>
             </div>
             
@@ -166,7 +128,7 @@ const ComparisonSummary = ({ result }) => {
               <div className="category-icon font"></div>
               <div className="category-info">
                 <div className="category-label">Fonts</div>
-                <div className="category-count">{result.totalFontDifferences || 0} differences</div>
+                <div className="category-count">{fontDifferenceCount} differences</div>
               </div>
             </div>
             
@@ -174,7 +136,7 @@ const ComparisonSummary = ({ result }) => {
               <div className="category-icon style"></div>
               <div className="category-info">
                 <div className="category-label">Text Styles</div>
-                <div className="category-count">{result.totalStyleDifferences || 0} differences</div>
+                <div className="category-count">{styleDifferenceCount} differences</div>
               </div>
             </div>
           </div>
@@ -187,10 +149,10 @@ const ComparisonSummary = ({ result }) => {
           <div className="category-chart">
             <div className="chart-bars">
               {Object.entries({
-                content: result.totalTextDifferences || 0,
-                style: result.totalStyleDifferences || 0,
-                images: result.totalImageDifferences || 0,
-                structure: result.pageDifferences?.filter(p => p.onlyInBase || p.onlyInCompare || p.dimensionsDifferent).length || 0
+                content: textDifferenceCount,
+                style: styleDifferenceCount,
+                images: imageDifferenceCount,
+                structure: totalDifferences - textDifferenceCount - styleDifferenceCount - imageDifferenceCount - fontDifferenceCount
               }).map(([category, count]) => (
                 <div className="chart-item" key={category}>
                   <div className="chart-label">{

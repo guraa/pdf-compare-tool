@@ -1,4 +1,3 @@
-// File: frontend/src/components/results/ResultViewer.js
 import React, { useState, useEffect, useRef } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import { getComparisonResult, generateReport, downloadBlob } from '../../services/api';
@@ -9,7 +8,7 @@ import DifferenceList from '../comparison/DifferenceList';
 import Spinner from '../common/Spinner';
 import './ResultViewer.css';
 
-// Error component for handling error states
+// Separate error component for better organization
 const ResultViewerError = ({ error, onRetry, onNewComparison }) => {
   return (
     <div className="result-viewer-error">
@@ -18,10 +17,10 @@ const ResultViewerError = ({ error, onRetry, onNewComparison }) => {
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
         </svg>
       </div>
-      <h3>Error Loading Page Comparison</h3>
+      <h3>Error Loading Comparison Results</h3>
       <p className="error-message">{error}</p>
       <p className="error-details">
-        Failed to load page comparison details. Request failed with status code 404.
+        The comparison process may have failed or the server is not responding.
       </p>
       <div className="error-actions">
         <button className="reload-button" onClick={onRetry}>
@@ -50,7 +49,7 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
   const [exportFormat, setExportFormat] = useState('pdf');
   const [exportLoading, setExportLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  const [maxRetries] = useState(5);
+  const [maxRetries] = useState(10);
   
   // Use refs to prevent infinite loops
   const retryCountRef = useRef(retryCount);
@@ -70,26 +69,33 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
     };
   }, []);
 
-  // Main fetch function - no useCallback to avoid dependency issues
+  // Function to fetch comparison results
   const fetchResults = async () => {
     if (!comparisonId) return;
     
     try {
       setLoading(true);
+      setError(null);
       
       console.log(`Fetching comparison results for ID: ${comparisonId} (Attempt ${retryCountRef.current + 1}/${maxRetries})`);
       
       const result = await getComparisonResult(comparisonId);
       
-      // If we got a result, reset everything and update state
-      setComparisonResult(result);
-      setLoading(false);
-      setRetryCount(0);
-      console.log('Comparison result received:', result);
+      // If we got a valid result
+      if (result) {
+        console.log('Comparison result received:', result);
+        setComparisonResult(result);
+        setLoading(false);
+        setRetryCount(0);
+        return;
+      } else {
+        throw new Error("Empty result received from server");
+      }
     } catch (err) {
       console.error('Error fetching comparison results:', err);
       
-      if (retryCountRef.current < maxRetries - 1) {
+      // If still processing and under max retries
+      if (err.message.includes("still processing") && retryCountRef.current < maxRetries) {
         // Increase the delay with each retry (exponential backoff)
         const delay = Math.min(2000 * Math.pow(1.5, retryCountRef.current), 15000);
         console.log(`Retrying in ${Math.round(delay/1000)} seconds...`);
@@ -102,30 +108,33 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
           clearTimeout(timerRef.current);
         }
         
-        // Set up next retry using the ref
+        // Set up next retry
         timerRef.current = setTimeout(() => {
           setRetryCount(prev => prev + 1);
-          fetchResults(); // Call directly instead of relying on effect
         }, delay);
       } else {
-        setError('Failed to load comparison results after multiple attempts. The comparison may still be processing or has failed.');
+        // Max retries reached or different error
+        setError(err.message || 'Failed to load comparison results after multiple attempts.');
         setLoading(false);
       }
     }
   };
 
-  // Effect to fetch results when component mounts or comparison ID changes
+  // Effect for retrying
+  useEffect(() => {
+    // Only run fetch if we're retrying or starting
+    if (retryCount > 0 || (!state.comparisonResult && !state.error)) {
+      fetchResults();
+    }
+  }, [retryCount, comparisonId]);
+
+  // Initial fetch when component mounts
   useEffect(() => {
     if (comparisonId) {
       // Reset state for new comparison
       setRetryCount(0);
       setError(null);
       setComparisonResult(null);
-      
-      // Clear any existing timer
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
       
       // Start fetching
       fetchResults();
@@ -162,7 +171,9 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
 
   const handleDifferenceClick = (diffInfo) => {
     // Set the selected page and difference
-    setSelectedPage(diffInfo.page);
+    if (diffInfo.page) {
+      setSelectedPage(diffInfo.page);
+    }
     setSelectedDifference(diffInfo);
     
     // Switch to side-by-side view
@@ -173,7 +184,8 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
     updateFilters(filters);
   };
 
-  if (state.loading && retryCount === 0) {
+  // Initial loading state
+  if (state.loading && !state.comparisonResult && retryCount === 0) {
     return (
       <div className="result-viewer-loading">
         <Spinner size="large" />
@@ -182,6 +194,7 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
     );
   }
 
+  // Error state after max retries
   if (state.error && retryCount >= maxRetries) {
     return (
       <ResultViewerError 
@@ -195,6 +208,7 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
     );
   }
 
+  // Processing state - still retrying
   if (!state.comparisonResult && retryCount < maxRetries) {
     return (
       <div className="result-viewer-loading">
@@ -205,6 +219,7 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
     );
   }
 
+  // Empty state - no results available
   if (!state.comparisonResult) {
     return (
       <div className="result-viewer-empty">
@@ -216,6 +231,7 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
     );
   }
 
+  // Main view - comparison results available
   return (
     <div className="result-viewer">
       <div className="result-header">
@@ -276,34 +292,34 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
       </div>
       
       <div className="result-content">
-        {activeTab === 'overview' && (
-          <ComparisonSummary 
-            result={state.comparisonResult}
-            onDifferenceClick={handleDifferenceClick}
-          />
-        )}
-        
-        {activeTab === 'sideBySide' && (
-          state.comparisonResult.mode === 'smart' ? (
-            <SmartComparisonContainer 
-              comparisonId={comparisonId}
-            />
-          ) : (
-            <SideBySideView 
-              comparisonId={comparisonId}
-              result={state.comparisonResult}
-            />
-          )
-        )}
-        
-        {activeTab === 'differences' && (
-          <DifferenceList 
-            result={state.comparisonResult}
-            onDifferenceClick={handleDifferenceClick}
-            onFilterChange={handleFilterChange}
-          />
-        )}
-      </div>
+  {activeTab === 'overview' && (
+    <ComparisonSummary 
+      result={state.comparisonResult}
+      onDifferenceClick={handleDifferenceClick}
+    />
+  )}
+  
+  {activeTab === 'sideBySide' && (
+    state.comparisonResult.mode === 'smart' ? (
+      <SmartComparisonContainer 
+        comparisonId={comparisonId}
+      />
+    ) : (
+      <SideBySideView 
+        comparisonId={comparisonId}
+        result={state.comparisonResult}
+      />
+    )
+  )}
+  
+  {activeTab === 'differences' && (
+    <DifferenceList 
+      result={state.comparisonResult}
+      onDifferenceClick={handleDifferenceClick}
+      onFilterChange={handleFilterChange}
+    />
+  )}
+</div>
     </div>
   );
 };

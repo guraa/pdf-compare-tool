@@ -14,6 +14,9 @@
   transition: opacity var(--transition-medium);
   box-shadow: var(--shadow-medium);
   margin: var(--spacing-m) 0;
+  background-color: #aaa; /* Add a background color so empty containers are visible */
+  min-width: 300px;
+  min-height: 400px;
 }
 
 .pdf-canvas, .pdf-image {
@@ -167,7 +170,7 @@
   background-color: rgba(0, 0, 0, 0.8);
   color: white;
   padding: var(--spacing-xs) var(--spacing-s);
-  border-radius: var(--border-radius-s);
+  border-radius: var(--spacing-s);
   font-size: var(--font-size-xs);
   pointer-events: none;
   transform: translate(-50%, -100%);
