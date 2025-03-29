@@ -56,6 +56,13 @@ const SideBySideView = ({ comparisonId, result }) => {
   // Total pages is the maximum of base and compare
   const totalPages = Math.max(basePageCount, comparePageCount);
   
+  // Ensure we have a valid selected page
+  useEffect(() => {
+    if (!state.selectedPage || state.selectedPage < 1) {
+      setSelectedPage(1);
+    }
+  }, [state.selectedPage, setSelectedPage]);
+  
   // Log the structure of the result object
   useEffect(() => {
     console.log("Comparison result structure:", result);
@@ -83,13 +90,16 @@ const SideBySideView = ({ comparisonId, result }) => {
         setLoading(true);
         setError(null);
         
-        console.log(`Fetching comparison details for ID: ${comparisonId}, page: ${state.selectedPage}, pairIndex: ${selectedPairIndex}`);
+        // Ensure we always use a valid page number (minimum 1)
+        const pageNumber = Math.max(1, state.selectedPage);
+        
+        console.log(`Fetching comparison details for ID: ${comparisonId}, page: ${pageNumber}, pairIndex: ${selectedPairIndex}`);
         
         // Use document pair specific API for smart comparison mode
         const details = await getDocumentPageDetails(
           comparisonId,
           selectedPairIndex,
-          state.selectedPage,
+          pageNumber,
           state.filters
         );
         

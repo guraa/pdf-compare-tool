@@ -24,25 +24,32 @@ const SideBySidePanel = ({
   console.log("documentPair:", documentPair);
   
   // Calculate the actual page in base and compare documents
-  let basePage = state.selectedPage;
-  let comparePage = state.selectedPage;
+  // Make sure page numbers start at 1, not 0
+  let selectedPage = state.selectedPage || 1;
+  
+  let basePage = selectedPage;
+  let comparePage = selectedPage;
   
   if (isSmartMode && documentPair) {
     // Adjust for page offsets in document pairs
-    basePage = documentPair.baseStartPage + state.selectedPage - 1;
-    comparePage = documentPair.compareStartPage + state.selectedPage - 1;
+    basePage = documentPair.baseStartPage + selectedPage - 1;
+    comparePage = documentPair.compareStartPage + selectedPage - 1;
   }
+  
+  // Ensure we never send page 0 to the API
+  basePage = Math.max(1, basePage);
+  comparePage = Math.max(1, comparePage);
   
   console.log(`Calculated page numbers - base: ${basePage}, compare: ${comparePage}`);
   
   // Check if pages exist
   const basePageExists = isSmartMode && documentPair ? 
     (basePage >= documentPair.baseStartPage && basePage <= documentPair.baseEndPage) :
-    (result && result.basePageCount >= state.selectedPage);
+    (result && result.basePageCount >= selectedPage);
     
   const comparePageExists = isSmartMode && documentPair ? 
     (comparePage >= documentPair.compareStartPage && comparePage <= documentPair.compareEndPage) :
-    (result && result.comparePageCount >= state.selectedPage);
+    (result && result.comparePageCount >= selectedPage);
     
   console.log(`Page exists - base: ${basePageExists}, compare: ${comparePageExists}`);
 
@@ -53,7 +60,7 @@ const SideBySidePanel = ({
           <h3>Base Document</h3>
           <div className="document-info">
             {!basePageExists && (
-              <span className="page-missing">Page {state.selectedPage} does not exist</span>
+              <span className="page-missing">Page {selectedPage} does not exist</span>
             )}
           </div>
         </div>
@@ -84,7 +91,7 @@ const SideBySidePanel = ({
           <h3>Comparison Document</h3>
           <div className="document-info">
             {!comparePageExists && (
-              <span className="page-missing">Page {state.selectedPage} does not exist</span>
+              <span className="page-missing">Page {selectedPage} does not exist</span>
             )}
           </div>
         </div>

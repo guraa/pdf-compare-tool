@@ -79,13 +79,16 @@ public class SmartDocumentComparisonService {
                         comparisonId, baseFilePath, compareFilePath);
 
                 // Step 1: Process both documents
+                File baseFile = new File(baseFilePath);
+                File compareFile = new File(compareFilePath);
+
                 PDFProcessor processor = new PDFProcessor();
-                PDFDocumentModel baseDocument = processor.processDocument(new File(baseFilePath));
-                PDFDocumentModel compareDocument = processor.processDocument(new File(compareFilePath));
+                PDFDocumentModel baseDocument = processor.processDocument(baseFile);
+                PDFDocumentModel compareDocument = processor.processDocument(compareFile);
 
                 // Step 2: Perform document matching
                 SmartDocumentMatcher matcher = new SmartDocumentMatcher();
-                List<DocumentPair> matchedPairs = matcher.matchDocuments(baseDocument, compareDocument);
+                List<DocumentPair> matchedPairs = matcher.matchDocuments(baseDocument, compareDocument, baseFile, compareFile);
 
                 // Store matching results
                 matchingResults.put(comparisonId, matchedPairs);

@@ -14,7 +14,7 @@
   transition: opacity var(--transition-medium);
   box-shadow: var(--shadow-medium);
   margin: var(--spacing-m) 0;
-  background-color: #aaa; /* Add a background color so empty containers are visible */
+  background-color: #f0f0f0; /* Lighter background color for better visibility */
   min-width: 300px;
   min-height: 400px;
 }
@@ -23,6 +23,8 @@
   display: block;
   background-color: white;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+  max-width: 100%;
+  height: auto;
 }
 
 .highlight-layer {
@@ -30,6 +32,7 @@
   top: 0;
   left: 0;
   pointer-events: auto;
+  z-index: 10; /* Ensure this is above the image */
 }
 
 .highlight-layer:hover {
@@ -49,7 +52,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-s);
-  z-index: 10;
+  z-index: 50;
 }
 
 .render-error svg {
@@ -68,7 +71,7 @@
   justify-content: center;
   align-items: center;
   background-color: rgba(255, 255, 255, 0.8);
-  z-index: 5;
+  z-index: 40;
 }
 
 .spinner {
@@ -162,6 +165,7 @@
   justify-content: center;
   font-weight: bold;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 30;
 }
 
 /* Tooltip styles */
@@ -201,4 +205,83 @@
     width: 90%;
     justify-content: space-between;
   }
+}
+
+/* Additional styles for overlay view */
+.overlay-view .canvas-container {
+  margin: 0;
+  box-shadow: none;
+}
+
+.overlay-view .pdf-image {
+  max-width: none;
+}
+
+/* Fix for side-by-side view */
+.document-content {
+  display: flex;
+  justify-content: center;
+}
+
+/* Animation for the loading spinner */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Enhanced styles for overlay view */
+.overlay-container {
+  position: relative;
+}
+
+.overlay-content {
+  display: flex;
+  justify-content: center;
+  overflow: auto;
+}
+
+.overlay-layers {
+  position: relative;
+  min-height: 500px;
+  min-width: 300px;
+}
+
+.base-layer, .compare-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.compare-layer {
+  pointer-events: none;
+}
+
+/* Force the image to display in the overlay view */
+.overlay-layers .pdf-image {
+  display: block !important;
+}
+
+.difference-overlays {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.difference-highlight {
+  position: absolute;
+  border-radius: 4px;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.difference-highlight:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
 }

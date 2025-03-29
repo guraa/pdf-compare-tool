@@ -5,6 +5,8 @@ import org.apache.commons.text.similarity.JaccardSimilarity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -33,27 +35,21 @@ public class SmartDocumentMatcher {
      * @param compareDocument The comparison PDF document model
      * @return List of document pairs (indices in original PDFs)
      */
-    public List<DocumentPair> matchDocuments(PDFDocumentModel baseDocument, PDFDocumentModel compareDocument) {
-        logger.info("Starting smart document matching between {} and {}",
-                baseDocument.getFileName(), compareDocument.getFileName());
+    public List<DocumentPair> matchDocuments(PDFDocumentModel baseDocument, PDFDocumentModel compareDocument, File baseFile, File compareFile) throws IOException {
+        List<String> baseVisualHashes = VisualMatcher.computeVisualHashes(baseFile);
+        List<String> compareVisualHashes = VisualMatcher.computeVisualHashes(compareFile);
 
-        // Step 1: Identify document boundaries in both PDFs
         List<DocumentSegment> baseSegments = segmentDocuments(baseDocument);
         List<DocumentSegment> compareSegments = segmentDocuments(compareDocument);
 
-        logger.info("Found {} document segments in base PDF and {} in comparison PDF",
-                baseSegments.size(), compareSegments.size());
-
-        // Step 2: Extract features for each document
         for (DocumentSegment segment : baseSegments) {
-            extractFeatures(segment, baseDocument);
+            extractFeatures(segment, baseDocument, baseVisualHashes);
         }
 
         for (DocumentSegment segment : compareSegments) {
-            extractFeatures(segment, compareDocument);
+            extractFeatures(segment, compareDocument, compareVisualHashes);
         }
 
-        // Step 3: Calculate similarity scores between all document pairs
         List<SimilarityScore> allScores = new ArrayList<>();
 
         for (int i = 0; i < baseSegments.size(); i++) {
@@ -70,7 +66,6 @@ public class SmartDocumentMatcher {
             }
         }
 
-        // Step 4: Match documents using greedy approach (highest similarity first)
         Collections.sort(allScores, Comparator.comparingDouble(SimilarityScore::getScore).reversed());
 
         Set<Integer> matchedBase = new HashSet<>();
@@ -82,7 +77,6 @@ public class SmartDocumentMatcher {
             int compareIndex = score.getCompareIndex();
 
             if (!matchedBase.contains(baseIndex) && !matchedCompare.contains(compareIndex)) {
-                // This is a valid match
                 DocumentSegment baseSegment = baseSegments.get(baseIndex);
                 DocumentSegment compareSegment = compareSegments.get(compareIndex);
 
@@ -97,15 +91,9 @@ public class SmartDocumentMatcher {
                 result.add(pair);
                 matchedBase.add(baseIndex);
                 matchedCompare.add(compareIndex);
-
-                logger.debug("Matched document: Base pages {}-{} to Compare pages {}-{} with similarity {}",
-                        baseSegment.getStartPage(), baseSegment.getEndPage(),
-                        compareSegment.getStartPage(), compareSegment.getEndPage(),
-                        score.getScore());
             }
         }
 
-        // Add unmatched documents with null pairs
         for (int i = 0; i < baseSegments.size(); i++) {
             if (!matchedBase.contains(i)) {
                 DocumentSegment segment = baseSegments.get(i);
@@ -114,9 +102,6 @@ public class SmartDocumentMatcher {
                         segment.getEndPage(),
                         -1, -1, 0.0
                 ));
-
-                logger.debug("Unmatched base document: pages {}-{}",
-                        segment.getStartPage(), segment.getEndPage());
             }
         }
 
@@ -129,19 +114,16 @@ public class SmartDocumentMatcher {
                         segment.getEndPage(),
                         0.0
                 ));
-
-                logger.debug("Unmatched compare document: pages {}-{}",
-                        segment.getStartPage(), segment.getEndPage());
             }
         }
 
-        // Sort by base document page order
         result.sort(Comparator
                 .comparingInt(DocumentPair::getBaseStartPage)
                 .thenComparingInt(DocumentPair::getCompareStartPage));
 
         return result;
     }
+
 
     /**
      * Identify document segments in a PDF based on document boundaries
@@ -242,24 +224,20 @@ public class SmartDocumentMatcher {
     /**
      * Extract feature vectors for a document segment
      */
-    private void extractFeatures(DocumentSegment segment, PDFDocumentModel document) {
+    private void extractFeatures(DocumentSegment segment, PDFDocumentModel document, List<String> visualHashes) {
         Map<String, Object> features = new HashMap<>();
 
-        // Calculate text features
         if (useTextFeatures) {
             StringBuilder fullText = new StringBuilder();
             List<String> keywords = new ArrayList<>();
 
-            // Extract text and keywords from each page
             for (int i = segment.getStartPage(); i <= segment.getEndPage(); i++) {
                 PDFPageModel page = document.getPages().get(i);
 
-                // Add full text
                 if (page.getText() != null) {
                     fullText.append(page.getText()).append(" ");
                 }
 
-                // Extract potential keywords (e.g., words in bold or larger font)
                 if (page.getTextElements() != null) {
                     for (TextElement element : page.getTextElements()) {
                         if (element.getFontSize() > 12 || "bold".equalsIgnoreCase(element.getFontStyle())) {
@@ -269,36 +247,26 @@ public class SmartDocumentMatcher {
                 }
             }
 
-            // Store text features
             features.put("fullText", fullText.toString());
             features.put("keywords", keywords);
-
-            // Calculate TF-IDF or other text features
             Map<String, Integer> wordFrequency = calculateWordFrequency(fullText.toString());
             features.put("wordFrequency", wordFrequency);
         }
 
-        // Title feature
         if (useTitleMatching) {
             features.put("title", segment.getTitle());
         }
 
-        // Layout features
         if (useLayoutFeatures) {
-            // Extract layout patterns, page sizes, margins, etc.
             List<float[]> pageDimensions = new ArrayList<>();
-
             for (int i = segment.getStartPage(); i <= segment.getEndPage(); i++) {
                 PDFPageModel page = document.getPages().get(i);
                 pageDimensions.add(new float[]{page.getWidth(), page.getHeight()});
             }
-
             features.put("pageDimensions", pageDimensions);
         }
 
-        // Image features
         if (useImageFeatures) {
-            // Count images, extract image hashes, etc.
             int imageCount = 0;
             for (int i = segment.getStartPage(); i <= segment.getEndPage(); i++) {
                 PDFPageModel page = document.getPages().get(i);
@@ -306,12 +274,17 @@ public class SmartDocumentMatcher {
                     imageCount += page.getImages().size();
                 }
             }
-
             features.put("imageCount", imageCount);
+        }
+
+        if (visualHashes != null && segment.getEndPage() < visualHashes.size()) {
+            List<String> segmentHashes = visualHashes.subList(segment.getStartPage(), segment.getEndPage() + 1);
+            features.put("visualHashes", segmentHashes);
         }
 
         segment.setFeatures(features);
     }
+
 
     /**
      * Calculate similarity score between two document segments
@@ -389,6 +362,15 @@ public class SmartDocumentMatcher {
                 score += countRatio * 0.05;
                 weight += 0.05;
             }
+        }
+        @SuppressWarnings("unchecked")
+        List<String> h1 = (List<String>) baseSegment.getFeatures().get("visualHashes");
+        @SuppressWarnings("unchecked")
+        List<String> h2 = (List<String>) compareSegment.getFeatures().get("visualHashes");
+        if (h1 != null && h2 != null) {
+            double visualSim = VisualMatcher.compareHashLists(h1, h2);
+            score += visualSim * 0.45;  // most weight now
+            weight += 0.45;
         }
 
         // Return normalized score
