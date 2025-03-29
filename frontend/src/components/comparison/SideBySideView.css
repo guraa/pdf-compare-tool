@@ -651,3 +651,126 @@
     flex-direction: column;
   }
 }
+/* Overlay view specific styles */
+.overlay-container {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  transition: width var(--transition-medium);
+}
+
+.overlay-container.with-panel {
+  width: 70%;
+}
+
+.overlay-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.overlay-layers {
+  position: relative;
+  min-height: 100%;
+}
+
+.base-layer, .compare-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.compare-layer {
+  pointer-events: none;
+  mix-blend-mode: difference;
+}
+
+.difference-overlays {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.difference-highlight {
+  pointer-events: auto;
+}
+
+.overlay-legend {
+  display: flex;
+  gap: var(--spacing-m);
+  font-size: var(--font-size-xs);
+}
+
+.base-legend, .compare-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.base-legend::before, .compare-legend::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.base-legend::before {
+  background-color: rgba(33, 150, 243, 0.5);
+}
+
+.compare-legend::before {
+  background-color: rgba(244, 67, 54, 0.5);
+}
+
+.no-differences-warning {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: var(--spacing-m);
+  border: 1px solid var(--primary-color);
+  border-radius: var(--border-radius-m);
+  box-shadow: var(--shadow-medium);
+  max-width: 400px;
+  text-align: center;
+  z-index: 50;
+}
+
+.no-differences-warning p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-s);
+}
+
+/* Add styles for difference overlay wrapper */
+.difference-overlays {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.difference-highlight {
+  pointer-events: auto;
+  position: absolute;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.difference-highlight:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  z-index: 110;
+}

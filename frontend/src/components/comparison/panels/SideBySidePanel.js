@@ -1,6 +1,9 @@
 import React from 'react';
 import PDFRenderer from '../PDFRenderer';
 
+/**
+ * Side by side panel component that displays two PDFs side by side
+ */
 const SideBySidePanel = ({
   result,
   pageDetails,
@@ -18,7 +21,7 @@ const SideBySidePanel = ({
         <div className="document-header">
           <h3>Base Document</h3>
           <div className="document-info">
-            {result.basePageCount < state.selectedPage ? (
+            {result?.basePageCount < state.selectedPage ? (
               <span className="page-missing">Page {state.selectedPage} does not exist</span>
             ) : null}
           </div>
@@ -29,12 +32,12 @@ const SideBySidePanel = ({
           className="document-content"
           onScroll={(e) => handleScroll(e, 'base')}
         >
-          {result.basePageCount >= state.selectedPage && (
+          {result?.basePageCount >= state.selectedPage && (
             <PDFRenderer 
               fileId={state.baseFile?.fileId}
               page={state.selectedPage}
-              zoom={state.viewSettings.zoom}
-              highlightMode={state.viewSettings.highlightMode}
+              zoom={state.viewSettings?.zoom || 1}
+              highlightMode={state.viewSettings?.highlightMode || 'all'}
               differences={pageDetails?.baseDifferences || []}
               selectedDifference={state.selectedDifference}
               onDifferenceSelect={handleDifferenceSelect}
@@ -49,7 +52,7 @@ const SideBySidePanel = ({
         <div className="document-header">
           <h3>Comparison Document</h3>
           <div className="document-info">
-            {result.comparePageCount < state.selectedPage ? (
+            {result?.comparePageCount < state.selectedPage ? (
               <span className="page-missing">Page {state.selectedPage} does not exist</span>
             ) : null}
           </div>
@@ -60,12 +63,12 @@ const SideBySidePanel = ({
           className="document-content"
           onScroll={(e) => handleScroll(e, 'compare')}
         >
-          {result.comparePageCount >= state.selectedPage && (
+          {result?.comparePageCount >= state.selectedPage && (
             <PDFRenderer 
               fileId={state.compareFile?.fileId}
               page={state.selectedPage}
-              zoom={state.viewSettings.zoom}
-              highlightMode={state.viewSettings.highlightMode}
+              zoom={state.viewSettings?.zoom || 1}
+              highlightMode={state.viewSettings?.highlightMode || 'all'}
               differences={pageDetails?.compareDifferences || []}
               selectedDifference={state.selectedDifference}
               onDifferenceSelect={handleDifferenceSelect}

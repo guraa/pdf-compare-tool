@@ -84,20 +84,33 @@ export const uploadPDF = async (file) => {
 };
 
 export const compareDocuments = async (baseFileId, compareFileId, options = {}) => {
-    // Add smart matching option if enabled
-    const requestOptions = { ...options };
+    // Always enable smart matching regardless of input options
+    const requestOptions = { 
+      ...options,
+      smartMatching: true  // Force smart matching to be enabled
+    };
     
-    if (options.smartMatching) {
-      requestOptions.smartMatching = true;
+    console.log('Sending comparison request with options:', requestOptions);
+  
+    try {
+      const response = await api.post('/pdfs/compare', {
+        baseFileId,
+        compareFileId,
+        options: requestOptions
+      });
+      
+      console.log('Comparison API response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error in compareDocuments API call:', error);
+      
+      // Provide more detailed error information if available
+      if (error.response && error.response.data) {
+        console.error('API error details:', error.response.data);
+      }
+      
+      throw error;
     }
-    
-    const response = await api.post('/pdfs/compare', {
-      baseFileId,
-      compareFileId,
-      options: requestOptions
-    });
-    
-    return response.data;
   };
 
 export const getComparisonResult = async (comparisonId) => {
@@ -124,37 +137,142 @@ export const getComparisonResult = async (comparisonId) => {
 };
 
 export const getComparisonDetails = async (comparisonId, page, filters = {}) => {
-  // Convert filter objects to simple string parameters
-  const params = {};
-  
-  // Handle filter parameters properly
-  if (filters.differenceTypes && filters.differenceTypes.length > 0) {
-    params.types = filters.differenceTypes.join(',');
-  }
-  
-  if (filters.minSeverity) {
-    params.severity = filters.minSeverity;
-  }
-  
-  if (filters.searchTerm) {
-    params.search = filters.searchTerm;
-  }
-  
-  const response = await api.get(`/pdfs/comparison/${comparisonId}/page/${page}`, { 
-    params,
-    validateStatus: function (status) {
-      // Accept 202 Accepted as a valid response (still processing)
-      return (status >= 200 && status < 300) || status === 202;
+    try {
+      // Convert filter objects to query parameters
+      const params = {};
+      
+      if (filters && filters.differenceTypes && filters.differenceTypes.length > 0) {
+        params.types = filters.differenceTypes.join(',');
+      }
+      
+      if (filters && filters.minSeverity && filters.minSeverity !== 'all') {
+        params.severity = filters.minSeverity;
+      }
+      
+      if (filters && filters.searchTerm) {
+        params.search = filters.searchTerm;
+      }
+      
+      // Ensure page is a valid number
+      const pageNumber = parseInt(page) || 1;
+      
+      // Debug logging to check URL and parameters
+      console.log(`Making API request to: /pdfs/comparison/${comparisonId}/page/${pageNumber}`);
+      console.log('Query parameters:', params);
+      
+      try {
+        const response = await api.get(`/pdfs/comparison/${comparisonId}/page/${pageNumber}`, { 
+          params,
+          // Set longer timeout for potentially large responses
+          timeout: 60000,
+          validateStatus: function (status) {
+            // Accept 202 Accepted as a valid status for "still processing"
+            return (status >= 200 && status < 300) || status === 202;
+          }
+        });
+        
+        // Check if the response indicates the comparison is still processing
+        if (response.status === 202) {
+          throw new Error("Comparison still processing");
+        }
+        
+        // Debug log the actual response structure
+        console.log('Page details response:', response.data);
+        
+        // Handle empty or malformed response
+        if (!response.data) {
+          console.error("Empty response from server");
+          throw new Error("Empty response from server");
+        }
+        
+        // Check for differences data structure
+        if (!response.data.baseDifferences && !response.data.compareDifferences) {
+          console.warn("No differences arrays found in response", response.data);
+        }
+        
+        // Initialize differences arrays if missing
+        if (!response.data.baseDifferences) {
+          response.data.baseDifferences = [];
+          console.warn("baseDifferences missing, initialized to empty array");
+        }
+        
+        if (!response.data.compareDifferences) {
+          response.data.compareDifferences = [];
+          console.warn("compareDifferences missing, initialized to empty array");
+        }
+        
+        // Check structure of response data
+        if (response.data.baseDifferences && response.data.baseDifferences.length > 0) {
+          console.log(`Found ${response.data.baseDifferences.length} base differences`);
+          console.log('First base difference sample:', response.data.baseDifferences[0]);
+        }
+        
+        if (response.data.compareDifferences && response.data.compareDifferences.length > 0) {
+          console.log(`Found ${response.data.compareDifferences.length} compare differences`);
+          console.log('First compare difference sample:', response.data.compareDifferences[0]);
+        }
+        
+        return response.data;
+      } catch (error) {
+        // Check if error is a network error
+        if (error.message && error.message.includes('Network Error')) {
+          console.error('Network error when fetching page details:', error);
+          throw new Error("Network error when connecting to the server. Please check your connection.");
+        }
+        
+        // Handle 404 specifically
+        if (error.response && error.response.status === 404) {
+          console.error(`Page ${pageNumber} not found in comparison ${comparisonId}:`, error);
+          
+          // Create a minimal valid response to prevent UI from crashing
+          return {
+            baseDifferences: [],
+            compareDifferences: [],
+            pageNumber: pageNumber,
+            error: `Page ${pageNumber} not found or no differences detected`
+          };
+        }
+        
+        // Re-throw other errors
+        throw error;
+      }
+    } catch (error) {
+      console.error(`Error fetching page ${page} details for comparison ${comparisonId}:`, error);
+      
+      if (error.message === "Comparison still processing") {
+        // Propagate processing status
+        throw error;
+      }
+      
+      // Try to use a fallback to get at least some data
+      try {
+        console.log("Attempting fallback request to get general comparison results...");
+        const response = await api.get(`/pdfs/comparison/${comparisonId}`);
+        
+        // Log the general comparison result
+        console.log("Fallback comparison results:", response.data);
+        
+        // Return minimal page details structure
+        return {
+          baseDifferences: [],
+          compareDifferences: [],
+          pageNumber: parseInt(page) || 1,
+          fetchError: error.message || "Failed to fetch detailed page information",
+          basePageCount: response.data.basePageCount || 0,
+          comparePageCount: response.data.comparePageCount || 0
+        };
+      } catch (fallbackError) {
+        console.error("Fallback request also failed:", fallbackError);
+        // Return minimal data structure to prevent UI crashes
+        return {
+          baseDifferences: [],
+          compareDifferences: [],
+          pageNumber: parseInt(page) || 1,
+          fetchError: error.message || "Failed to fetch comparison details"
+        };
+      }
     }
-  });
-  
-  // If status is 202, throw a "still processing" error that the retry logic can handle
-  if (response.status === 202) {
-    throw new Error("Comparison still processing");
-  }
-  
-  return response.data;
-};
+  };
 
 export const getDocumentPairs = async (comparisonId) => {
     try {

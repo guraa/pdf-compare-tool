@@ -150,10 +150,26 @@ const PDFRenderer = ({
     renderPdf();
   }, [pdfData, zoom, isImage]);
   
-  // Draw difference highlights
   useEffect(() => {
-    if (!highlightLayerRef.current || !rendered || highlightMode === 'none' || differences.length === 0) {
+    if (!highlightLayerRef.current || !rendered || highlightMode === 'none') {
       return;
+    }
+    
+    console.log(`Drawing highlights for PDFRenderer. Mode: ${highlightMode}, Differences: ${differences.length}`);
+    
+    if (differences.length === 0) {
+      console.warn("No differences to highlight in PDFRenderer");
+      return;
+    }
+    
+    // Sample the first difference to understand its structure
+    if (differences.length > 0) {
+      console.log("Sample difference:", differences[0]);
+      
+      // Check if the difference has proper bounds for highlighting
+      if (!differences[0].bounds) {
+        console.warn("Difference is missing bounds property:", differences[0]);
+      }
     }
     
     const canvas = highlightLayerRef.current;
@@ -182,6 +198,12 @@ const PDFRenderer = ({
       
       // Check if this is being hovered
       const isHovered = hoveredDiffId === diff.id;
+      
+      // Ensure diff has bounds before trying to draw
+      if (!diff.bounds) {
+        console.warn(`Difference ${diff.id} has no bounds, cannot highlight`, diff);
+        return;
+      }
       
       // Draw the highlight
       drawHighlight(ctx, diff, color, isSelected, isHovered);
@@ -300,9 +322,10 @@ const PDFRenderer = ({
     }
   };
   
-  // Handle click on highlight layer to select a difference
   const handleHighlightClick = (e) => {
     if (!interactive || !differences.length || !onDifferenceSelect) return;
+    
+    console.log("Highlight layer clicked");
     
     // Get click coordinates relative to canvas
     const canvas = highlightLayerRef.current;
@@ -316,24 +339,36 @@ const PDFRenderer = ({
     const scaledX = x * scaleX;
     const scaledY = y * scaleY;
     
+    console.log(`Click at: ${scaledX}, ${scaledY}`);
+    
     // Find the difference that was clicked
+    let clickedDiff = null;
     for (const diff of differences) {
-      if (diff.bounds) {
-        const { x: diffX, y: diffY, width, height } = diff.bounds;
-        
-        if (
-          scaledX >= diffX && 
-          scaledX <= diffX + width && 
-          scaledY >= diffY && 
-          scaledY <= diffY + height
-        ) {
-          onDifferenceSelect(diff);
-          return;
-        }
+      if (!diff.bounds) {
+        console.warn(`Difference ${diff.id} has no bounds, cannot detect click`, diff);
+        continue;
+      }
+      
+      const { x: diffX, y: diffY, width, height } = diff.bounds;
+      
+      if (
+        scaledX >= diffX && 
+        scaledX <= diffX + width && 
+        scaledY >= diffY && 
+        scaledY <= diffY + height
+      ) {
+        clickedDiff = diff;
+        break;
       }
     }
+    
+    if (clickedDiff) {
+      console.log("Clicked difference:", clickedDiff);
+      onDifferenceSelect(clickedDiff);
+    } else {
+      console.log("No difference found at click position");
+    }
   };
-  
   // Handle mouse movement over highlight layer
   const handleMouseMove = (e) => {
     if (!interactive || !differences.length) return;

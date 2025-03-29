@@ -2,6 +2,9 @@ import React from 'react';
 import Spinner from '../../common/Spinner';
 import PDFRenderer from '../PDFRenderer';
 
+/**
+ * Difference panel component that shows differences in context
+ */
 const DifferencePanel = ({
   result,
   pageDetails,
@@ -11,7 +14,12 @@ const DifferencePanel = ({
   handleDifferenceSelect,
   showDifferencePanel
 }) => {
-  if (!pageDetails) return <div className="loading-container"><Spinner size="medium" /></div>;
+  if (!pageDetails) return (
+    <div className="loading-container">
+      <Spinner size="medium" />
+      <p>Loading differences...</p>
+    </div>
+  );
   
   // Combine all differences
   const allDifferences = [
@@ -35,14 +43,14 @@ const DifferencePanel = ({
         
         <div className="difference-content" ref={baseContainerRef}>
           <div className="difference-renderer" style={{ position: 'relative' }}>
-            {result.basePageCount >= state.selectedPage && (
+            {result?.basePageCount >= state.selectedPage && (
               <div className="difference-view">
                 {/* Base document for reference (with lower opacity) */}
                 <div className="reference-layer" style={{ position: 'relative' }}>
                   <PDFRenderer 
                     fileId={state.baseFile?.fileId}
                     page={state.selectedPage}
-                    zoom={state.viewSettings.zoom}
+                    zoom={state.viewSettings?.zoom || 1}
                     highlightMode="none"
                     differences={[]}
                     onDifferenceSelect={() => {}}

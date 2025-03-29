@@ -1,6 +1,10 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import PDFRenderer from '../PDFRenderer';
 
+/**
+ * Overlay panel component that displays two PDFs overlaid with transparency
+ * Fixed to ensure proper rendering and positioning
+ */
 const OverlayPanel = ({
   result,
   pageDetails,
@@ -27,109 +31,68 @@ const OverlayPanel = ({
           className="overlay-content" 
           ref={overlayContainerRef}
         >
-          <div className="overlay-layers" style={{ position: 'relative' }}>
+          <div className="overlay-layers">
             {/* Base document layer */}
-            <div 
-              className="base-layer"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                zIndex: 1
-              }}
-            >
-              {result.basePageCount >= state.selectedPage && (
+            <div className="base-layer">
+              {result?.basePageCount >= state.selectedPage && (
                 <PDFRenderer 
                   fileId={state.baseFile?.fileId}
                   page={state.selectedPage}
-                  zoom={state.viewSettings.zoom}
+                  zoom={state.viewSettings?.zoom || 1}
                   highlightMode="none"
                   differences={[]}
                   selectedDifference={null}
-                  onDifferenceSelect={()=>{}}
+                  onDifferenceSelect={() => {}}
                   loading={loading}
                   interactive={false}
-                  opacity={1.0}
                 />
               )}
             </div>
             
-            {/* Compare document layer with blending */}
+            {/* Compare document layer with opacity */}
             <div 
               className="compare-layer" 
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                zIndex: 2,
-                mixBlendMode: 'difference',
-                opacity: overlayOpacity
-              }}
+              style={{ opacity: overlayOpacity }}
             >
-              {result.comparePageCount >= state.selectedPage && (
+              {result?.comparePageCount >= state.selectedPage && (
                 <PDFRenderer 
                   fileId={state.compareFile?.fileId}
                   page={state.selectedPage}
-                  zoom={state.viewSettings.zoom}
+                  zoom={state.viewSettings?.zoom || 1}
                   highlightMode="none"
                   differences={[]}
                   selectedDifference={null}
-                  onDifferenceSelect={()=>{}}
+                  onDifferenceSelect={() => {}}
                   loading={loading}
                   interactive={false}
-                  opacity={1.0}
                 />
               )}
             </div>
             
-            {/* Highlight layer on top */}
-            <div 
-              className="highlight-layer" 
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                zIndex: 3,
-                pointerEvents: 'auto'
-              }}
-            >
-              {/* Add transparent canvas with highlights */}
-              <div 
-                style={{
-                  position: 'relative',
-                  width: '100%',
-                  height: '100%'
-                }}
-              >
-                {pageDetails && pageDetails.baseDifferences && (
-                  pageDetails.baseDifferences.map(diff => (
-                    <div 
-                      key={diff.id}
-                      className="difference-highlight"
-                      style={{
-                        position: 'absolute',
-                        top: diff.position?.y || 0,
-                        left: diff.position?.x || 0,
-                        width: diff.bounds?.width || 100,
-                        height: diff.bounds?.height || 30,
-                        backgroundColor: 'rgba(255, 0, 0, 0.3)',
-                        border: '2px solid rgba(255, 0, 0, 0.5)',
-                        borderRadius: '4px',
-                        zIndex: 4,
-                        cursor: 'pointer'
-                      }}
-                      onClick={() => handleDifferenceSelect(diff)}
-                    />
-                  ))
-                )}
+            {/* Highlight differences */}
+            {pageDetails && (
+              <div className="difference-overlays">
+                {pageDetails.baseDifferences && pageDetails.baseDifferences.map(diff => (
+                  <div 
+                    key={diff.id}
+                    className="difference-highlight"
+                    style={{
+                      position: 'absolute',
+                      top: diff.position?.y || 0,
+                      left: diff.position?.x || 0,
+                      width: diff.bounds?.width || 100,
+                      height: diff.bounds?.height || 30,
+                      backgroundColor: 'rgba(255, 0, 0, 0.3)',
+                      border: '2px solid rgba(255, 0, 0, 0.5)',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      zIndex: 50
+                    }}
+                    onClick={() => handleDifferenceSelect(diff)}
+                  />
+                ))}
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

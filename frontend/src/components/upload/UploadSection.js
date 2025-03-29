@@ -26,7 +26,8 @@ const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonEr
     compareAnnotations: true,
     compareBookmarks: true,
     compareMetadata: true,
-    smartMatching: false
+    // Smart matching is always enabled - no toggle needed
+    smartMatching: true
   });
   
   const [submitting, setSubmitting] = useState(false);
@@ -53,21 +54,26 @@ const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonEr
       setLoading(true);
       setError(null);
       
-      
       // Notify parent component to update UI state to "comparing"
       onComparisonStart();
 
       console.log('Starting comparison with files:', {
         baseFile: state.baseFile,
         compareFile: state.compareFile,
-        settings
+        settings: {
+          ...settings,
+          smartMatching: true // Always use smart matching
+        }
       });
 
-      // Call API to start comparison
+      // Call API to start comparison with smart matching always enabled
       const result = await compareDocuments(
         state.baseFile.fileId, 
         state.compareFile.fileId, 
-        settings
+        {
+          ...settings,
+          smartMatching: true // Ensure smart matching is enabled
+        }
       );
       
       console.log('Comparison result:', result);
@@ -108,16 +114,8 @@ const UploadSection = ({ onComparisonStart, onComparisonComplete, onComparisonEr
         <h2>Compare PDF Documents</h2>
         <p className="upload-description">
           Upload two PDF documents to identify and analyze differences between them.
+          Smart Document Matching is enabled to handle multi-document PDFs automatically.
         </p>
-        <div className="upload-option">
-          <input 
-            type="checkbox" 
-            id="smartMatching" 
-            checked={settings.smartMatching}
-            onChange={(e) => handleSettingChange('smartMatching', e.target.checked)}
-          />
-          <label htmlFor="smartMatching">Enable Smart Document Matching (for multi-document PDFs)</label>
-        </div>
         
         <div className="upload-grid">
           <div className="upload-item">
