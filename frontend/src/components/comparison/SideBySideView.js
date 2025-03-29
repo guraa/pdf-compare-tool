@@ -41,6 +41,21 @@ const SideBySideView = ({ comparisonId, result }) => {
     result?.basePageCount || 0,
     result?.comparePageCount || 0
   );
+
+  useEffect(() => {
+    // Set default view settings if not already set
+    if (!state.viewSettings) {
+      updateViewSettings({
+        highlightMode: 'all',
+        zoom: 1.0,
+        syncScroll: true,
+        showChangesOnly: false
+      });
+    }
+    
+    // Force re-initialization of selected page
+    setSelectedPage(state.selectedPage || 1);
+  }, []);
   
   // Check if result contains page differences
   useEffect(() => {
@@ -103,6 +118,23 @@ const SideBySideView = ({ comparisonId, result }) => {
     
     fetchPageDetails();
   }, [comparisonId, state.selectedPage, state.filters, retryCount, maxRetries]);
+
+  const checkForRealDifferences = (pageDetails) => {
+    if (!pageDetails) return false;
+    
+    // Check base differences
+    if (pageDetails.baseDifferences && pageDetails.baseDifferences.length > 0) {
+      return true;
+    }
+    
+    // Check compare differences
+    if (pageDetails.compareDifferences && pageDetails.compareDifferences.length > 0) {
+      return true;
+    }
+    
+    return false;
+  };
+  
 
   // Handler for difference selection
   const handleDifferenceSelect = (difference) => {

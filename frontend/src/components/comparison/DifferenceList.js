@@ -22,9 +22,109 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
   const [typeFilter, setTypeFilter] = useState('all');
   const [severityFilter, setSeverityFilter] = useState('all');
   
+  useEffect(() => {
+    // This will store all differences found from the API
+    const fetchAllDifferences = async () => {
+      if (!result) return;
+      
+      try {
+        setLoading(true);
+        
+        // Store differences from all pages for an overview
+        const allDiffs = [];
+        
+        // Loop through all pages to collect differences
+        for (let i = 1; i <= Math.max(result.basePageCount, result.comparePageCount); i++) {
+          try {
+            const pageDetails = await getComparisonDetails(state.comparisonId, i);
+            
+            if (pageDetails && pageDetails.baseDifferences) {
+              allDiffs.push(...pageDetails.baseDifferences.map(diff => ({
+                ...diff,
+                page: i
+              })));
+            }
+            
+            if (pageDetails && pageDetails.compareDifferences) {
+              // Only add differences not already included from base
+              const uniqueCompareDiffs = pageDetails.compareDifferences.filter(
+                compDiff => !pageDetails.baseDifferences.some(
+                  baseDiff => baseDiff.id === compDiff.id
+                )
+              );
+              
+              allDiffs.push(...uniqueCompareDiffs.map(diff => ({
+                ...diff,
+                page: i
+              })));
+            }
+          } catch (err) {
+            console.warn(`Could not load differences for page ${i}:`, err);
+          }
+        }
+        
+        console.log(`Loaded ${allDiffs.length} total differences across all pages`);
+        setAllDifferences(allDiffs);
+        
+        // Apply initial filtering
+        applyFilters(allDiffs, searchTerm, typeFilter, severityFilter);
+        
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching all differences:', err);
+        setError('Failed to load differences. Please try again.');
+        setLoading(false);
+      }
+    };
+    
+    fetchAllDifferences();
+  }, [result, state.comparisonId]);
 
+  useEffect(() => {
+    applyFilters(allDifferences, searchTerm, typeFilter, severityFilter);
+  }, [allDifferences, searchTerm, typeFilter, severityFilter]);
   
- 
+  
+  const applyFilters = (diffs, search, type, severity) => {
+    if (!diffs || diffs.length === 0) {
+      setFilteredDifferences([]);
+      return;
+    }
+    
+    let filtered = [...diffs];
+    
+    // Apply type filter
+    if (type !== 'all') {
+      filtered = filtered.filter(diff => diff.type === type);
+    }
+    
+    // Apply severity filter
+    if (severity !== 'all') {
+      const severityLevels = ['info', 'minor', 'major', 'critical'];
+      const minSeverityIndex = severityLevels.indexOf(severity);
+      
+      if (minSeverityIndex >= 0) {
+        filtered = filtered.filter(diff => {
+          const diffSeverityIndex = severityLevels.indexOf(diff.severity || 'minor');
+          return diffSeverityIndex >= minSeverityIndex;
+        });
+      }
+    }
+    
+    // Apply search filter
+    if (search && search.trim() !== '') {
+      const searchLower = search.toLowerCase().trim();
+      filtered = filtered.filter(diff => 
+        (diff.description && diff.description.toLowerCase().includes(searchLower)) ||
+        (diff.text && diff.text.toLowerCase().includes(searchLower)) ||
+        (diff.baseText && diff.baseText.toLowerCase().includes(searchLower)) ||
+        (diff.compareText && diff.compareText.toLowerCase().includes(searchLower))
+      );
+    }
+    
+    setFilteredDifferences(filtered);
+    console.log(`Filtered to ${filtered.length} differences`);
+  };
   
   // Group differences by page
   const getDifferencesByPage = () => {

@@ -241,6 +241,8 @@ public class PageComparisonResult {
         return differences;
     }
 
+
+
     // Getters and setters
     public int getPageNumber() {
         return pageNumber;

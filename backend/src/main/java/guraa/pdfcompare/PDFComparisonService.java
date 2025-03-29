@@ -266,10 +266,13 @@ public class PDFComparisonService {
      * @return Comparison result, or null if not found
      */
     public PDFComparisonResult getComparisonResult(String comparisonId) {
-        // Add logging to debug
-        logger.info("Retrieving comparison result for ID: {}", comparisonId);
+        if (comparisonId == null || comparisonId.trim().isEmpty()) {
+            logger.warn("Attempted to retrieve comparison result with null or empty ID");
+            return null;
+        }
 
-        // Dump all keys to help debug
+        // Add additional logging to debug
+        logger.info("Attempting to retrieve comparison result for ID: {}", comparisonId);
         logger.debug("Available comparison IDs: {}", comparisonResults.keySet());
 
         ComparisonResultData resultData = comparisonResults.get(comparisonId);
@@ -281,8 +284,24 @@ public class PDFComparisonService {
                 return null;
             }
 
-            logger.info("Found comparison result for ID: {}", comparisonId);
-            return resultData.getResult();
+            PDFComparisonResult result = resultData.getResult();
+
+            // Additional validation
+            if (result != null) {
+                // Validate the page differences array exists
+                if (result.getPageDifferences() == null) {
+                    logger.warn("Retrieved comparison result has null pageDifferences array! Initializing empty array.");
+                    result.setPageDifferences(new ArrayList<>());
+                }
+
+                // Log details about the result
+                logger.info("Found valid comparison result for ID: {} with {} total differences",
+                        comparisonId, result.getTotalDifferences());
+                logger.debug("Result contains {} page differences entries",
+                        result.getPageDifferences().size());
+            }
+
+            return result;
         }
 
         logger.warn("Comparison result not found for ID: {}", comparisonId);

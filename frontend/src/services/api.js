@@ -137,6 +137,11 @@ export const getComparisonResult = async (comparisonId) => {
 };
 
 export const getComparisonDetails = async (comparisonId, page, filters = {}) => {
+    if (!comparisonId || !page) {
+      console.error("Missing required parameters for getComparisonDetails:", { comparisonId, page });
+      throw new Error("ComparisonId and page are required");
+    }
+    
     try {
       // Convert filter objects to query parameters
       const params = {};
@@ -156,41 +161,33 @@ export const getComparisonDetails = async (comparisonId, page, filters = {}) => 
       // Ensure page is a valid number
       const pageNumber = parseInt(page) || 1;
       
-      // Debug logging to check URL and parameters
-      console.log(`Making API request to: /pdfs/comparison/${comparisonId}/page/${pageNumber}`);
-      console.log('Query parameters:', params);
+      // Debug logging
+      console.log(`Making API request to: /pdfs/comparison/${comparisonId}/page/${pageNumber}`, params);
       
       try {
         const response = await api.get(`/pdfs/comparison/${comparisonId}/page/${pageNumber}`, { 
           params,
-          // Set longer timeout for potentially large responses
           timeout: 60000,
           validateStatus: function (status) {
-            // Accept 202 Accepted as a valid status for "still processing"
             return (status >= 200 && status < 300) || status === 202;
           }
         });
         
-        // Check if the response indicates the comparison is still processing
+        // Check for processing status
         if (response.status === 202) {
           throw new Error("Comparison still processing");
         }
         
-        // Debug log the actual response structure
-        console.log('Page details response:', response.data);
+        // Debug log the response structure
+        console.log('Page details response structure:', Object.keys(response.data));
         
-        // Handle empty or malformed response
+        // Handle empty response
         if (!response.data) {
           console.error("Empty response from server");
           throw new Error("Empty response from server");
         }
         
-        // Check for differences data structure
-        if (!response.data.baseDifferences && !response.data.compareDifferences) {
-          console.warn("No differences arrays found in response", response.data);
-        }
-        
-        // Initialize differences arrays if missing
+        // Ensure differences arrays exist
         if (!response.data.baseDifferences) {
           response.data.baseDifferences = [];
           console.warn("baseDifferences missing, initialized to empty array");
@@ -201,76 +198,31 @@ export const getComparisonDetails = async (comparisonId, page, filters = {}) => 
           console.warn("compareDifferences missing, initialized to empty array");
         }
         
-        // Check structure of response data
-        if (response.data.baseDifferences && response.data.baseDifferences.length > 0) {
-          console.log(`Found ${response.data.baseDifferences.length} base differences`);
-          console.log('First base difference sample:', response.data.baseDifferences[0]);
+        // Log difference counts
+        console.log(`Found ${response.data.baseDifferences.length} base differences and ${response.data.compareDifferences.length} compare differences`);
+        
+        // Add debugging sample
+        if (response.data.baseDifferences.length > 0) {
+          console.log('Sample base difference:', response.data.baseDifferences[0]);
         }
         
-        if (response.data.compareDifferences && response.data.compareDifferences.length > 0) {
-          console.log(`Found ${response.data.compareDifferences.length} compare differences`);
-          console.log('First compare difference sample:', response.data.compareDifferences[0]);
+        if (response.data.compareDifferences.length > 0) {
+          console.log('Sample compare difference:', response.data.compareDifferences[0]);
         }
         
         return response.data;
       } catch (error) {
-        // Check if error is a network error
-        if (error.message && error.message.includes('Network Error')) {
-          console.error('Network error when fetching page details:', error);
-          throw new Error("Network error when connecting to the server. Please check your connection.");
+        // Pass through processing status
+        if (error.message === "Comparison still processing") {
+          throw error;
         }
         
-        // Handle 404 specifically
-        if (error.response && error.response.status === 404) {
-          console.error(`Page ${pageNumber} not found in comparison ${comparisonId}:`, error);
-          
-          // Create a minimal valid response to prevent UI from crashing
-          return {
-            baseDifferences: [],
-            compareDifferences: [],
-            pageNumber: pageNumber,
-            error: `Page ${pageNumber} not found or no differences detected`
-          };
-        }
-        
-        // Re-throw other errors
+        console.error("Error fetching page details:", error);
         throw error;
       }
     } catch (error) {
-      console.error(`Error fetching page ${page} details for comparison ${comparisonId}:`, error);
-      
-      if (error.message === "Comparison still processing") {
-        // Propagate processing status
-        throw error;
-      }
-      
-      // Try to use a fallback to get at least some data
-      try {
-        console.log("Attempting fallback request to get general comparison results...");
-        const response = await api.get(`/pdfs/comparison/${comparisonId}`);
-        
-        // Log the general comparison result
-        console.log("Fallback comparison results:", response.data);
-        
-        // Return minimal page details structure
-        return {
-          baseDifferences: [],
-          compareDifferences: [],
-          pageNumber: parseInt(page) || 1,
-          fetchError: error.message || "Failed to fetch detailed page information",
-          basePageCount: response.data.basePageCount || 0,
-          comparePageCount: response.data.comparePageCount || 0
-        };
-      } catch (fallbackError) {
-        console.error("Fallback request also failed:", fallbackError);
-        // Return minimal data structure to prevent UI crashes
-        return {
-          baseDifferences: [],
-          compareDifferences: [],
-          pageNumber: parseInt(page) || 1,
-          fetchError: error.message || "Failed to fetch comparison details"
-        };
-      }
+      console.error(`Error in getComparisonDetails for comparison ${comparisonId}, page ${page}:`, error);
+      throw error;
     }
   };
 

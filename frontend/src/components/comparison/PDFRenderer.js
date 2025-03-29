@@ -229,23 +229,61 @@ const PDFRenderer = ({
     }
   }, [hoveredDiffId, differences]);
   
-  // Draw highlight rectangle or outline
   const drawHighlight = (ctx, diff, color, isSelected, isHovered) => {
-    if (!diff.bounds) return;
+    if (!diff.bounds) {
+      // Try to calculate bounds from position if available
+      if (diff.position) {
+        // Estimate size based on type
+        let width = 100;
+        let height = 30;
+        
+        if (diff.type === 'text') {
+          // Estimate text size
+          width = Math.max(
+            (diff.baseText?.length || 0) * 8, 
+            (diff.compareText?.length || 0) * 8,
+            100
+          );
+          height = 20;
+        } else if (diff.type === 'image') {
+          width = 150;
+          height = 100;
+        }
+        
+        diff.bounds = {
+          x: diff.position.x,
+          y: diff.position.y,
+          width: width,
+          height: height
+        };
+        
+        console.log(`Created estimated bounds for diff ${diff.id}`, diff.bounds);
+      } else {
+        console.warn(`Difference ${diff.id} has no bounds or position, cannot highlight`, diff);
+        return;
+      }
+    }
     
     const { x, y, width, height } = diff.bounds;
     
-    // Set highlight style
+    // Set highlight style with improved opacity for better visibility
     ctx.fillStyle = color;
-    ctx.strokeStyle = isSelected 
-      ? 'rgba(255, 255, 0, 0.8)' 
-      : isHovered 
-        ? 'rgba(255, 255, 255, 0.8)' 
-        : color.replace('0.3', '0.8');
     
-    ctx.lineWidth = isSelected ? 3 : isHovered ? 2 : 1;
+    // Make selected and hovered items more visible
+    if (isSelected) {
+      ctx.fillStyle = color.replace('0.3', '0.5');
+      ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+      ctx.lineWidth = 3;
+    } else if (isHovered) {
+      ctx.fillStyle = color.replace('0.3', '0.4');
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 2;
+    } else {
+      ctx.strokeStyle = color.replace('0.3', '0.8');
+      ctx.lineWidth = 1;
+    }
     
-    // Draw the highlight
+    // Draw the highlight with improved visibility
     ctx.fillRect(x, y, width, height);
     ctx.strokeRect(x, y, width, height);
     
@@ -259,14 +297,22 @@ const PDFRenderer = ({
       ctx.fill();
       ctx.shadowBlur = 0;
       
-      // Add a label if available
-      if (diff.type || diff.changeType) {
-        ctx.font = '10px Arial';
-        ctx.fillStyle = 'black';
-        ctx.textAlign = 'center';
-        const label = `${diff.type?.toUpperCase() || ''} ${diff.changeType?.toUpperCase() || ''}`;
-        ctx.fillText(label.trim(), x + width / 2, y - 15);
-      }
+      // Add a label with information about the difference
+      ctx.font = '12px Arial';
+      ctx.fillStyle = 'black';
+      ctx.textAlign = 'center';
+      
+      // Create a descriptive label
+      let label = `${diff.type?.toUpperCase() || ''} ${diff.changeType?.toUpperCase() || ''}`;
+      
+      // Add a background for better readability
+      const textWidth = ctx.measureText(label).width + 10;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.fillRect(x + width/2 - textWidth/2, y - 30, textWidth, 20);
+      
+      // Draw text
+      ctx.fillStyle = 'black';
+      ctx.fillText(label.trim(), x + width / 2, y - 15);
     }
     
     // If hovered, draw an icon or indicator

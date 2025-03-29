@@ -204,19 +204,52 @@ public class PDFComparisonEngine {
     private TextComparisonResult compareText(String baseText, String compareText) {
         TextComparisonResult result = new TextComparisonResult();
 
+        // Special case - handle null or empty texts properly
+        if ((baseText == null || baseText.trim().isEmpty()) &&
+                (compareText == null || compareText.trim().isEmpty())) {
+            // Both texts are empty or null - no differences
+            result.setDifferences(new ArrayList<>());
+            result.setDifferenceCount(0);
+            return result;
+        }
+
+        // Handle case where one text is null and the other isn't
+        if (baseText == null || baseText.trim().isEmpty()) {
+            TextDifferenceItem diff = new TextDifferenceItem();
+            diff.setLineNumber(1);
+            diff.setBaseText("");
+            diff.setCompareText(compareText);
+            diff.setDifferenceType(TextDifferenceType.ADDED);
+            result.setDifferences(Collections.singletonList(diff));
+            result.setDifferenceCount(1);
+            return result;
+        }
+
+        if (compareText == null || compareText.trim().isEmpty()) {
+            TextDifferenceItem diff = new TextDifferenceItem();
+            diff.setLineNumber(1);
+            diff.setBaseText(baseText);
+            diff.setCompareText("");
+            diff.setDifferenceType(TextDifferenceType.DELETED);
+            result.setDifferences(Collections.singletonList(diff));
+            result.setDifferenceCount(1);
+            return result;
+        }
+
+        // Normalize line endings
+        baseText = baseText.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+        compareText = compareText.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+
         // Split texts into lines for line-by-line comparison
         String[] baseLines = baseText.split("\n");
         String[] compareLines = compareText.split("\n");
-
-        // Use diff_match_patch or another diff algorithm for detailed text comparison
-        // This is a simplified implementation, in a real application you would use
-        // a proper diff algorithm like Myers diff, diff_match_patch, or similar
 
         List<TextDifferenceItem> differences = new ArrayList<>();
         int maxLines = Math.max(baseLines.length, compareLines.length);
 
         for (int i = 0; i < maxLines; i++) {
             if (i < baseLines.length && i < compareLines.length) {
+                // Both lines exist - compare them
                 if (!baseLines[i].equals(compareLines[i])) {
                     TextDifferenceItem diff = new TextDifferenceItem();
                     diff.setLineNumber(i + 1);
@@ -228,6 +261,7 @@ public class PDFComparisonEngine {
                             i + 1, baseLines[i], compareLines[i]);
                 }
             } else if (i < baseLines.length) {
+                // Line only in base document
                 TextDifferenceItem diff = new TextDifferenceItem();
                 diff.setLineNumber(i + 1);
                 diff.setBaseText(baseLines[i]);
@@ -236,6 +270,7 @@ public class PDFComparisonEngine {
                 differences.add(diff);
                 logger.debug("Deleted text at line {}: '{}'", i + 1, baseLines[i]);
             } else {
+                // Line only in compare document
                 TextDifferenceItem diff = new TextDifferenceItem();
                 diff.setLineNumber(i + 1);
                 diff.setBaseText("");
@@ -249,6 +284,12 @@ public class PDFComparisonEngine {
         result.setDifferences(differences);
         result.setDifferenceCount(differences.size());
 
+        // Log the comparison results clearly
+        logger.info("Text comparison found {} differences between texts", differences.size());
+        if (differences.size() > 0) {
+            logger.debug("Text differences sample: {}", differences.get(0).toString());
+        }
+
         return result;
     }
 
@@ -261,19 +302,25 @@ public class PDFComparisonEngine {
     private List<TextElementDifference> compareTextElements(List<TextElement> baseElements, List<TextElement> compareElements) {
         List<TextElementDifference> differences = new ArrayList<>();
 
-        // This is a simplified implementation. A more advanced implementation would
-        // use positional matching and fuzzy text matching to identify corresponding
-        // text elements between documents
+        // Handle null cases
+        if (baseElements == null) baseElements = new ArrayList<>();
+        if (compareElements == null) compareElements = new ArrayList<>();
 
-        // For now, match elements by their text content and position
+        // Enhanced logging
+        logger.debug("Comparing {} base text elements with {} compare text elements",
+                baseElements.size(), compareElements.size());
+
+        // Create maps for quicker lookup - improve the key calculation
         Map<String, TextElement> baseElementMap = new HashMap<>();
         for (TextElement element : baseElements) {
+            // Create a unique key combining text and position (rounded)
             String key = element.getText() + "_" + Math.round(element.getX()) + "_" + Math.round(element.getY());
             baseElementMap.put(key, element);
         }
 
         Map<String, TextElement> compareElementMap = new HashMap<>();
         for (TextElement element : compareElements) {
+            // Create a unique key combining text and position (rounded)
             String key = element.getText() + "_" + Math.round(element.getX()) + "_" + Math.round(element.getY());
             compareElementMap.put(key, element);
         }
@@ -302,6 +349,20 @@ public class PDFComparisonEngine {
                     diff.setStyleDifferent(true);
                     differences.add(diff);
                     logger.debug("Text element '{}' has style differences", baseElement.getText());
+
+                    // Add detailed logging for style differences
+                    if (baseElement.getFontName() != null && compareElement.getFontName() != null &&
+                            !baseElement.getFontName().equals(compareElement.getFontName())) {
+                        logger.debug("  Font name differs: '{}' vs '{}'",
+                                baseElement.getFontName(), compareElement.getFontName());
+                    }
+
+                    if (Math.abs(baseElement.getFontSize() - compareElement.getFontSize()) > 0.1) {
+                        logger.debug("  Font size differs: {} vs {}",
+                                baseElement.getFontSize(), compareElement.getFontSize());
+                    }
+
+                    // Log other style differences...
                 }
 
                 // Remove from compare map to track processed elements
@@ -319,6 +380,7 @@ public class PDFComparisonEngine {
             logger.debug("Text element '{}' only exists in compare document", element.getText());
         }
 
+        logger.info("Found {} text element differences", differences.size());
         return differences;
     }
 
