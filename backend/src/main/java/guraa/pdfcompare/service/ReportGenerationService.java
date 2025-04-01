@@ -1,4 +1,5 @@
 package guraa.pdfcompare.service;
+import guraa.pdfcompare.comparison.PageComparisonResult;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lowagie.text.*;
