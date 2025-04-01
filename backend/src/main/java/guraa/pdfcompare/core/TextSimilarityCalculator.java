@@ -1,114 +1,107 @@
 package guraa.pdfcompare.core;
 
-import org.apache.commons.text.similarity.JaccardSimilarity;
-import org.apache.commons.text.similarity.LevenshteinDistance;
-import org.apache.commons.text.similarity.CosineSimilarity;
-
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.Arrays;
 
 /**
- * Advanced text similarity calculator with multiple comparison techniques
+ * Utility class for calculating text similarity
  */
 public class TextSimilarityCalculator {
-    private final JaccardSimilarity jaccardSimilarity = new JaccardSimilarity();
-    private final LevenshteinDistance levenshteinDistance = LevenshteinDistance.getDefaultInstance();
-    private final CosineSimilarity cosineSimilarity = new CosineSimilarity();
 
     /**
-     * Calculate text similarity using multiple techniques
-     *
-     * @param text1 First text to compare
-     * @param text2 Second text to compare
-     * @return Similarity score between 0 and 1
+     * Calculate Jaccard similarity between two text strings
+     * Jaccard similarity = size of intersection / size of union
      */
-    public double calculateTextSimilarity(String text1, String text2) {
+    public static double calculateJaccardSimilarity(String text1, String text2) {
+        // Handle null cases
         if (text1 == null || text2 == null) return 0.0;
+        if (text1.isEmpty() || text2.isEmpty()) return 0.0;
 
-        // Normalize texts
-        text1 = normalizeText(text1);
-        text2 = normalizeText(text2);
+        // Tokenize texts into word sets
+        Set<String> set1 = new HashSet<>(Arrays.asList(text1.toLowerCase().split("\\W+")));
+        Set<String> set2 = new HashSet<>(Arrays.asList(text2.toLowerCase().split("\\W+")));
 
-        // Calculate different similarity metrics
-        double jaccardSim = calculateJaccardSimilarity(text1, text2);
-        double editDistanceSim = calculateEditDistanceSimilarity(text1, text2);
-        double cosineSim = calculateCosineSimilarity(text1, text2);
-        double wordOverlapSim = calculateWordOverlapSimilarity(text1, text2);
+        // Remove empty strings that might result from splitting
+        set1.remove("");
+        set2.remove("");
 
-        // Weighted combination of similarities
-        return (
-                jaccardSim * 0.3 +
-                        editDistanceSim * 0.2 +
-                        cosineSim * 0.3 +
-                        wordOverlapSim * 0.2
-        );
+        // Calculate intersection and union
+        Set<String> intersection = new HashSet<>(set1);
+        intersection.retainAll(set2);
+
+        Set<String> union = new HashSet<>(set1);
+        union.addAll(set2);
+
+        // Calculate Jaccard similarity
+        if (union.isEmpty()) return 0.0;
+        return (double) intersection.size() / union.size();
     }
 
     /**
-     * Normalize text for comparison
+     * Calculate cosine similarity between two text strings
+     * This is a more sophisticated measure that accounts for term frequency
      */
-    private String normalizeText(String text) {
-        return text.toLowerCase()
-                .replaceAll("[^a-z0-9\\s]", "")
-                .trim();
-    }
+    public static double calculateCosineSimilarity(String text1, String text2) {
+        // Handle null cases
+        if (text1 == null || text2 == null) return 0.0;
+        if (text1.isEmpty() || text2.isEmpty()) return 0.0;
 
-    /**
-     * Calculate Jaccard similarity
-     */
-    private double calculateJaccardSimilarity(String text1, String text2) {
-        return jaccardSimilarity.apply(text1, text2);
-    }
+        // Tokenize texts into word arrays
+        String[] words1 = text1.toLowerCase().split("\\W+");
+        String[] words2 = text2.toLowerCase().split("\\W+");
 
-    /**
-     * Calculate edit distance similarity
-     */
-    private double calculateEditDistanceSimilarity(String text1, String text2) {
-        int distance = levenshteinDistance.apply(text1, text2);
-        int maxLength = Math.max(text1.length(), text2.length());
-        return maxLength > 0 ? 1.0 - (double) distance / maxLength : 1.0;
-    }
-
-    /**
-     * Calculate cosine similarity using word frequencies
-     */
-    private double calculateCosineSimilarity(String text1, String text2) {
-        Map<CharSequence, Integer> freq1 = calculateWordFrequency(text1);
-        Map<CharSequence, Integer> freq2 = calculateWordFrequency(text2);
-
-        try {
-            return cosineSimilarity.cosineSimilarity(freq1, freq2);
-        } catch (Exception e) {
-            return 0.0;
+        // Get all unique words
+        Set<String> uniqueWords = new HashSet<>();
+        for (String word : words1) {
+            if (!word.isEmpty()) uniqueWords.add(word);
         }
+        for (String word : words2) {
+            if (!word.isEmpty()) uniqueWords.add(word);
+        }
+
+        // Calculate term frequencies
+        double[] vector1 = new double[uniqueWords.size()];
+        double[] vector2 = new double[uniqueWords.size()];
+
+        String[] uniqueWordsArray = uniqueWords.toArray(new String[0]);
+        for (int i = 0; i < uniqueWordsArray.length; i++) {
+            String word = uniqueWordsArray[i];
+            vector1[i] = countOccurrences(words1, word);
+            vector2[i] = countOccurrences(words2, word);
+        }
+
+        // Calculate cosine similarity
+        return calculateCosineSimilarity(vector1, vector2);
     }
 
     /**
-     * Calculate word overlap similarity
+     * Count occurrences of a word in a word array
      */
-    private double calculateWordOverlapSimilarity(String text1, String text2) {
-        Set<String> words1 = Arrays.stream(text1.split("\\s+"))
-                .collect(Collectors.toSet());
-        Set<String> words2 = Arrays.stream(text2.split("\\s+"))
-                .collect(Collectors.toSet());
-
-        // Calculate Sørensen–Dice coefficient
-        Set<String> intersection = new HashSet<>(words1);
-        intersection.retainAll(words2);
-
-        return 2.0 * intersection.size() / (words1.size() + words2.size());
+    private static int countOccurrences(String[] words, String word) {
+        int count = 0;
+        for (String w : words) {
+            if (w.equals(word)) count++;
+        }
+        return count;
     }
 
     /**
-     * Calculate word frequency map
+     * Calculate cosine similarity between two vectors
      */
-    private Map<CharSequence, Integer> calculateWordFrequency(String text) {
-        return Arrays.stream(text.split("\\s+"))
-                .filter(word -> word.length() > 1)  // Ignore very short words
-                .collect(Collectors.toMap(
-                        word -> (CharSequence) word,
-                        word -> 1,
-                        Integer::sum
-                ));
+    private static double calculateCosineSimilarity(double[] vector1, double[] vector2) {
+        double dotProduct = 0.0;
+        double norm1 = 0.0;
+        double norm2 = 0.0;
+
+        for (int i = 0; i < vector1.length; i++) {
+            dotProduct += vector1[i] * vector2[i];
+            norm1 += vector1[i] * vector1[i];
+            norm2 += vector2[i] * vector2[i];
+        }
+
+        if (norm1 == 0.0 || norm2 == 0.0) return 0.0;
+
+        return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
     }
 }

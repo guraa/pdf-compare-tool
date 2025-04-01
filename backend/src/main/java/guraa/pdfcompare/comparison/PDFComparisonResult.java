@@ -19,6 +19,7 @@ public class PDFComparisonResult {
     private int totalImageDifferences;
     private int totalFontDifferences;
     private int totalStyleDifferences;
+    private String matchingId;
 
     // New field for document pairs
     private List<DocumentPair> documentPairs;
@@ -58,6 +59,14 @@ public class PDFComparisonResult {
 
     public List<PageComparisonResult> getPageDifferences() {
         return pageDifferences;
+    }
+
+    public String getMatchingId() {
+        return matchingId;
+    }
+
+    public void setMatchingId(String matchingId) {
+        this.matchingId = matchingId;
     }
 
     public void setPageDifferences(List<PageComparisonResult> pageDifferences) {

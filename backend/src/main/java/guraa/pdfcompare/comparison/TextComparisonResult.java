@@ -27,4 +27,3 @@ public class TextComparisonResult {
         this.differenceCount = differenceCount;
     }
 }
-

@@ -1,164 +1,130 @@
 package guraa.pdfcompare.service;
 
 /**
- * Represents a summary of a page-level comparison between two PDF documents.
- * Contains statistics about matched, unmatched, and modified pages.
+ * Summary of the page-level comparison results.
  */
 public class PageLevelComparisonSummary {
-    private int matchedPageCount;
-    private int unmatchedBasePageCount;
-    private int unmatchedComparePageCount;
+    private int totalDifferences;
+    private int totalTextDifferences;
+    private int totalImageDifferences;
+    private int totalFontDifferences;
+    private int totalStyleDifferences;
+    private int totalMatchedPages;
+    private int totalUnmatchedBasePages;
+    private int totalUnmatchedComparePages;
+    private double overallSimilarityScore;
     private int identicalPageCount;
     private int pagesWithDifferencesCount;
-    private int totalDifferences;
 
-    /**
-     * Get the number of pages that were successfully matched between the documents
-     * @return Number of matched pages
-     */
-    public int getMatchedPageCount() {
-        return matchedPageCount;
-    }
-
-    /**
-     * Set the number of pages that were successfully matched between the documents
-     * @param matchedPageCount Number of matched pages
-     */
-    public void setMatchedPageCount(int matchedPageCount) {
-        this.matchedPageCount = matchedPageCount;
-    }
-
-    /**
-     * Get the number of pages in the base document that have no match in the compare document
-     * @return Number of unmatched base pages
-     */
-    public int getUnmatchedBasePageCount() {
-        return unmatchedBasePageCount;
-    }
-
-    /**
-     * Set the number of pages in the base document that have no match in the compare document
-     * @param unmatchedBasePageCount Number of unmatched base pages
-     */
-    public void setUnmatchedBasePageCount(int unmatchedBasePageCount) {
-        this.unmatchedBasePageCount = unmatchedBasePageCount;
-    }
-
-    /**
-     * Get the number of pages in the compare document that have no match in the base document
-     * @return Number of unmatched compare pages
-     */
-    public int getUnmatchedComparePageCount() {
-        return unmatchedComparePageCount;
-    }
-
-    /**
-     * Set the number of pages in the compare document that have no match in the base document
-     * @param unmatchedComparePageCount Number of unmatched compare pages
-     */
-    public void setUnmatchedComparePageCount(int unmatchedComparePageCount) {
-        this.unmatchedComparePageCount = unmatchedComparePageCount;
-    }
-
-    /**
-     * Get the number of matched pages that are identical (no differences)
-     * @return Number of identical pages
-     */
-    public int getIdenticalPageCount() {
-        return identicalPageCount;
-    }
-
-    /**
-     * Set the number of matched pages that are identical (no differences)
-     * @param identicalPageCount Number of identical pages
-     */
-    public void setIdenticalPageCount(int identicalPageCount) {
-        this.identicalPageCount = identicalPageCount;
-    }
-
-    /**
-     * Get the number of matched pages that contain at least one difference
-     * @return Number of pages with differences
-     */
-    public int getPagesWithDifferencesCount() {
-        return pagesWithDifferencesCount;
-    }
-
-    /**
-     * Set the number of matched pages that contain at least one difference
-     * @param pagesWithDifferencesCount Number of pages with differences
-     */
-    public void setPagesWithDifferencesCount(int pagesWithDifferencesCount) {
-        this.pagesWithDifferencesCount = pagesWithDifferencesCount;
-    }
-
-    /**
-     * Get the total number of differences found across all matched pages
-     * @return Total number of differences
-     */
     public int getTotalDifferences() {
         return totalDifferences;
     }
 
-    /**
-     * Set the total number of differences found across all matched pages
-     * @param totalDifferences Total number of differences
-     */
     public void setTotalDifferences(int totalDifferences) {
         this.totalDifferences = totalDifferences;
     }
 
-    /**
-     * Calculate the total number of pages in the base document
-     * @return Total base document page count
-     */
-    public int getTotalBasePageCount() {
-        return matchedPageCount + unmatchedBasePageCount;
+    public int getTotalTextDifferences() {
+        return totalTextDifferences;
     }
 
-    /**
-     * Calculate the total number of pages in the compare document
-     * @return Total compare document page count
-     */
-    public int getTotalComparePageCount() {
-        return matchedPageCount + unmatchedComparePageCount;
+    public void setTotalTextDifferences(int totalTextDifferences) {
+        this.totalTextDifferences = totalTextDifferences;
     }
 
-    /**
-     * Calculate the percentage of matched pages that are identical
-     * @return Percentage of identical pages among matched pages
-     */
-    public double getIdenticalPagePercentage() {
-        if (matchedPageCount == 0) {
-            return 0.0;
-        }
-
-        return (double) identicalPageCount / matchedPageCount * 100.0;
+    public int getTotalImageDifferences() {
+        return totalImageDifferences;
     }
 
-    /**
-     * Calculate the overall match percentage between the documents
-     * @return Percentage of pages that were successfully matched
-     */
-    public double getDocumentMatchPercentage() {
-        int totalPages = getTotalBasePageCount() + getTotalComparePageCount();
-        if (totalPages == 0) {
-            return 0.0;
-        }
-
-        return (double) (matchedPageCount * 2) / totalPages * 100.0;
+    public void setTotalImageDifferences(int totalImageDifferences) {
+        this.totalImageDifferences = totalImageDifferences;
     }
 
-    @Override
-    public String toString() {
-        return "PageLevelComparisonSummary{" +
-                "matchedPages=" + matchedPageCount +
-                ", unmatchedBasePages=" + unmatchedBasePageCount +
-                ", unmatchedComparePages=" + unmatchedComparePageCount +
-                ", identicalPages=" + identicalPageCount +
-                ", pagesWithDifferences=" + pagesWithDifferencesCount +
-                ", totalDifferences=" + totalDifferences +
-                ", matchPercentage=" + String.format("%.1f%%", getDocumentMatchPercentage()) +
-                '}';
+    public int getTotalFontDifferences() {
+        return totalFontDifferences;
+    }
+
+    public void setTotalFontDifferences(int totalFontDifferences) {
+        this.totalFontDifferences = totalFontDifferences;
+    }
+
+    public int getTotalStyleDifferences() {
+        return totalStyleDifferences;
+    }
+
+    public void setTotalStyleDifferences(int totalStyleDifferences) {
+        this.totalStyleDifferences = totalStyleDifferences;
+    }
+
+    public int getTotalMatchedPages() {
+        return totalMatchedPages;
+    }
+
+    public void setTotalMatchedPages(int totalMatchedPages) {
+        this.totalMatchedPages = totalMatchedPages;
+    }
+
+    public int getTotalUnmatchedBasePages() {
+        return totalUnmatchedBasePages;
+    }
+
+    public void setTotalUnmatchedBasePages(int totalUnmatchedBasePages) {
+        this.totalUnmatchedBasePages = totalUnmatchedBasePages;
+    }
+
+    public int getTotalUnmatchedComparePages() {
+        return totalUnmatchedComparePages;
+    }
+
+    public void setTotalUnmatchedComparePages(int totalUnmatchedComparePages) {
+        this.totalUnmatchedComparePages = totalUnmatchedComparePages;
+    }
+
+    public double getOverallSimilarityScore() {
+        return overallSimilarityScore;
+    }
+
+    public void setOverallSimilarityScore(double overallSimilarityScore) {
+        this.overallSimilarityScore = overallSimilarityScore;
+    }
+    
+    public int getIdenticalPageCount() {
+        return identicalPageCount;
+    }
+    
+    public void setIdenticalPageCount(int identicalPageCount) {
+        this.identicalPageCount = identicalPageCount;
+    }
+    
+    public int getPagesWithDifferencesCount() {
+        return pagesWithDifferencesCount;
+    }
+    
+    public void setPagesWithDifferencesCount(int pagesWithDifferencesCount) {
+        this.pagesWithDifferencesCount = pagesWithDifferencesCount;
+    }
+    
+    public int getMatchedPageCount() {
+        return totalMatchedPages;
+    }
+    
+    public void setMatchedPageCount(int matchedPageCount) {
+        this.totalMatchedPages = matchedPageCount;
+    }
+    
+    public int getUnmatchedBasePageCount() {
+        return totalUnmatchedBasePages;
+    }
+    
+    public void setUnmatchedBasePageCount(int unmatchedBasePageCount) {
+        this.totalUnmatchedBasePages = unmatchedBasePageCount;
+    }
+    
+    public int getUnmatchedComparePageCount() {
+        return totalUnmatchedComparePages;
+    }
+    
+    public void setUnmatchedComparePageCount(int unmatchedComparePageCount) {
+        this.totalUnmatchedComparePages = unmatchedComparePageCount;
     }
 }

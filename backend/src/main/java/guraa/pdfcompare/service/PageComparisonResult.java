@@ -1,7 +1,9 @@
 package guraa.pdfcompare.service;
 
-import guraa.pdfcompare.comparison.PDFComparisonResult;
+import guraa.pdfcompare.comparison.*;
 import guraa.pdfcompare.core.CustomPageDifference;
+
+import java.util.List;
 
 /**
  * Represents the result of comparing a pair of pages from two PDF documents.
@@ -13,10 +15,22 @@ public class PageComparisonResult {
     private boolean hasDifferences;
     private int totalDifferences;
     private PDFComparisonResult comparisonResult;
-    private PDFComparisonResult.PageDifference pageDifference;
+    private PageDifference pageDifference;
     private CustomPageDifference customPageDifference;
     private String changeType;  // "IDENTICAL", "MODIFIED", "ADDITION", "DELETION"
     private String error;
+    
+    // Fields to support compatibility with comparison.PageComparisonResult
+    private int pageNumber;
+    private boolean onlyInBase;
+    private boolean onlyInCompare;
+    private boolean dimensionsDifferent;
+    private float[] baseDimensions;
+    private float[] compareDimensions;
+    private TextComparisonResult textDifferences;
+    private List<TextElementDifference> textElementDifferences;
+    private List<ImageDifference> imageDifferences;
+    private List<FontDifference> fontDifferences;
 
     /**
      * Default constructor
@@ -106,13 +120,32 @@ public class PageComparisonResult {
      */
     public void setComparisonResult(PDFComparisonResult comparisonResult) {
         this.comparisonResult = comparisonResult;
+        
+        // If we have a comparison result with page differences, extract the first one
+        if (comparisonResult != null && comparisonResult.getPageDifferences() != null 
+                && !comparisonResult.getPageDifferences().isEmpty()) {
+            guraa.pdfcompare.comparison.PageComparisonResult pageResult = 
+                    comparisonResult.getPageDifferences().get(0);
+            
+            // Copy properties from the comparison result to this object for compatibility
+            this.pageNumber = pageResult.getPageNumber();
+            this.onlyInBase = pageResult.isOnlyInBase();
+            this.onlyInCompare = pageResult.isOnlyInCompare();
+            this.dimensionsDifferent = pageResult.isDimensionsDifferent();
+            this.baseDimensions = pageResult.getBaseDimensions();
+            this.compareDimensions = pageResult.getCompareDimensions();
+            this.textDifferences = pageResult.getTextDifferences();
+            this.textElementDifferences = pageResult.getTextElementDifferences();
+            this.imageDifferences = pageResult.getImageDifferences();
+            this.fontDifferences = pageResult.getFontDifferences();
+        }
     }
 
     /**
      * Get the page difference information
      * @return Page difference object
      */
-    public PDFComparisonResult.PageDifference getPageDifference() {
+    public PageDifference getPageDifference() {
         return pageDifference;
     }
 
@@ -120,7 +153,7 @@ public class PageComparisonResult {
      * Set the page difference information
      * @param pageDifference Page difference object
      */
-    public void setPageDifference(PDFComparisonResult.PageDifference pageDifference) {
+    public void setPageDifference(PageDifference pageDifference) {
         this.pageDifference = pageDifference;
     }
 
@@ -254,6 +287,88 @@ public class PageComparisonResult {
         }
 
         return summary.toString();
+    }
+    
+    // Methods to support compatibility with comparison.PageComparisonResult
+    
+    public int getPageNumber() {
+        return pageNumber;
+    }
+
+    public void setPageNumber(int pageNumber) {
+        this.pageNumber = pageNumber;
+    }
+
+    public boolean isOnlyInBase() {
+        return onlyInBase;
+    }
+
+    public void setOnlyInBase(boolean onlyInBase) {
+        this.onlyInBase = onlyInBase;
+    }
+
+    public boolean isOnlyInCompare() {
+        return onlyInCompare;
+    }
+
+    public void setOnlyInCompare(boolean onlyInCompare) {
+        this.onlyInCompare = onlyInCompare;
+    }
+
+    public boolean isDimensionsDifferent() {
+        return dimensionsDifferent;
+    }
+
+    public void setDimensionsDifferent(boolean dimensionsDifferent) {
+        this.dimensionsDifferent = dimensionsDifferent;
+    }
+
+    public float[] getBaseDimensions() {
+        return baseDimensions;
+    }
+
+    public void setBaseDimensions(float[] baseDimensions) {
+        this.baseDimensions = baseDimensions;
+    }
+
+    public float[] getCompareDimensions() {
+        return compareDimensions;
+    }
+
+    public void setCompareDimensions(float[] compareDimensions) {
+        this.compareDimensions = compareDimensions;
+    }
+
+    public TextComparisonResult getTextDifferences() {
+        return textDifferences;
+    }
+
+    public void setTextDifferences(TextComparisonResult textDifferences) {
+        this.textDifferences = textDifferences;
+    }
+
+    public List<TextElementDifference> getTextElementDifferences() {
+        return textElementDifferences;
+    }
+
+    public void setTextElementDifferences(List<TextElementDifference> textElementDifferences) {
+        this.textElementDifferences = textElementDifferences;
+    }
+
+    public List<ImageDifference> getImageDifferences() {
+        return imageDifferences;
+    }
+
+    public void setImageDifferences(List<ImageDifference> imageDifferences) {
+        this.imageDifferences = imageDifferences;
+    }
+
+    public List<FontDifference> getFontDifferences() {
+        return fontDifferences;
+    }
+
+    public void setFontDifferences(List<FontDifference> fontDifferences) {
+        this.fontDifferences = fontDifferences;
     }
 
     @Override

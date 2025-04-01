@@ -23,7 +23,7 @@ public class PageLevelComparisonIntegrationService {
 
     private final PDFComparisonService comparisonService;
     private final PageLevelComparisonService pageLevelComparisonService;
-    private final Map<String, PageLevelComparisonService.PageLevelComparisonResult> comparisonResults = new ConcurrentHashMap<>();
+    private final Map<String, PageLevelComparisonResult> comparisonResults = new ConcurrentHashMap<>();
     private final Map<String, String> comparisonStatuses = new ConcurrentHashMap<>();
     private final Map<String, String> comparisonErrors = new ConcurrentHashMap<>();
 
@@ -70,7 +70,7 @@ public class PageLevelComparisonIntegrationService {
                 PDFDocumentModel compareDocument = processor.processDocument(compareFile);
 
                 // Perform page-level comparison
-                PageLevelComparisonService.PageLevelComparisonResult result =
+                PageLevelComparisonResult result =
                         pageLevelComparisonService.compareDocuments(baseDocument, compareDocument);
 
                 // Store result
@@ -106,7 +106,7 @@ public class PageLevelComparisonIntegrationService {
      * @param comparisonId Comparison ID
      * @return Comparison result
      */
-    public PageLevelComparisonService.PageLevelComparisonResult getComparisonResult(String comparisonId) {
+    public PageLevelComparisonResult getComparisonResult(String comparisonId) {
         return comparisonResults.get(comparisonId);
     }
 
@@ -156,9 +156,9 @@ public class PageLevelComparisonIntegrationService {
         }
 
         // If completed, add summary from result
-        PageLevelComparisonService.PageLevelComparisonResult result = comparisonResults.get(comparisonId);
+        PageLevelComparisonResult result = comparisonResults.get(comparisonId);
         if (result != null) {
-            PageLevelComparisonService.PageLevelComparisonSummary resultSummary = result.getSummary();
+            PageLevelComparisonSummary resultSummary = result.getSummary();
 
             summary.put("matchedPageCount", resultSummary.getMatchedPageCount());
             summary.put("unmatchedBasePageCount", resultSummary.getUnmatchedBasePageCount());
@@ -174,12 +174,12 @@ public class PageLevelComparisonIntegrationService {
 
             // Add page change summary
             List<Map<String, Object>> pageChanges = new ArrayList<>();
-            List<PageLevelComparisonService.PageComparisonResult> pageResults = result.getPageResults();
+            List<PageComparisonResult> pageResults = result.getPageResults();
 
-            for (PageLevelComparisonService.PageComparisonResult pageResult : pageResults) {
+            for (PageComparisonResult pageResult : pageResults) {
                 Map<String, Object> pageChange = new HashMap<>();
 
-                PageLevelComparisonService.PagePair pagePair = pageResult.getPagePair();
+                PagePair pagePair = pageResult.getPagePair();
                 pageChange.put("changeType", pageResult.getChangeType());
 
                 if (pagePair.getBaseFingerprint() != null) {
@@ -228,19 +228,19 @@ public class PageLevelComparisonIntegrationService {
     public Map<String, Object> getPagePairResult(String comparisonId, int pairIndex) {
         Map<String, Object> result = new HashMap<>();
 
-        PageLevelComparisonService.PageLevelComparisonResult comparisonResult = comparisonResults.get(comparisonId);
+        PageLevelComparisonResult comparisonResult = comparisonResults.get(comparisonId);
         if (comparisonResult == null) {
             result.put("status", "not_found");
             return result;
         }
 
-        List<PageLevelComparisonService.PageComparisonResult> pageResults = comparisonResult.getPageResults();
+        List<PageComparisonResult> pageResults = comparisonResult.getPageResults();
         if (pairIndex < 0 || pairIndex >= pageResults.size()) {
             result.put("status", "not_found");
             return result;
         }
 
-        PageLevelComparisonService.PageComparisonResult pageResult = pageResults.get(pairIndex);
+        PageComparisonResult pageResult = pageResults.get(pairIndex);
         result.put("status", "ok");
         result.put("pairIndex", pairIndex);
         result.put("changeType", pageResult.getChangeType());
@@ -251,7 +251,7 @@ public class PageLevelComparisonIntegrationService {
             result.put("error", pageResult.getError());
         }
 
-        PageLevelComparisonService.PagePair pagePair = pageResult.getPagePair();
+        PagePair pagePair = pageResult.getPagePair();
         if (pagePair.getBaseFingerprint() != null) {
             Map<String, Object> baseInfo = new HashMap<>();
             baseInfo.put("pageIndex", pagePair.getBaseFingerprint().getPageIndex());

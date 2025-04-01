@@ -3,6 +3,7 @@ package guraa.pdfcompare.service;
 import guraa.pdfcompare.PDFComparisonEngine;
 import guraa.pdfcompare.PDFComparisonService;
 import guraa.pdfcompare.comparison.PDFComparisonResult;
+import guraa.pdfcompare.comparison.PageComparisonResult;
 import guraa.pdfcompare.core.DocumentFeaturesExtractor;
 import guraa.pdfcompare.core.PDFDocumentModel;
 import guraa.pdfcompare.core.PDFPageModel;
@@ -243,25 +244,22 @@ public class SmartDocumentComparisonService {
      * Convert a page comparison result to a full comparison result
      */
     private PDFComparisonResult convertToComparisonResult(
-            PageComparisonResult pageResult,
+            guraa.pdfcompare.service.PageComparisonResult pageResult,
             PDFDocumentModel baseDocument,
             PDFDocumentModel compareDocument) {
-
-        if (pageResult.getComparisonResult() != null) {
-            return pageResult.getComparisonResult();
-        }
 
         // Create a new comparison result
         PDFComparisonResult result = new PDFComparisonResult();
 
         // Set basic properties
-        if (pageResult.getPagePair().getBaseFingerprint() != null) {
+        PagePair pagePair = pageResult.getPagePair();
+        if (pagePair != null && pagePair.getBaseFingerprint() != null) {
             result.setBasePageCount(1);
         } else {
             result.setBasePageCount(0);
         }
 
-        if (pageResult.getPagePair().getCompareFingerprint() != null) {
+        if (pagePair != null && pagePair.getCompareFingerprint() != null) {
             result.setComparePageCount(1);
         } else {
             result.setComparePageCount(0);
@@ -270,20 +268,51 @@ public class SmartDocumentComparisonService {
         result.setPageCountDifferent(result.getBasePageCount() != result.getComparePageCount());
 
         // Set page differences
-        List<PDFComparisonResult.PageDifference> pageDifferences = new ArrayList<>();
-        if (pageResult.getPageDifference() != null) {
-            pageDifferences.add(pageResult.getPageDifference());
-        } else if (pageResult.getCustomPageDifference() != null) {
-            // Convert the custom page difference
-            PDFComparisonResult.PageDifference pageDifference = new PDFComparisonResult.PageDifference();
-            // Set additional properties as needed
-
-            // Add to page differences
-            pageDifferences.add(pageDifference);
-        }
-
+        List<guraa.pdfcompare.comparison.PageComparisonResult> pageDifferences = new ArrayList<>();
+        
+        // Create a comparison page result
+        guraa.pdfcompare.comparison.PageComparisonResult comparisonPageResult = 
+                new guraa.pdfcompare.comparison.PageComparisonResult();
+        
+        // Copy properties from service.PageComparisonResult to comparison.PageComparisonResult
+        comparisonPageResult.setPageNumber(pageResult.getPageNumber());
+        comparisonPageResult.setOnlyInBase(pageResult.isOnlyInBase());
+        comparisonPageResult.setOnlyInCompare(pageResult.isOnlyInCompare());
+        comparisonPageResult.setDimensionsDifferent(pageResult.isDimensionsDifferent());
+        comparisonPageResult.setBaseDimensions(pageResult.getBaseDimensions());
+        comparisonPageResult.setCompareDimensions(pageResult.getCompareDimensions());
+        comparisonPageResult.setTextDifferences(pageResult.getTextDifferences());
+        comparisonPageResult.setTextElementDifferences(pageResult.getTextElementDifferences());
+        comparisonPageResult.setImageDifferences(pageResult.getImageDifferences());
+        comparisonPageResult.setFontDifferences(pageResult.getFontDifferences());
+        
+        pageDifferences.add(comparisonPageResult);
         result.setPageDifferences(pageDifferences);
-        result.setTotalDifferences(pageResult.getTotalDifferences());
+        
+        // Set total differences
+        int totalDiffs = 0;
+        
+        // Count text differences
+        if (pageResult.getTextDifferences() != null) {
+            totalDiffs += pageResult.getTextDifferences().getDifferenceCount();
+        }
+        
+        // Count text element differences
+        if (pageResult.getTextElementDifferences() != null) {
+            totalDiffs += pageResult.getTextElementDifferences().size();
+        }
+        
+        // Count image differences
+        if (pageResult.getImageDifferences() != null) {
+            totalDiffs += pageResult.getImageDifferences().size();
+        }
+        
+        // Count font differences
+        if (pageResult.getFontDifferences() != null) {
+            totalDiffs += pageResult.getFontDifferences().size();
+        }
+        
+        result.setTotalDifferences(totalDiffs);
 
         return result;
     }

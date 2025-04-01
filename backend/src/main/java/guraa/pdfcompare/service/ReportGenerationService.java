@@ -132,9 +132,9 @@ public class ReportGenerationService {
                 document.add(Chunk.NEWLINE);
 
                 // Sort pages by most significant differences
-                List<PageComparisonResult> significantPages = findMostSignificantPages(result.getPageDifferences(), 20);
+                List<guraa.pdfcompare.comparison.PageComparisonResult> significantPages = findMostSignificantPages(result.getPageDifferences(), 20);
 
-                for (PageComparisonResult page : significantPages) {
+                for (guraa.pdfcompare.comparison.PageComparisonResult page : significantPages) {
                     // Skip pages with no differences
                     if ((page.getTextDifferences() == null || page.getTextDifferences().getDifferenceCount() == 0) &&
                             (page.getTextElementDifferences() == null || page.getTextElementDifferences().isEmpty()) &&
@@ -370,7 +370,7 @@ public class ReportGenerationService {
             html.append("  <h2>Page Differences</h2>\n");
 
             // Find most significant pages
-            List<PageComparisonResult> significantPages = findMostSignificantPages(result.getPageDifferences(), 20);
+            List<guraa.pdfcompare.comparison.PageComparisonResult> significantPages = findMostSignificantPages(result.getPageDifferences(), 20);
 
             for (PageComparisonResult page : significantPages) {
                 // Skip pages with no differences
@@ -687,9 +687,35 @@ public class ReportGenerationService {
      * @param maxPages Maximum number of pages to return
      * @return List of most significant pages
      */
-    public List<PageComparisonResult> findMostSignificantPages(List<PageComparisonResult> pages, int maxPages) {
+    public List<guraa.pdfcompare.comparison.PageComparisonResult> findMostSignificantPages(List<?> pages, int maxPages) {
+        // Convert the list to the correct type
+        List<guraa.pdfcompare.comparison.PageComparisonResult> typedPages = new ArrayList<>();
+        for (Object page : pages) {
+            if (page instanceof guraa.pdfcompare.comparison.PageComparisonResult) {
+                typedPages.add((guraa.pdfcompare.comparison.PageComparisonResult) page);
+            } else if (page instanceof PageComparisonResult) {
+                // Convert service.PageComparisonResult to comparison.PageComparisonResult
+                PageComparisonResult servicePage = (PageComparisonResult) page;
+                
+                guraa.pdfcompare.comparison.PageComparisonResult comparisonPage = 
+                        new guraa.pdfcompare.comparison.PageComparisonResult();
+                comparisonPage.setPageNumber(servicePage.getPageNumber());
+                comparisonPage.setOnlyInBase(servicePage.isOnlyInBase());
+                comparisonPage.setOnlyInCompare(servicePage.isOnlyInCompare());
+                comparisonPage.setDimensionsDifferent(servicePage.isDimensionsDifferent());
+                comparisonPage.setBaseDimensions(servicePage.getBaseDimensions());
+                comparisonPage.setCompareDimensions(servicePage.getCompareDimensions());
+                comparisonPage.setTextDifferences(servicePage.getTextDifferences());
+                comparisonPage.setTextElementDifferences(servicePage.getTextElementDifferences());
+                comparisonPage.setImageDifferences(servicePage.getImageDifferences());
+                comparisonPage.setFontDifferences(servicePage.getFontDifferences());
+                
+                typedPages.add(comparisonPage);
+            }
+        }
+        
         // Sort pages by significance (number and type of differences)
-        return pages.stream()
+        return typedPages.stream()
                 .filter(page ->
                         page.isOnlyInBase() ||
                                 page.isOnlyInCompare() ||
@@ -714,7 +740,7 @@ public class ReportGenerationService {
      * @param page The page comparison result
      * @return Significance score
      */
-    private int calculatePageSignificance(PageComparisonResult page) {
+    private int calculatePageSignificance(guraa.pdfcompare.comparison.PageComparisonResult page) {
         int score = 0;
 
         // Pages that exist in only one document are highly significant
