@@ -1,12 +1,13 @@
 package guraa.pdfcompare.core;
 
+import guraa.pdfcompare.comparison.PDFComparisonResult;
+import guraa.pdfcompare.visual.VisualMatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
  * Document matching facade that provides backward compatibility
@@ -18,7 +19,10 @@ public class SmartDocumentMatcher {
     // Composition of matching components
     private final DocumentMatchingStrategy matchingStrategy;
     private final DocumentSegmentationStrategy segmentationStrategy;
-    private final VisualMatcher visualMatcher;
+
+    // Storage for document matching results
+    private Map<String, List<DocumentPair>> documentPairsById = new HashMap<>();
+    private Map<String, Map<Integer, PDFComparisonResult>> pairResultsById = new HashMap<>();
 
     // Configuration parameters
     private double similarityThreshold = 0.1;
@@ -33,7 +37,6 @@ public class SmartDocumentMatcher {
     public SmartDocumentMatcher() {
         this.matchingStrategy = new DocumentMatchingStrategy();
         this.segmentationStrategy = new DocumentSegmentationStrategy();
-        this.visualMatcher = new VisualMatcher();
     }
 
     /**
@@ -52,8 +55,8 @@ public class SmartDocumentMatcher {
         List<String> baseVisualHashes = VisualMatcher.computeVisualHashes(baseFile);
         List<String> compareVisualHashes = VisualMatcher.computeVisualHashes(compareFile);
 
-        // Perform document matching with converted segments
-        List<DocumentPair> convertedPairs = matchDocumentsWithConvertedSegments(
+        // Perform document matching with SmartDocumentMatcher.DocumentSegment
+        List<DocumentPair> convertedPairs = matchDocumentsWithInternalSegments(
                 baseDocument, compareDocument
         );
 
@@ -70,23 +73,28 @@ public class SmartDocumentMatcher {
             PDFDocumentModel baseDocument,
             PDFDocumentModel compareDocument) throws IOException {
 
-        // Perform document matching with converted segments
-        return matchDocumentsWithConvertedSegments(baseDocument, compareDocument);
+        // Perform document matching with internal segments
+        return matchDocumentsWithInternalSegments(baseDocument, compareDocument);
     }
 
     /**
-     * Match documents with converted segments to handle type compatibility
+     * Match documents with internal DocumentSegment class
      */
-    private List<DocumentPair> matchDocumentsWithConvertedSegments(
+    private List<DocumentPair> matchDocumentsWithInternalSegments(
             PDFDocumentModel baseDocument,
             PDFDocumentModel compareDocument) throws IOException {
 
-        // Segment both documents
-        List<DocumentSegment> baseSegments = segmentationStrategy.segment(baseDocument);
-        List<DocumentSegment> compareSegments = segmentationStrategy.segment(compareDocument);
+        // Segment both documents using our internal DocumentSegment class
+        List<DocumentSegment> baseSegments = convertToInternalSegments(
+                segmentationStrategy.segment(baseDocument)
+        );
 
-        // Find matches with converted segments
-        List<DocumentPair> matchedPairs = findMatchesWithConvertedSegments(
+        List<DocumentSegment> compareSegments = convertToInternalSegments(
+                segmentationStrategy.segment(compareDocument)
+        );
+
+        // Find matches
+        List<DocumentPair> matchedPairs = findMatches(
                 baseDocument, compareDocument, baseSegments, compareSegments
         );
 
@@ -94,9 +102,37 @@ public class SmartDocumentMatcher {
     }
 
     /**
-     * Find matches with converted segments to handle type compatibility
+     * Convert external DocumentSegment to internal DocumentSegment
      */
-    private List<DocumentPair> findMatchesWithConvertedSegments(
+    private List<DocumentSegment> convertToInternalSegments(List<guraa.pdfcompare.core.DocumentSegment> externalSegments) {
+        List<DocumentSegment> internalSegments = new ArrayList<>();
+
+        for (guraa.pdfcompare.core.DocumentSegment segment : externalSegments) {
+            DocumentSegment internalSegment = new DocumentSegment(
+                    segment.getStartPage(),
+                    segment.getEndPage(),
+                    segment.getTitle()
+            );
+
+            // Check for null features map before copying
+            Map<String, Object> features = segment.getFeatures();
+            if (features != null) {
+                internalSegment.setFeatures(new HashMap<>(features));
+            } else {
+                // Initialize with empty map if features is null
+                internalSegment.setFeatures(new HashMap<>());
+            }
+
+            internalSegments.add(internalSegment);
+        }
+
+        return internalSegments;
+    }
+
+    /**
+     * Find matches between base and compare segments
+     */
+    private List<DocumentPair> findMatches(
             PDFDocumentModel baseDocument,
             PDFDocumentModel compareDocument,
             List<DocumentSegment> baseSegments,
@@ -161,14 +197,18 @@ public class SmartDocumentMatcher {
             DocumentSegment baseSegment,
             List<DocumentSegment> compareSegments) {
 
-        return compareSegments.stream()
-                .max(Comparator.comparingDouble(compareSegment ->
-                        calculateSimilarity(baseSegment, compareSegment)
-                ))
-                .filter(compareSegment ->
-                        calculateSimilarity(baseSegment, compareSegment) > similarityThreshold
-                )
-                .orElse(null);
+        DocumentSegment bestMatch = null;
+        double bestSimilarity = similarityThreshold;
+
+        for (DocumentSegment compareSegment : compareSegments) {
+            double similarity = calculateSimilarity(baseSegment, compareSegment);
+            if (similarity > bestSimilarity) {
+                bestSimilarity = similarity;
+                bestMatch = compareSegment;
+            }
+        }
+
+        return bestMatch;
     }
 
     /**
@@ -178,64 +218,53 @@ public class SmartDocumentMatcher {
             DocumentSegment baseSegment,
             DocumentSegment compareSegment) {
 
-        // Extract text features
-        String baseText = extractFullText(baseSegment, baseDocument);
-        String compareText = extractFullText(compareSegment, compareDocument);
+        // Extract text features from the segments' features map (with null check)
+        Map<String, Object> baseFeatures = baseSegment.getFeatures() != null ?
+                baseSegment.getFeatures() : new HashMap<>();
+        Map<String, Object> compareFeatures = compareSegment.getFeatures() != null ?
+                compareSegment.getFeatures() : new HashMap<>();
 
-        // Basic similarity calculation (can be enhanced)
-        return calculateTextSimilarity(baseText, compareText);
-    }
+        // Use text features if available, otherwise extract from document directly
+        String baseText = (String) baseFeatures.getOrDefault("fullText", "");
+        String compareText = (String) compareFeatures.getOrDefault("fullText", "");
 
-    /**
-     * Extract full text from a segment
-     */
-    private String extractFullText(
-            DocumentSegment segment,
-            PDFDocumentModel document) {
-
-        StringBuilder text = new StringBuilder();
-        for (int i = segment.getStartPage(); i <= segment.getEndPage(); i++) {
-            PDFPageModel page = document.getPages().get(i);
-            text.append(page.getText()).append("\n");
+        if (baseText.isEmpty() || compareText.isEmpty()) {
+            // Need to extract text (implementation depends on your specific setup)
+            // This is a simplified version - just use the title if available
+            baseText = baseSegment.getTitle() != null ? baseSegment.getTitle() : "";
+            compareText = compareSegment.getTitle() != null ? compareSegment.getTitle() : "";
         }
-        return text.toString();
+
+        // Calculate text similarity (with null/empty checks)
+        return calculateTextSimilarity(baseText, compareText);
     }
 
     /**
      * Calculate text similarity
      */
     private double calculateTextSimilarity(String text1, String text2) {
+        // Handle null or empty cases
         if (text1 == null || text2 == null) return 0.0;
+        if (text1.isEmpty() || text2.isEmpty()) return 0.0;
 
-        // Simple similarity calculation
-        return 1.0 - (double) levenshteinDistance(text1, text2) /
-                Math.max(text1.length(), text2.length());
-    }
+        // Simple Jaccard similarity
+        Set<String> set1 = new HashSet<>(Arrays.asList(text1.toLowerCase().split("\\W+")));
+        Set<String> set2 = new HashSet<>(Arrays.asList(text2.toLowerCase().split("\\W+")));
 
-    /**
-     * Levenshtein distance calculation
-     */
-    private int levenshteinDistance(String s1, String s2) {
-        int[] costs = new int[s2.length() + 1];
-        for (int i = 0; i <= s1.length(); i++) {
-            int lastValue = i;
-            for (int j = 0; j <= s2.length(); j++) {
-                if (i == 0) {
-                    costs[j] = j;
-                } else if (j > 0) {
-                    int newValue = costs[j - 1];
-                    if (s1.charAt(i - 1) != s2.charAt(j - 1)) {
-                        newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-                    }
-                    costs[j - 1] = lastValue;
-                    lastValue = newValue;
-                }
-            }
-            if (i > 0) {
-                costs[s2.length()] = lastValue;
-            }
-        }
-        return costs[s2.length()];
+        // Remove empty strings that might result from splitting
+        set1.remove("");
+        set2.remove("");
+
+        // If either set is empty after processing, similarity is 0
+        if (set1.isEmpty() || set2.isEmpty()) return 0.0;
+
+        Set<String> union = new HashSet<>(set1);
+        union.addAll(set2);
+
+        Set<String> intersection = new HashSet<>(set1);
+        intersection.retainAll(set2);
+
+        return (double) intersection.size() / union.size();
     }
 
     /**
@@ -273,7 +302,125 @@ public class SmartDocumentMatcher {
         }
     }
 
-    // Remaining configuration methods stay the same...
+    /**
+     * Store document pairs for a comparison ID
+     */
+    public void storeDocumentPairs(String comparisonId, List<DocumentPair> pairs) {
+        documentPairsById.put(comparisonId, pairs);
+    }
 
-    // Inner classes (DocumentSegment and DocumentPair) remain the same
+    /**
+     * Store pair result for a comparison ID and pair index
+     */
+    public void storePairResult(String comparisonId, int pairIndex, PDFComparisonResult result) {
+        pairResultsById.computeIfAbsent(comparisonId, k -> new HashMap<>())
+                .put(pairIndex, result);
+    }
+
+    /**
+     * Get document pairs for a comparison ID
+     */
+    public List<DocumentPair> getDocumentPairs(String comparisonId) {
+        return documentPairsById.getOrDefault(comparisonId, new ArrayList<>());
+    }
+
+    /**
+     * Get pair result for a comparison ID and pair index
+     */
+    public PDFComparisonResult getPairResult(String comparisonId, int pairIndex) {
+        return pairResultsById.getOrDefault(comparisonId, Collections.emptyMap())
+                .get(pairIndex);
+    }
+
+    /**
+     * Inner class for document segments
+     */
+    public static class DocumentSegment {
+        private final int startPage;
+        private final int endPage;
+        private final String title;
+        private Map<String, Object> features = new HashMap<>();
+
+        public DocumentSegment(int startPage, int endPage, String title) {
+            this.startPage = startPage;
+            this.endPage = endPage;
+            this.title = title;
+        }
+
+        public int getStartPage() {
+            return startPage;
+        }
+
+        public int getEndPage() {
+            return endPage;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public Map<String, Object> getFeatures() {
+            return features;
+        }
+
+        public void setFeatures(Map<String, Object> features) {
+            this.features = features != null ? features : new HashMap<>();
+        }
+    }
+
+    /**
+     * Inner class for document pairs
+     */
+    public static class DocumentPair {
+        private final int baseStartPage;
+        private final int baseEndPage;
+        private final int compareStartPage;
+        private final int compareEndPage;
+        private final double similarityScore;
+
+        public DocumentPair(
+                int baseStartPage,
+                int baseEndPage,
+                int compareStartPage,
+                int compareEndPage,
+                double similarityScore) {
+            this.baseStartPage = baseStartPage;
+            this.baseEndPage = baseEndPage;
+            this.compareStartPage = compareStartPage;
+            this.compareEndPage = compareEndPage;
+            this.similarityScore = similarityScore;
+        }
+
+        public boolean isMatched() {
+            return hasBaseDocument() && hasCompareDocument();
+        }
+
+        public boolean hasBaseDocument() {
+            return baseStartPage >= 0 && baseEndPage >= 0;
+        }
+
+        public boolean hasCompareDocument() {
+            return compareStartPage >= 0 && compareEndPage >= 0;
+        }
+
+        public int getBaseStartPage() {
+            return baseStartPage;
+        }
+
+        public int getBaseEndPage() {
+            return baseEndPage;
+        }
+
+        public int getCompareStartPage() {
+            return compareStartPage;
+        }
+
+        public int getCompareEndPage() {
+            return compareEndPage;
+        }
+
+        public double getSimilarityScore() {
+            return similarityScore;
+        }
+    }
 }

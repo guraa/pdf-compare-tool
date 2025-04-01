@@ -1,5 +1,7 @@
 package guraa.pdfcompare.comparison;
 
+import guraa.pdfcompare.core.DocumentPair;
+
 import java.util.List;
 import java.util.Map;
 
@@ -17,6 +19,9 @@ public class PDFComparisonResult {
     private int totalImageDifferences;
     private int totalFontDifferences;
     private int totalStyleDifferences;
+
+    // New field for document pairs
+    private List<DocumentPair> documentPairs;
 
     // Getters and setters
     public Map<String, MetadataDifference> getMetadataDifferences() {
@@ -98,6 +103,20 @@ public class PDFComparisonResult {
     public void setTotalStyleDifferences(int totalStyleDifferences) {
         this.totalStyleDifferences = totalStyleDifferences;
     }
+
+    /**
+     * Get the document pairs associated with this comparison
+     * @return List of document pairs
+     */
+    public List<DocumentPair> getDocumentPairs() {
+        return documentPairs;
+    }
+
+    /**
+     * Set the document pairs for this comparison
+     * @param documentPairs List of document pairs
+     */
+    public void setDocumentPairs(List<DocumentPair> documentPairs) {
+        this.documentPairs = documentPairs;
+    }
 }
-
-

@@ -1,6 +1,7 @@
-package guraa.pdfcompare.core;
+package guraa.pdfcompare.visual;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,17 +11,18 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * VisualMatcher provides page-level visual fingerprinting for smart matching.
+ * Unified VisualMatcher: generates visual hashes and compares them using perceptual similarity.
  */
 public class VisualMatcher {
     private static final Logger logger = LoggerFactory.getLogger(VisualMatcher.class);
 
     /**
-     * Generate visual hashes (e.g. perceptual hashes) for all pages in a document
+     * Generate visual hashes (dHash) for all pages in a document
      */
     public static List<String> computeVisualHashes(File pdfFile) throws IOException {
         List<String> hashes = new ArrayList<>();
@@ -29,9 +31,8 @@ public class VisualMatcher {
             PDFRenderer renderer = new PDFRenderer(document);
 
             for (int i = 0; i < document.getNumberOfPages(); i++) {
-                BufferedImage pageImage = renderer.renderImageWithDPI(i, 72); // Low-res to reduce processing
-                BufferedImage resized = resizeImage(pageImage, 32, 32);
-                String hash = averageHash(resized);
+                BufferedImage pageImage = renderer.renderImageWithDPI(i, 72, ImageType.RGB);
+                String hash = computeDHash(pageImage);
                 hashes.add(hash);
             }
         }
@@ -44,47 +45,49 @@ public class VisualMatcher {
      */
     private static BufferedImage resizeImage(BufferedImage original, int width, int height) {
         BufferedImage resized = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
-        resized.getGraphics().drawImage(original, 0, 0, width, height, null);
+        Graphics2D g = resized.createGraphics();
+        g.drawImage(original, 0, 0, width, height, null);
+        g.dispose();
         return resized;
     }
 
     /**
-     * Compute average hash (aHash) from a grayscale image
+     * Compute dHash from a grayscale image
      */
-    private static String averageHash(BufferedImage image) {
-        int width = image.getWidth();
-        int height = image.getHeight();
+    private static String computeDHash(BufferedImage image) {
+        final int width = 9; // dHash uses width+1
+        final int height = 8;
 
-        int sum = 0;
-        int[] pixels = new int[width * height];
+        BufferedImage resized = resizeImage(image, width, height);
 
+        StringBuilder hashBuilder = new StringBuilder();
         for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int gray = new Color(image.getRGB(x, y)).getRed();
-                pixels[y * width + x] = gray;
-                sum += gray;
+            for (int x = 0; x < width - 1; x++) {
+                int leftPixel = resized.getRGB(x, y) & 0xFF;
+                int rightPixel = resized.getRGB(x + 1, y) & 0xFF;
+                hashBuilder.append(leftPixel < rightPixel ? "1" : "0");
             }
         }
 
-        int avg = sum / pixels.length;
-        StringBuilder hash = new StringBuilder();
-
-        for (int px : pixels) {
-            hash.append(px >= avg ? "1" : "0");
+        // Convert binary string to base64
+        byte[] hashBytes = new byte[hashBuilder.length() / 8];
+        for (int i = 0; i < hashBytes.length; i++) {
+            String byteStr = hashBuilder.substring(i * 8, i * 8 + 8);
+            hashBytes[i] = (byte) Integer.parseInt(byteStr, 2);
         }
 
-        return hash.toString();
+        return Base64.getEncoder().encodeToString(hashBytes);
     }
 
     /**
      * Calculate Hamming distance between two binary hash strings
      */
     public static int hammingDistance(String hash1, String hash2) {
+        byte[] b1 = Base64.getDecoder().decode(hash1);
+        byte[] b2 = Base64.getDecoder().decode(hash2);
         int dist = 0;
-        for (int i = 0; i < Math.min(hash1.length(), hash2.length()); i++) {
-            if (hash1.charAt(i) != hash2.charAt(i)) {
-                dist++;
-            }
+        for (int i = 0; i < Math.min(b1.length, b2.length); i++) {
+            dist += Integer.bitCount(b1[i] ^ b2[i]);
         }
         return dist;
     }
@@ -97,11 +100,12 @@ public class VisualMatcher {
         if (minSize == 0) return 0;
 
         int totalDistance = 0;
+        int maxDistance = 0;
         for (int i = 0; i < minSize; i++) {
             totalDistance += hammingDistance(base.get(i), compare.get(i));
+            maxDistance += 8 * Base64.getDecoder().decode(base.get(i)).length;
         }
 
-        int maxDistance = minSize * base.get(0).length();
         return 1.0 - ((double) totalDistance / maxDistance);
     }
 

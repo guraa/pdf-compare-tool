@@ -45,7 +45,7 @@ public class ContentTypeDetector {
      * @return Detected content type
      */
     public String detectContentType(
-            SmartDocumentMatcher.DocumentSegment segment,
+            DocumentSegment segment,
             PDFDocumentModel document) {
 
         // Extract text from the segment
@@ -66,9 +66,7 @@ public class ContentTypeDetector {
                 .orElse("GENERIC_DOCUMENT");
     }
 
-    /**
-     * Calculate content type score based on keyword presence
-     */
+
     private double calculateContentTypeScore(String text, Set<String> keywords) {
         // Count keyword matches
         long matchCount = keywords.stream()
@@ -83,7 +81,7 @@ public class ContentTypeDetector {
      * Extract full text from a document segment
      */
     private String extractFullText(
-            SmartDocumentMatcher.DocumentSegment segment,
+            DocumentSegment segment,
             PDFDocumentModel document) {
 
         StringBuilder text = new StringBuilder();
@@ -93,6 +91,7 @@ public class ContentTypeDetector {
         }
         return text.toString();
     }
+
 
     /**
      * Advanced content type detection using more sophisticated techniques

@@ -1,11 +1,47 @@
 package guraa.pdfcompare.core;
 
-import guraa.pdfcompare.core.SmartDocumentMatcher.DocumentSegment as LegacyDocumentSegment;
-
 /**
  * Utility class for converting between new and legacy document segments
  */
 public class DocumentSegmentConverter {
+    /**
+     * Inner class representing a legacy document segment
+     * to maintain compatibility with existing code
+     */
+    public static class LegacyDocumentSegment {
+        private int startPage;
+        private int endPage;
+        private String title;
+        private java.util.Map<String, Object> features;
+
+        public LegacyDocumentSegment(int startPage, int endPage, String title) {
+            this.startPage = startPage;
+            this.endPage = endPage;
+            this.title = title;
+            this.features = new java.util.HashMap<>();
+        }
+
+        public int getStartPage() {
+            return startPage;
+        }
+
+        public int getEndPage() {
+            return endPage;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public java.util.Map<String, Object> getFeatures() {
+            return features;
+        }
+
+        public void setFeatures(java.util.Map<String, Object> features) {
+            this.features = features;
+        }
+    }
+
     /**
      * Convert new DocumentSegment to legacy DocumentSegment
      * @param newSegment New document segment

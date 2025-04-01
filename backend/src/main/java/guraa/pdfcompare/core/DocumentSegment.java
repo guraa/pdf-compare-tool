@@ -22,7 +22,7 @@ public class DocumentSegment {
         this.startPage = startPage;
         this.endPage = endPage;
         this.title = title;
-        this.features = new HashMap<>();
+        this.features = new HashMap<>();  // Initialize with empty map
     }
 
     /**
@@ -54,6 +54,10 @@ public class DocumentSegment {
      * @return Map of segment features
      */
     public Map<String, Object> getFeatures() {
+        // Ensure we never return null
+        if (features == null) {
+            features = new HashMap<>();
+        }
         return features;
     }
 
@@ -62,7 +66,8 @@ public class DocumentSegment {
      * @param features Map of segment features
      */
     public void setFeatures(Map<String, Object> features) {
-        this.features = features;
+        // Ensure we never store null
+        this.features = features != null ? features : new HashMap<>();
     }
 
     /**

@@ -2,7 +2,7 @@ package guraa.pdfcompare.controller;
 
 import guraa.pdfcompare.PDFComparisonService;
 import guraa.pdfcompare.comparison.PDFComparisonResult;
-import guraa.pdfcompare.core.SmartDocumentMatcher.DocumentPair;
+import guraa.pdfcompare.core.SmartDocumentMatcher;
 import guraa.pdfcompare.model.ComparisonRequest;
 import guraa.pdfcompare.model.FileUploadResponse;
 import guraa.pdfcompare.service.FileStorageService;
@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Controller for PDF comparison operations with smart document matching
@@ -28,10 +29,14 @@ import java.util.*;
 public class PDFController {
 
     private static final Logger logger = LoggerFactory.getLogger(PDFController.class);
+    private static final long MAX_WAIT_TIME_MS = 300000; // 5 minutes max wait time for comparison
 
     private final PDFComparisonService comparisonService;
     private final SmartDocumentComparisonService smartComparisonService;
     private final FileStorageService storageService;
+
+    // Track when comparison requests were started
+    private final Map<String, Long> comparisonStartTimes = new ConcurrentHashMap<>();
 
     @Autowired
     public PDFController(
@@ -105,23 +110,33 @@ public class PDFController {
                     Boolean.TRUE.equals(request.getOptions().get("smartMatching"));
 
             String comparisonId;
-            if (useSmartMatching) {
-                // Use smart comparison service
-                comparisonId = smartComparisonService.compareFiles(
-                        baseFilePath, compareFilePath, true);
-                logger.info("Smart comparison started with ID: {}", comparisonId);
-            } else {
-                // Use standard comparison service
-                comparisonId = comparisonService.compareFiles(baseFilePath, compareFilePath);
-                logger.info("Standard comparison started with ID: {}", comparisonId);
+            try {
+                if (useSmartMatching) {
+                    // Use smart comparison service
+                    comparisonId = smartComparisonService.compareFiles(
+                            baseFilePath, compareFilePath, true);
+                    logger.info("Smart comparison started with ID: {}", comparisonId);
+                } else {
+                    // Use standard comparison service
+                    comparisonId = comparisonService.compareFiles(baseFilePath, compareFilePath);
+                    logger.info("Standard comparison started with ID: {}", comparisonId);
+                }
+
+                // Track start time
+                comparisonStartTimes.put(comparisonId, System.currentTimeMillis());
+
+                // Create response
+                Map<String, String> response = new HashMap<>();
+                response.put("comparisonId", comparisonId);
+                response.put("mode", useSmartMatching ? "smart" : "standard");
+
+                return ResponseEntity.ok(response);
+            } catch (Exception e) {
+                logger.error("Error starting comparison: {}", e.getMessage(), e);
+                Map<String, String> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Error starting comparison: " + e.getMessage());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
             }
-
-            // Create response
-            Map<String, String> response = new HashMap<>();
-            response.put("comparisonId", comparisonId);
-            response.put("mode", useSmartMatching ? "smart" : "standard");
-
-            return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Failed to compare documents: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -138,11 +153,36 @@ public class PDFController {
     public ResponseEntity<?> getComparisonResult(@PathVariable String comparisonId) {
         logger.info("Received request for comparison result: {}", comparisonId);
 
+        // Special handling for old comparison IDs from previous runs
+        if (!comparisonStartTimes.containsKey(comparisonId)) {
+            // If this is an old ID from a previous server run, and neither service has results
+            if (comparisonService.getComparisonResult(comparisonId) == null &&
+                    !smartComparisonService.isComparisonReady(comparisonId)) {
+
+                Map<String, Object> oldIdResponse = new HashMap<>();
+                oldIdResponse.put("status", "not_found");
+                oldIdResponse.put("message", "This comparison ID is no longer valid. Please start a new comparison.");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(oldIdResponse);
+            }
+        }
+
+        // Check if comparison has timed out
+        Long startTime = comparisonStartTimes.get(comparisonId);
+        if (startTime != null && System.currentTimeMillis() - startTime > MAX_WAIT_TIME_MS) {
+            logger.warn("Comparison {} has exceeded maximum wait time of {} ms", comparisonId, MAX_WAIT_TIME_MS);
+            comparisonStartTimes.remove(comparisonId);
+            Map<String, Object> timeoutResponse = new HashMap<>();
+            timeoutResponse.put("status", "timeout");
+            timeoutResponse.put("message", "Comparison is taking too long to complete. Please try again with smaller files.");
+            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT).body(timeoutResponse);
+        }
+
         // Try standard comparison first
         PDFComparisonResult standardResult = comparisonService.getComparisonResult(comparisonId);
 
         if (standardResult != null) {
             logger.info("Returning standard comparison result for ID: {}", comparisonId);
+            comparisonStartTimes.remove(comparisonId); // Clean up tracking
             return ResponseEntity.ok(standardResult);
         }
 
@@ -150,10 +190,32 @@ public class PDFController {
         if (smartComparisonService.isComparisonReady(comparisonId)) {
             logger.info("Returning smart comparison summary for ID: {}", comparisonId);
             Map<String, Object> summary = smartComparisonService.getComparisonSummary(comparisonId);
+
+            // Check if comparison failed
+            if ("failed".equals(summary.get("status"))) {
+                logger.error("Comparison {} failed: {}", comparisonId, summary.get("error"));
+                comparisonStartTimes.remove(comparisonId); // Clean up tracking
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(summary);
+            }
+
+            comparisonStartTimes.remove(comparisonId); // Clean up tracking
             return ResponseEntity.ok(summary);
         }
 
-        // If neither is ready, return "processing" status
+        // Get a progress update for better user feedback
+        Map<String, Object> summary = smartComparisonService.getComparisonSummary(comparisonId);
+
+        // If we have progress information, return it with ACCEPTED status
+        if (summary.containsKey("percentComplete")) {
+            logger.info("Comparison {} is in progress ({}% complete)",
+                    comparisonId, summary.get("percentComplete"));
+            return ResponseEntity.status(HttpStatus.ACCEPTED)
+                    .header("X-Comparison-Status", "processing")
+                    .header("X-Comparison-Progress", summary.get("percentComplete").toString())
+                    .body(summary);
+        }
+
+        // Otherwise, just indicate processing
         logger.info("Comparison result not found or still processing: {}", comparisonId);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .header("X-Comparison-Status", "processing")
@@ -167,9 +229,36 @@ public class PDFController {
      */
     @GetMapping("/comparison/{comparisonId}/documents")
     public ResponseEntity<?> getDocumentPairs(@PathVariable String comparisonId) {
-        List<DocumentPair> pairs = smartComparisonService.getDocumentPairs(comparisonId);
+        // Check for old comparison IDs
+        if (!comparisonStartTimes.containsKey(comparisonId) &&
+                !smartComparisonService.isComparisonReady(comparisonId)) {
+
+            Map<String, Object> oldIdResponse = new HashMap<>();
+            oldIdResponse.put("status", "not_found");
+            oldIdResponse.put("message", "This comparison ID is no longer valid. Please start a new comparison.");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(oldIdResponse);
+        }
+
+        List<SmartDocumentMatcher.DocumentPair> pairs = smartComparisonService.getDocumentPairs(comparisonId);
 
         if (pairs == null || pairs.isEmpty()) {
+            // Check if comparison has timed out
+            Long startTime = comparisonStartTimes.get(comparisonId);
+            if (startTime != null && System.currentTimeMillis() - startTime > MAX_WAIT_TIME_MS) {
+                logger.warn("Document pairs request for comparison {} has timed out", comparisonId);
+                comparisonStartTimes.remove(comparisonId);
+                Map<String, Object> timeoutResponse = new HashMap<>();
+                timeoutResponse.put("status", "timeout");
+                timeoutResponse.put("message", "Document pair identification is taking too long. Please try again with smaller files.");
+                return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT).body(timeoutResponse);
+            }
+
+            // Get progress information if available
+            Map<String, Object> summary = smartComparisonService.getComparisonSummary(comparisonId);
+            if (summary.containsKey("status") && "failed".equals(summary.get("status"))) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(summary);
+            }
+
             return ResponseEntity.status(HttpStatus.ACCEPTED)
                     .header("X-Comparison-Status", "processing")
                     .build();
@@ -178,7 +267,7 @@ public class PDFController {
         // Create a response with more details
         List<Map<String, Object>> pairDetails = new ArrayList<>();
         for (int i = 0; i < pairs.size(); i++) {
-            DocumentPair pair = pairs.get(i);
+            SmartDocumentMatcher.DocumentPair pair = pairs.get(i);
             Map<String, Object> details = new HashMap<>();
 
             details.put("pairIndex", i);
@@ -214,12 +303,33 @@ public class PDFController {
             @PathVariable String comparisonId,
             @PathVariable int pairIndex) {
 
+        // Check for old comparison IDs
+        if (!comparisonStartTimes.containsKey(comparisonId) &&
+                !smartComparisonService.isComparisonReady(comparisonId)) {
+
+            Map<String, Object> oldIdResponse = new HashMap<>();
+            oldIdResponse.put("status", "not_found");
+            oldIdResponse.put("message", "This comparison ID is no longer valid. Please start a new comparison.");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(oldIdResponse);
+        }
+
         PDFComparisonResult result = smartComparisonService.getDocumentPairResult(comparisonId, pairIndex);
 
         if (result == null) {
             // Check if the pair exists but comparison is not ready
-            List<DocumentPair> pairs = smartComparisonService.getDocumentPairs(comparisonId);
+            List<SmartDocumentMatcher.DocumentPair> pairs = smartComparisonService.getDocumentPairs(comparisonId);
             if (pairs != null && pairIndex < pairs.size()) {
+                // Check for timeout
+                Long startTime = comparisonStartTimes.get(comparisonId);
+                if (startTime != null && System.currentTimeMillis() - startTime > MAX_WAIT_TIME_MS) {
+                    logger.warn("Document pair result request for comparison {} has timed out", comparisonId);
+                    comparisonStartTimes.remove(comparisonId);
+                    Map<String, Object> timeoutResponse = new HashMap<>();
+                    timeoutResponse.put("status", "timeout");
+                    timeoutResponse.put("message", "Document pair comparison is taking too long. Please try again with smaller files.");
+                    return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT).body(timeoutResponse);
+                }
+
                 return ResponseEntity.status(HttpStatus.ACCEPTED)
                         .header("X-Comparison-Status", "processing")
                         .build();
@@ -247,6 +357,16 @@ public class PDFController {
             @RequestParam(required = false) String severity,
             @RequestParam(required = false) String search) {
 
+        // Check for old comparison IDs
+        if (!comparisonStartTimes.containsKey(comparisonId) &&
+                !smartComparisonService.isComparisonReady(comparisonId)) {
+
+            Map<String, Object> oldIdResponse = new HashMap<>();
+            oldIdResponse.put("status", "not_found");
+            oldIdResponse.put("message", "This comparison ID is no longer valid. Please start a new comparison.");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(oldIdResponse);
+        }
+
         // Convert filter parameters to a map
         Map<String, Object> filters = new HashMap<>();
 
@@ -273,11 +393,21 @@ public class PDFController {
 
         if (result == null) {
             // Check if the pair exists but comparison is not ready
-            List<DocumentPair> pairs = smartComparisonService.getDocumentPairs(comparisonId);
+            List<SmartDocumentMatcher.DocumentPair> pairs = smartComparisonService.getDocumentPairs(comparisonId);
             if (pairs != null && pairIndex < pairs.size()) {
+                // Check for timeout
+                Long startTime = comparisonStartTimes.get(comparisonId);
+                if (startTime != null && System.currentTimeMillis() - startTime > MAX_WAIT_TIME_MS) {
+                    logger.warn("Page details request for comparison {} has timed out", comparisonId);
+                    Map<String, Object> timeoutResponse = new HashMap<>();
+                    timeoutResponse.put("status", "timeout");
+                    timeoutResponse.put("message", "Page comparison is taking too long. Please try again with smaller files.");
+                    return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT).body(timeoutResponse);
+                }
+
                 return ResponseEntity.status(HttpStatus.ACCEPTED)
                         .header("X-Comparison-Status", "processing")
-                        .build();
+                        .body(Map.of("status", "processing", "message", "Page comparison is still processing"));
             }
 
             logger.warn("Document pair {} not found in comparison {}", pairIndex, comparisonId);
@@ -313,8 +443,6 @@ public class PDFController {
                 pageNumber, pairIndex, comparisonId);
         return ResponseEntity.ok(response);
     }
-
-    // Other existing controller methods remain the same...
 
     /**
      * Get document page as image
@@ -355,6 +483,15 @@ public class PDFController {
             @PathVariable String comparisonId,
             @RequestBody Map<String, Object> request) {
         try {
+            // Check for old comparison IDs
+            if (!comparisonStartTimes.containsKey(comparisonId) &&
+                    !smartComparisonService.isComparisonReady(comparisonId) &&
+                    comparisonService.getComparisonResult(comparisonId) == null) {
+
+                logger.warn("Report generation request for invalid comparison ID: {}", comparisonId);
+                return ResponseEntity.notFound().build();
+            }
+
             String format = (String) request.getOrDefault("format", "pdf");
             Integer pairIndex = request.containsKey("documentPairIndex") ?
                     (Integer) request.get("documentPairIndex") : null;
@@ -363,11 +500,39 @@ public class PDFController {
                 logger.info("Generating {} report for document pair {} in comparison {}",
                         format, pairIndex, comparisonId);
 
-                // TODO: Implement report generation for specific document pairs
-                // This would need to be added to the service layer
+                // Check if comparison result is available for this pair
+                PDFComparisonResult pairResult = smartComparisonService.getDocumentPairResult(comparisonId, pairIndex);
+                if (pairResult == null) {
+                    return ResponseEntity.notFound().build();
+                }
 
-                return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
-                        .body(null);
+                // Use standard service for report generation
+                Resource report = comparisonService.generateReport(comparisonId, format);
+
+                // Set headers
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentDispositionFormData("attachment", "comparison-report." + format);
+
+                // Set content type based on format
+                MediaType mediaType;
+                switch (format) {
+                    case "html":
+                        mediaType = MediaType.TEXT_HTML;
+                        break;
+                    case "json":
+                        mediaType = MediaType.APPLICATION_JSON;
+                        break;
+                    default: // pdf
+                        mediaType = MediaType.APPLICATION_PDF;
+                }
+
+                headers.setContentType(mediaType);
+
+                logger.info("Report generated successfully for document pair {} in comparison {}",
+                        pairIndex, comparisonId);
+                return ResponseEntity.ok()
+                        .headers(headers)
+                        .body(report);
             } else {
                 logger.info("Generating {} report for comparison {}", format, comparisonId);
 

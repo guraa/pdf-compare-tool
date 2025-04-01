@@ -36,42 +36,7 @@ public class DocumentSimilarityScorer {
      * @param compareSegment Second document segment to compare against
      * @return Similarity score between 0 and 1
      */
-    public double calculateSimilarity(
-            SmartDocumentMatcher.DocumentSegment baseSegment,
-            SmartDocumentMatcher.DocumentSegment compareSegment) {
 
-        logger.debug("Calculating similarity between segments");
-
-        // Extract features
-        Map<String, Object> baseFeatures = baseSegment.getFeatures();
-        Map<String, Object> compareFeatures = compareSegment.getFeatures();
-
-        // Calculate individual similarity components
-        double textSimilarity = calculateTextSimilarity(baseFeatures, compareFeatures);
-        double contentTypeSimilarity = calculateContentTypeSimilarity(baseFeatures, compareFeatures);
-        double layoutSimilarity = calculateLayoutSimilarity(baseFeatures, compareFeatures);
-        double imageSimilarity = calculateImageSimilarity(baseFeatures, compareFeatures);
-        double titleSimilarity = calculateTitleSimilarity(baseSegment, compareSegment);
-
-        // Combine similarities with weighted average
-        double overallSimilarity = (
-                (textSimilarity * TEXT_SIMILARITY_WEIGHT) +
-                        (contentTypeSimilarity * CONTENT_TYPE_WEIGHT) +
-                        (layoutSimilarity * LAYOUT_WEIGHT) +
-                        (imageSimilarity * IMAGE_WEIGHT) +
-                        (titleSimilarity * TITLE_WEIGHT)
-        );
-
-        logger.debug("Similarity breakdown:");
-        logger.debug("Text Similarity: {}", textSimilarity);
-        logger.debug("Content Type Similarity: {}", contentTypeSimilarity);
-        logger.debug("Layout Similarity: {}", layoutSimilarity);
-        logger.debug("Image Similarity: {}", imageSimilarity);
-        logger.debug("Title Similarity: {}", titleSimilarity);
-        logger.debug("Overall Similarity: {}", overallSimilarity);
-
-        return overallSimilarity;
-    }
 
     /**
      * Calculate text similarity
@@ -131,6 +96,30 @@ public class DocumentSimilarityScorer {
     }
 
     /**
+     * Calculate title similarity
+     */
+    private double calculateTitleSimilarity(
+            DocumentSegment baseSegment,
+            DocumentSegment compareSegment) {
+
+        String baseTitle = baseSegment.getTitle();
+        String compareTitle = compareSegment.getTitle();
+
+        // If both titles are null or empty, consider them similar
+        if ((baseTitle == null || baseTitle.trim().isEmpty()) &&
+                (compareTitle == null || compareTitle.trim().isEmpty())) {
+            return 1.0;
+        }
+
+        // Use text similarity for title comparison
+        return textSimilarityCalculator.calculateTextSimilarity(
+                Objects.toString(baseTitle, ""),
+                Objects.toString(compareTitle, "")
+        );
+    }
+
+
+    /**
      * Calculate image similarity based on image count
      */
     private double calculateImageSimilarity(
@@ -153,23 +142,40 @@ public class DocumentSimilarityScorer {
     /**
      * Calculate title similarity
      */
-    private double calculateTitleSimilarity(
-            SmartDocumentMatcher.DocumentSegment baseSegment,
-            SmartDocumentMatcher.DocumentSegment compareSegment) {
+    public double calculateSimilarity(
+            DocumentSegment baseSegment,
+            DocumentSegment compareSegment) {
 
-        String baseTitle = baseSegment.getTitle();
-        String compareTitle = compareSegment.getTitle();
+        logger.debug("Calculating similarity between segments");
 
-        // If both titles are null or empty, consider them similar
-        if ((baseTitle == null || baseTitle.trim().isEmpty()) &&
-                (compareTitle == null || compareTitle.trim().isEmpty())) {
-            return 1.0;
-        }
+        // Extract features
+        Map<String, Object> baseFeatures = baseSegment.getFeatures();
+        Map<String, Object> compareFeatures = compareSegment.getFeatures();
 
-        // Use text similarity for title comparison
-        return textSimilarityCalculator.calculateTextSimilarity(
-                Objects.toString(baseTitle, ""),
-                Objects.toString(compareTitle, "")
+        // Calculate individual similarity components
+        double textSimilarity = calculateTextSimilarity(baseFeatures, compareFeatures);
+        double contentTypeSimilarity = calculateContentTypeSimilarity(baseFeatures, compareFeatures);
+        double layoutSimilarity = calculateLayoutSimilarity(baseFeatures, compareFeatures);
+        double imageSimilarity = calculateImageSimilarity(baseFeatures, compareFeatures);
+        double titleSimilarity = calculateTitleSimilarity(baseSegment, compareSegment);
+
+        // Combine similarities with weighted average
+        double overallSimilarity = (
+                (textSimilarity * TEXT_SIMILARITY_WEIGHT) +
+                        (contentTypeSimilarity * CONTENT_TYPE_WEIGHT) +
+                        (layoutSimilarity * LAYOUT_WEIGHT) +
+                        (imageSimilarity * IMAGE_WEIGHT) +
+                        (titleSimilarity * TITLE_WEIGHT)
         );
+
+        logger.debug("Similarity breakdown:");
+        logger.debug("Text Similarity: {}", textSimilarity);
+        logger.debug("Content Type Similarity: {}", contentTypeSimilarity);
+        logger.debug("Layout Similarity: {}", layoutSimilarity);
+        logger.debug("Image Similarity: {}", imageSimilarity);
+        logger.debug("Title Similarity: {}", titleSimilarity);
+        logger.debug("Overall Similarity: {}", overallSimilarity);
+
+        return overallSimilarity;
     }
 }

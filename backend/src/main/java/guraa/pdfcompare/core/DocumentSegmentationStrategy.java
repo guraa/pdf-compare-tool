@@ -3,9 +3,7 @@ package guraa.pdfcompare.core;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -24,6 +22,11 @@ public class DocumentSegmentationStrategy {
      * @return List of document segments
      */
     public List<DocumentSegment> segment(PDFDocumentModel document) {
+        if (document == null || document.getPages() == null || document.getPages().isEmpty()) {
+            logger.warn("Cannot segment null or empty document");
+            return new ArrayList<>();
+        }
+
         List<DocumentSegment> segments = new ArrayList<>();
         int currentStart = 0;
 
@@ -36,6 +39,7 @@ public class DocumentSegmentationStrategy {
                 if (i - currentStart >= minDocumentPages) {
                     DocumentSegment segment = createSegment(document, currentStart, i - 1);
                     segments.add(segment);
+                    logger.debug("Created document segment: {}", segment);
                 }
 
                 // Reset start for new segment
@@ -51,11 +55,14 @@ public class DocumentSegmentationStrategy {
                     document.getPageCount() - 1
             );
             segments.add(finalSegment);
+            logger.debug("Created final document segment: {}", finalSegment);
         }
 
         // If no segments found, treat entire document as one segment
         if (segments.isEmpty()) {
-            segments.add(createSegment(document, 0, document.getPageCount() - 1));
+            DocumentSegment wholeDocument = createSegment(document, 0, document.getPageCount() - 1);
+            segments.add(wholeDocument);
+            logger.debug("Created single segment for entire document: {}", wholeDocument);
         }
 
         return segments;
@@ -72,10 +79,13 @@ public class DocumentSegmentationStrategy {
         // First page is always a potential start
         if (pageIndex == 0) return true;
 
+        // Null check for page
+        if (page == null) return false;
+
         // Check for title-like elements
         if (page.getTextElements() != null && !page.getTextElements().isEmpty()) {
             List<TextElement> topElements = page.getTextElements().stream()
-                    .filter(el -> el.getY() < page.getHeight() * 0.3)  // Top 30% of page
+                    .filter(el -> el != null && el.getY() < page.getHeight() * 0.3)  // Top 30% of page
                     .sorted(Comparator.comparingDouble(TextElement::getFontSize).reversed())
                     .limit(3)
                     .collect(Collectors.toList());
@@ -83,7 +93,9 @@ public class DocumentSegmentationStrategy {
             // Assess potential title elements
             return topElements.stream()
                     .anyMatch(el ->
-                            el.getFontSize() > 14 &&  // Large font
+                            el != null &&
+                                    el.getFontSize() > 14 &&  // Large font
+                                    el.getText() != null &&  // Not null text
                                     el.getText().length() > 5 &&  // Not too short
                                     el.getText().length() < 100  // Not too long
                     );
@@ -102,7 +114,16 @@ public class DocumentSegmentationStrategy {
     private DocumentSegment createSegment(PDFDocumentModel document, int startPage, int endPage) {
         String title = extractSegmentTitle(document, startPage, endPage);
 
-        return new DocumentSegment(startPage, endPage, title);
+        DocumentSegment segment = new DocumentSegment(startPage, endPage, title);
+
+        // Initialize features map with some basic info
+        Map<String, Object> features = new HashMap<>();
+        features.put("pageCount", segment.getPageCount());
+        features.put("title", title);
+
+        segment.setFeatures(features);
+
+        return segment;
     }
 
     /**
@@ -113,15 +134,29 @@ public class DocumentSegmentationStrategy {
      * @return Extracted title
      */
     private String extractSegmentTitle(PDFDocumentModel document, int startPage, int endPage) {
+        // Handle possible null document or pages
+        if (document == null || document.getPages() == null) {
+            return "Untitled Document";
+        }
+
         // Look for title-like elements in the first pages of the segment
         for (int i = startPage; i <= Math.min(endPage, startPage + 1); i++) {
-            PDFPageModel page = document.getPages().get(i);
+            if (i >= document.getPages().size()) {
+                continue;
+            }
 
-            // Find potential title elements
+            PDFPageModel page = document.getPages().get(i);
+            if (page == null || page.getTextElements() == null || page.getTextElements().isEmpty()) {
+                continue;
+            }
+
+            // Find potential title elements with null checks
             List<TextElement> titleCandidates = page.getTextElements().stream()
                     .filter(el ->
-                            el.getY() < page.getHeight() * 0.3 &&  // Top 30% of page
+                            el != null &&
+                                    el.getY() < page.getHeight() * 0.3 &&  // Top 30% of page
                                     el.getFontSize() > 14 &&  // Large font
+                                    el.getText() != null &&
                                     el.getText().length() > 5 &&  // Not too short
                                     el.getText().length() < 100  // Not too long
                     )
@@ -129,7 +164,7 @@ public class DocumentSegmentationStrategy {
                     .collect(Collectors.toList());
 
             // Return first suitable title
-            if (!titleCandidates.isEmpty()) {
+            if (!titleCandidates.isEmpty() && titleCandidates.get(0).getText() != null) {
                 return titleCandidates.get(0).getText();
             }
         }

@@ -1,6 +1,5 @@
 package guraa.pdfcompare.core;
 
-import guraa.pdfcompare.comparison.PDFComparisonResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,14 +35,14 @@ public class EnhancedDocumentMatcher {
      * @param compareDocument The comparison PDF document model
      * @return List of document pairs
      */
-    public List<SmartDocumentMatcher.DocumentPair> matchDocuments(
+    public List<DocumentPair> matchDocuments(
             PDFDocumentModel baseDocument,
             PDFDocumentModel compareDocument) {
 
         // Segment documents
-        List<SmartDocumentMatcher.DocumentSegment> baseSegments =
+        List<DocumentSegment> baseSegments =
                 segmentDocuments(baseDocument);
-        List<SmartDocumentMatcher.DocumentSegment> compareSegments =
+        List<DocumentSegment> compareSegments =
                 segmentDocuments(compareDocument);
 
         // Extract features for segments
@@ -51,7 +50,7 @@ public class EnhancedDocumentMatcher {
         compareSegments.forEach(segment -> extractSegmentFeatures(segment, compareDocument));
 
         // Match segments
-        List<SmartDocumentMatcher.DocumentPair> matchedPairs =
+        List<DocumentPair> matchedPairs =
                 performAdvancedSegmentMatching(baseSegments, compareSegments);
 
         // Add unmatched segments
@@ -63,8 +62,8 @@ public class EnhancedDocumentMatcher {
     /**
      * Segment documents into potential individual document chunks
      */
-    private List<SmartDocumentMatcher.DocumentSegment> segmentDocuments(PDFDocumentModel document) {
-        List<SmartDocumentMatcher.DocumentSegment> segments = new ArrayList<>();
+    private List<DocumentSegment> segmentDocuments(PDFDocumentModel document) {
+        List<DocumentSegment> segments = new ArrayList<>();
         int currentStart = 0;
 
         for (int i = 0; i < document.getPageCount(); i++) {
@@ -73,7 +72,7 @@ public class EnhancedDocumentMatcher {
             // Detect potential document start
             if (isDocumentStart(page) && (i - currentStart >= minDocumentPages)) {
                 // Create segment from previous pages
-                SmartDocumentMatcher.DocumentSegment segment = new SmartDocumentMatcher.DocumentSegment(
+                DocumentSegment segment = new DocumentSegment(
                         currentStart,
                         i - 1,
                         extractDocumentTitle(document.getPages().subList(currentStart, i))
@@ -87,7 +86,7 @@ public class EnhancedDocumentMatcher {
 
         // Add final segment
         if (document.getPageCount() - currentStart >= minDocumentPages) {
-            SmartDocumentMatcher.DocumentSegment finalSegment = new SmartDocumentMatcher.DocumentSegment(
+            DocumentSegment finalSegment = new DocumentSegment(
                     currentStart,
                     document.getPageCount() - 1,
                     extractDocumentTitle(document.getPages().subList(currentStart, document.getPageCount()))
@@ -102,7 +101,7 @@ public class EnhancedDocumentMatcher {
      * Extract features for a document segment
      */
     private void extractSegmentFeatures(
-            SmartDocumentMatcher.DocumentSegment segment,
+            DocumentSegment segment,
             PDFDocumentModel document) {
 
         Map<String, Object> features = new HashMap<>();
@@ -122,17 +121,17 @@ public class EnhancedDocumentMatcher {
     /**
      * Perform advanced segment matching
      */
-    private List<SmartDocumentMatcher.DocumentPair> performAdvancedSegmentMatching(
-            List<SmartDocumentMatcher.DocumentSegment> baseSegments,
-            List<SmartDocumentMatcher.DocumentSegment> compareSegments) {
+    private List<DocumentPair> performAdvancedSegmentMatching(
+            List<DocumentSegment> baseSegments,
+            List<DocumentSegment> compareSegments) {
 
-        List<SmartDocumentMatcher.DocumentPair> matchedPairs = new ArrayList<>();
+        List<DocumentPair> matchedPairs = new ArrayList<>();
         Set<Integer> matchedBaseIndices = new HashSet<>();
         Set<Integer> matchedCompareIndices = new HashSet<>();
 
         // Sort segments by potential match score
         for (int i = 0; i < baseSegments.size(); i++) {
-            SmartDocumentMatcher.DocumentSegment baseSegment = baseSegments.get(i);
+            DocumentSegment baseSegment = baseSegments.get(i);
 
             double bestScore = 0;
             int bestMatchIndex = -1;
@@ -140,7 +139,7 @@ public class EnhancedDocumentMatcher {
             for (int j = 0; j < compareSegments.size(); j++) {
                 if (matchedCompareIndices.contains(j)) continue;
 
-                SmartDocumentMatcher.DocumentSegment compareSegment = compareSegments.get(j);
+                DocumentSegment compareSegment = compareSegments.get(j);
 
                 double similarity = similarityScorer.calculateSimilarity(baseSegment, compareSegment);
 
@@ -152,7 +151,7 @@ public class EnhancedDocumentMatcher {
 
             // Create matched pair if a good match is found
             if (bestMatchIndex != -1) {
-                SmartDocumentMatcher.DocumentPair pair = new SmartDocumentMatcher.DocumentPair(
+                DocumentPair pair = new DocumentPair(
                         baseSegment.getStartPage(),
                         baseSegment.getEndPage(),
                         compareSegments.get(bestMatchIndex).getStartPage(),
@@ -173,18 +172,20 @@ public class EnhancedDocumentMatcher {
      * Add unmatched segments to the result
      */
     private void addUnmatchedSegments(
-            List<SmartDocumentMatcher.DocumentPair> matchedPairs,
-            List<SmartDocumentMatcher.DocumentSegment> baseSegments,
-            List<SmartDocumentMatcher.DocumentSegment> compareSegments) {
+            List<DocumentPair> matchedPairs,
+            List<DocumentSegment> baseSegments,
+            List<DocumentSegment> compareSegments) {
 
         // Add unmatched base segments
-        for (int i = 0; i < baseSegments.size(); i++) {
-            SmartDocumentMatcher.DocumentSegment segment = baseSegments.get(i);
+        for (DocumentSegment segment : baseSegments) {
             boolean matched = matchedPairs.stream()
-                    .anyMatch(pair -> pair.getBaseStartPage() == segment.getStartPage());
+                    .anyMatch(pair ->
+                            pair.getBaseStartPage() == segment.getStartPage() &&
+                                    pair.getBaseEndPage() == segment.getEndPage()
+                    );
 
             if (!matched) {
-                matchedPairs.add(new SmartDocumentMatcher.DocumentPair(
+                matchedPairs.add(new DocumentPair(
                         segment.getStartPage(),
                         segment.getEndPage(),
                         -1,
@@ -195,13 +196,15 @@ public class EnhancedDocumentMatcher {
         }
 
         // Add unmatched compare segments
-        for (int i = 0; i < compareSegments.size(); i++) {
-            SmartDocumentMatcher.DocumentSegment segment = compareSegments.get(i);
+        for (DocumentSegment segment : compareSegments) {
             boolean matched = matchedPairs.stream()
-                    .anyMatch(pair -> pair.getCompareStartPage() == segment.getStartPage());
+                    .anyMatch(pair ->
+                            pair.getCompareStartPage() == segment.getStartPage() &&
+                                    pair.getCompareEndPage() == segment.getEndPage()
+                    );
 
             if (!matched) {
-                matchedPairs.add(new SmartDocumentMatcher.DocumentPair(
+                matchedPairs.add(new DocumentPair(
                         -1,
                         -1,
                         segment.getStartPage(),
@@ -264,7 +267,7 @@ public class EnhancedDocumentMatcher {
      * Extract full text from a document segment
      */
     private String extractFullText(
-            SmartDocumentMatcher.DocumentSegment segment,
+            DocumentSegment segment,
             PDFDocumentModel document) {
 
         StringBuilder text = new StringBuilder();
@@ -279,7 +282,7 @@ public class EnhancedDocumentMatcher {
      * Extract keywords from a document segment
      */
     private List<String> extractKeywords(
-            SmartDocumentMatcher.DocumentSegment segment,
+            DocumentSegment segment,
             PDFDocumentModel document) {
 
         return document.getPages().stream()
@@ -297,7 +300,7 @@ public class EnhancedDocumentMatcher {
      * Extract page dimensions for a segment
      */
     private List<float[]> extractPageDimensions(
-            SmartDocumentMatcher.DocumentSegment segment,
+            DocumentSegment segment,
             PDFDocumentModel document) {
 
         return document.getPages().stream()
@@ -311,7 +314,7 @@ public class EnhancedDocumentMatcher {
      * Count images in a document segment
      */
     private int countImages(
-            SmartDocumentMatcher.DocumentSegment segment,
+            DocumentSegment segment,
             PDFDocumentModel document) {
 
         return document.getPages().stream()
