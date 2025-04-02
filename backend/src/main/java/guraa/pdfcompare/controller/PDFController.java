@@ -6,6 +6,7 @@ import guraa.pdfcompare.core.SmartDocumentMatcher;
 import guraa.pdfcompare.model.ComparisonRequest;
 import guraa.pdfcompare.model.FileUploadResponse;
 import guraa.pdfcompare.service.FileStorageService;
+import guraa.pdfcompare.service.PageLevelComparisonIntegrationService;
 import guraa.pdfcompare.service.SmartDocumentComparisonService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +35,7 @@ public class PDFController {
     private final PDFComparisonService comparisonService;
     private final SmartDocumentComparisonService smartComparisonService;
     private final FileStorageService storageService;
+    private final PageLevelComparisonIntegrationService pageLevelComparisonService;
 
     // Track when comparison requests were started
     private final Map<String, Long> comparisonStartTimes = new ConcurrentHashMap<>();
@@ -42,10 +44,12 @@ public class PDFController {
     public PDFController(
             PDFComparisonService comparisonService,
             SmartDocumentComparisonService smartComparisonService,
-            FileStorageService storageService) {
+            FileStorageService storageService,
+            PageLevelComparisonIntegrationService pageLevelComparisonService) {
         this.comparisonService = comparisonService;
         this.smartComparisonService = smartComparisonService;
         this.storageService = storageService;
+        this.pageLevelComparisonService = pageLevelComparisonService;
     }
 
     /**
@@ -483,12 +487,36 @@ public class PDFController {
             @PathVariable String comparisonId,
             @RequestBody Map<String, Object> request) {
         try {
-            // Check for old comparison IDs
-            if (!comparisonStartTimes.containsKey(comparisonId) &&
-                    !smartComparisonService.isComparisonReady(comparisonId) &&
-                    comparisonService.getComparisonResult(comparisonId) == null) {
+            // Check if comparison exists in any of the services
+            boolean comparisonExists = false;
 
-                logger.warn("Report generation request for invalid comparison ID: {}", comparisonId);
+            // Check standard comparison service
+            PDFComparisonResult standardResult = comparisonService.getComparisonResult(comparisonId);
+            if (standardResult != null) {
+                comparisonExists = true;
+                logger.info("Found comparison result in standard service");
+            }
+
+            // Check smart document comparison service
+            if (!comparisonExists && smartComparisonService != null) {
+                boolean isReady = smartComparisonService.isComparisonReady(comparisonId);
+                if (isReady) {
+                    comparisonExists = true;
+                    logger.info("Found comparison result in smart comparison service");
+                }
+            }
+
+            // Check page-level comparison service (if it exists)
+            if (!comparisonExists && pageLevelComparisonService != null) {
+                boolean isReady = pageLevelComparisonService.isComparisonReady(comparisonId);
+                if (isReady) {
+                    comparisonExists = true;
+                    logger.info("Found comparison result in page-level comparison service");
+                }
+            }
+
+            if (!comparisonExists) {
+                logger.warn("No comparison result found in any service for ID: {}", comparisonId);
                 return ResponseEntity.notFound().build();
             }
 
@@ -496,73 +524,60 @@ public class PDFController {
             Integer pairIndex = request.containsKey("documentPairIndex") ?
                     (Integer) request.get("documentPairIndex") : null;
 
+            logger.info("Generating {} report for comparison {}", format, comparisonId);
+
+            // Use the appropriate service based on where we found the comparison
+            Resource report;
+
             if (pairIndex != null) {
-                logger.info("Generating {} report for document pair {} in comparison {}",
-                        format, pairIndex, comparisonId);
+                // For document pairs, we need to get the document pair result first
+                PDFComparisonResult pairResult;
 
-                // Check if comparison result is available for this pair
-                PDFComparisonResult pairResult = smartComparisonService.getDocumentPairResult(comparisonId, pairIndex);
-                if (pairResult == null) {
-                    return ResponseEntity.notFound().build();
+                if (smartComparisonService != null) {
+                    pairResult = smartComparisonService.getDocumentPairResult(comparisonId, pairIndex);
+                    if (pairResult != null) {
+                        // We need to store this in the standard service for report generation
+                        comparisonService.storeTemporaryResult(comparisonId, pairResult);
+                        logger.info("Stored document pair result in standard service for report generation");
+                    }
                 }
-
-                // Use standard service for report generation
-                Resource report = comparisonService.generateReport(comparisonId, format);
-
-                // Set headers
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentDispositionFormData("attachment", "comparison-report." + format);
-
-                // Set content type based on format
-                MediaType mediaType;
-                switch (format) {
-                    case "html":
-                        mediaType = MediaType.TEXT_HTML;
-                        break;
-                    case "json":
-                        mediaType = MediaType.APPLICATION_JSON;
-                        break;
-                    default: // pdf
-                        mediaType = MediaType.APPLICATION_PDF;
-                }
-
-                headers.setContentType(mediaType);
-
-                logger.info("Report generated successfully for document pair {} in comparison {}",
-                        pairIndex, comparisonId);
-                return ResponseEntity.ok()
-                        .headers(headers)
-                        .body(report);
-            } else {
-                logger.info("Generating {} report for comparison {}", format, comparisonId);
-
-                // Generate standard report
-                Resource report = comparisonService.generateReport(comparisonId, format);
-
-                // Set headers
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentDispositionFormData("attachment", "comparison-report." + format);
-
-                // Set content type based on format
-                MediaType mediaType;
-                switch (format) {
-                    case "html":
-                        mediaType = MediaType.TEXT_HTML;
-                        break;
-                    case "json":
-                        mediaType = MediaType.APPLICATION_JSON;
-                        break;
-                    default: // pdf
-                        mediaType = MediaType.APPLICATION_PDF;
-                }
-
-                headers.setContentType(mediaType);
-
-                logger.info("Report generated successfully for comparison {}", comparisonId);
-                return ResponseEntity.ok()
-                        .headers(headers)
-                        .body(report);
             }
+
+            // Generate the report using the standard service
+            report = comparisonService.generateReport(comparisonId, format);
+
+            // Set headers
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentDispositionFormData("attachment", "comparison-report." + format);
+
+            // Set content type based on format
+            MediaType mediaType;
+            switch (format.toLowerCase()) {
+                case "html":
+                    mediaType = MediaType.TEXT_HTML;
+                    headers.set(HttpHeaders.CONTENT_TYPE, "text/html; charset=UTF-8");
+                    break;
+                case "json":
+                    mediaType = MediaType.APPLICATION_JSON;
+                    headers.set(HttpHeaders.CONTENT_TYPE, "application/json; charset=UTF-8");
+                    break;
+                default: // pdf
+                    mediaType = MediaType.APPLICATION_PDF;
+                    headers.set(HttpHeaders.CONTENT_TYPE, "application/pdf");
+            }
+
+            headers.setContentType(mediaType);
+            if (report != null) {
+                headers.setContentLength(report.contentLength());
+                logger.info("Report generated successfully with size: {} bytes", report.contentLength());
+            } else {
+                logger.error("Generated report is null");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            }
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(report);
         } catch (Exception e) {
             logger.error("Error generating report: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();

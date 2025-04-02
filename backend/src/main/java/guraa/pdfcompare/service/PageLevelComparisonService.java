@@ -1,13 +1,13 @@
 package guraa.pdfcompare.service;
 
 import guraa.pdfcompare.PDFComparisonEngine;
-import guraa.pdfcompare.comparison.PDFComparisonResult;
 import guraa.pdfcompare.core.CustomPageDifference;
 import guraa.pdfcompare.core.PDFDocumentModel;
 import guraa.pdfcompare.core.PDFPageModel;
 import guraa.pdfcompare.core.TextElement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -36,6 +36,9 @@ public class PageLevelComparisonService {
 
     private final ExecutorService executorService = Executors.newFixedThreadPool(
             Math.max(2, Runtime.getRuntime().availableProcessors()));
+
+    @Autowired
+    private PDFComparisonEngine comparisonEngine;
 
     /**
      * Compare PDFs at the page level
@@ -403,7 +406,6 @@ public class PageLevelComparisonService {
     private List<PageComparisonResult> compareMatchedPages(List<PagePair> pagePairs,
                                                            PDFDocumentModel baseDoc,
                                                            PDFDocumentModel compareDoc) {
-        PDFComparisonEngine comparisonEngine = new PDFComparisonEngine();
         List<CompletableFuture<PageComparisonResult>> futures = new ArrayList<>();
 
         for (PagePair pair : pagePairs) {
@@ -413,23 +415,22 @@ public class PageLevelComparisonService {
                     result.setPagePair(pair);
 
                     if (pair.isMatched()) {
-                        // Create single-page documents for comparison
-                        PDFDocumentModel baseSinglePage = createSinglePageDocument(
-                                baseDoc, pair.getBaseFingerprint().getPageIndex());
-                        PDFDocumentModel compareSinglePage = createSinglePageDocument(
-                                compareDoc, pair.getCompareFingerprint().getPageIndex());
+                        // Get the page models for this pair
+                        PDFPageModel basePage = baseDoc.getPages().get(pair.getBaseFingerprint().getPageIndex());
+                        PDFPageModel comparePage = compareDoc.getPages().get(pair.getCompareFingerprint().getPageIndex());
 
-                        // Compare the single-page documents
-                        PDFComparisonResult compResult = comparisonEngine.compareDocuments(baseSinglePage, compareSinglePage);
-                        result.setComparisonResult(compResult);
+                        // Use the comparison engine to compare pages
+                        guraa.pdfcompare.comparison.PageComparisonResult comparisonResult =
+                                comparisonEngine.comparePage(basePage, comparePage);
 
-                        // Extract the page difference (there should be only one)
-                        if (compResult.getPageDifferences() != null && !compResult.getPageDifferences().isEmpty()) {
-                            result.setPageDifference(compResult.getPageDifferences().get(0));
-                        }
+                        // Convert the comparison result to service result using adapter
+                        PageComparisonResult adaptedResult = PageComparisonResultAdapter.toServiceResult(comparisonResult);
 
-                        result.setTotalDifferences(compResult.getTotalDifferences());
-                        result.setHasDifferences(compResult.getTotalDifferences() > 0);
+                        // Set the page pair and maintain other service-specific properties
+                        adaptedResult.setPagePair(pair);
+
+                        // Return the adapted result
+                        return adaptedResult;
                     } else {
                         // Create a result for an unmatched page
                         result.setHasDifferences(true);
@@ -471,33 +472,6 @@ public class PageLevelComparisonService {
     }
 
     /**
-     * Create a single-page document from a multi-page document
-     * @param document Source document
-     * @param pageIndex Page index
-     * @return Single-page document
-     */
-    private PDFDocumentModel createSinglePageDocument(PDFDocumentModel document, int pageIndex) {
-        PDFDocumentModel singlePage = new PDFDocumentModel();
-        singlePage.setFileName(document.getFileName());
-
-        if (document.getMetadata() != null) {
-            singlePage.setMetadata(new HashMap<>(document.getMetadata()));
-        } else {
-            singlePage.setMetadata(new HashMap<>());
-        }
-
-        List<PDFPageModel> pages = new ArrayList<>();
-        if (pageIndex >= 0 && pageIndex < document.getPages().size()) {
-            pages.add(document.getPages().get(pageIndex));
-        }
-
-        singlePage.setPages(pages);
-        singlePage.setPageCount(pages.size());
-
-        return singlePage;
-    }
-
-    /**
      * Create a summary of the comparison
      * @param pagePairs Matched page pairs
      * @param pageResults Page comparison results
@@ -530,11 +504,37 @@ public class PageLevelComparisonService {
         int identicalPages = 0;
         int pagesWithDifferences = 0;
         int totalDifferences = 0;
+        int totalTextDifferences = 0;
+        int totalImageDifferences = 0;
+        int totalFontDifferences = 0;
+        int totalStyleDifferences = 0;
 
         for (PageComparisonResult result : pageResults) {
             if (result.isHasDifferences()) {
                 pagesWithDifferences++;
                 totalDifferences += result.getTotalDifferences();
+
+                // Count specific types of differences
+                if (result.getTextDifferences() != null && result.getTextDifferences().getDifferences() != null) {
+                    totalTextDifferences += result.getTextDifferences().getDifferences().size();
+                }
+
+                if (result.getImageDifferences() != null) {
+                    totalImageDifferences += result.getImageDifferences().size();
+                }
+
+                if (result.getFontDifferences() != null) {
+                    totalFontDifferences += result.getFontDifferences().size();
+                }
+
+                if (result.getTextElementDifferences() != null) {
+                    for (guraa.pdfcompare.comparison.TextElementDifference diff : result.getTextElementDifferences()) {
+                        if (diff.isStyleDifferent()) {
+                            totalStyleDifferences++;
+                        }
+                    }
+                }
+
             } else if (result.getPagePair().isMatched()) {
                 identicalPages++;
             }
@@ -543,7 +543,47 @@ public class PageLevelComparisonService {
         summary.setIdenticalPageCount(identicalPages);
         summary.setPagesWithDifferencesCount(pagesWithDifferences);
         summary.setTotalDifferences(totalDifferences);
+        summary.setTotalTextDifferences(totalTextDifferences);
+        summary.setTotalImageDifferences(totalImageDifferences);
+        summary.setTotalFontDifferences(totalFontDifferences);
+        summary.setTotalStyleDifferences(totalStyleDifferences);
+
+        // Calculate overall similarity score
+        double totalSimilarity = pagePairs.stream()
+                .filter(PagePair::isMatched)
+                .mapToDouble(PagePair::getSimilarityScore)
+                .average()
+                .orElse(0.0);
+
+        summary.setOverallSimilarityScore(totalSimilarity);
 
         return summary;
+    }
+
+    /**
+     * Create a single-page document from a multi-page document
+     * @param document Source document
+     * @param pageIndex Page index
+     * @return Single-page document
+     */
+    private PDFDocumentModel createSinglePageDocument(PDFDocumentModel document, int pageIndex) {
+        PDFDocumentModel singlePage = new PDFDocumentModel();
+        singlePage.setFileName(document.getFileName());
+
+        if (document.getMetadata() != null) {
+            singlePage.setMetadata(new HashMap<>(document.getMetadata()));
+        } else {
+            singlePage.setMetadata(new HashMap<>());
+        }
+
+        List<PDFPageModel> pages = new ArrayList<>();
+        if (pageIndex >= 0 && pageIndex < document.getPages().size()) {
+            pages.add(document.getPages().get(pageIndex));
+        }
+
+        singlePage.setPages(pages);
+        singlePage.setPageCount(pages.size());
+
+        return singlePage;
     }
 }

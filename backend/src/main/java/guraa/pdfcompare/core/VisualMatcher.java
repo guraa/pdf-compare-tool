@@ -80,6 +80,23 @@ public class VisualMatcher {
     }
 
     /**
+     * Compare two hash strings and calculate similarity
+     * @param hash1 First hash string
+     * @param hash2 Second hash string
+     * @return Similarity score (0.0-1.0)
+     */
+    public static double compareHashes(String hash1, String hash2) {
+        // Calculate Hamming distance
+        int distance = hammingDistance(hash1, hash2);
+
+        // Convert to similarity score (1.0 = identical, 0.0 = completely different)
+        byte[] b1 = Base64.getDecoder().decode(hash1);
+        int maxDistance = 8 * b1.length; // Maximum possible Hamming distance (all bits different)
+
+        return 1.0 - ((double) distance / maxDistance);
+    }
+
+    /**
      * Calculate Hamming distance between two binary hash strings
      */
     public static int hammingDistance(String hash1, String hash2) {

@@ -19,6 +19,8 @@ public class PageComparisonResult {
     private List<TextElementDifference> textElementDifferences;
     private List<ImageDifference> imageDifferences;
     private List<FontDifference> fontDifferences;
+
+    // Added fields to support page-level comparison
     private Integer originalBasePageNumber;
     private Integer originalComparePageNumber;
 
@@ -243,10 +245,10 @@ public class PageComparisonResult {
         return differences;
     }
 
-
-
     // Getters and setters
-
+    public Integer getOriginalBasePageNumber() {
+        return originalBasePageNumber;
+    }
 
     public void setOriginalBasePageNumber(Integer originalBasePageNumber) {
         this.originalBasePageNumber = originalBasePageNumber;

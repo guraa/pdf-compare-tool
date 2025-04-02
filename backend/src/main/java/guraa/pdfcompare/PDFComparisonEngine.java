@@ -2,668 +2,300 @@ package guraa.pdfcompare;
 
 import guraa.pdfcompare.comparison.*;
 import guraa.pdfcompare.core.*;
+
+import guraa.pdfcompare.util.PDFComparisonUtility;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
-/**
- * Main class for comparing two PDF documents
- */
+@Service
 public class PDFComparisonEngine {
 
     private static final Logger logger = LoggerFactory.getLogger(PDFComparisonEngine.class);
 
     /**
-     * Compare two PDF document models and generate comparison results
-     * @param baseDocument The base document model
-     * @param compareDocument The document to compare against the base
-     * @return A comparison result containing all differences
+     * Compare two PDF documents and return the comparison result
+     *
+     * @param baseDocument    The base PDF document model
+     * @param compareDocument The PDF document model to compare against the base
+     * @return PDFComparisonResult  The result of the comparison
      */
     public PDFComparisonResult compareDocuments(PDFDocumentModel baseDocument, PDFDocumentModel compareDocument) {
-        logger.info("Starting document comparison between {} and {}",
-                baseDocument.getFileName(), compareDocument.getFileName());
-
         PDFComparisonResult result = new PDFComparisonResult();
 
-        // Compare metadata
-        logger.debug("Comparing document metadata");
-        Map<String, MetadataDifference> metadataDiffs = compareMetadata(baseDocument.getMetadata(), compareDocument.getMetadata());
-        result.setMetadataDifferences(metadataDiffs);
+        // Compare document metadata
+        result.setMetadataDifferences(compareMetadata(baseDocument, compareDocument));
 
-        // Compare page count
-        boolean pageCountDiff = baseDocument.getPageCount() != compareDocument.getPageCount();
-        result.setPageCountDifferent(pageCountDiff);
+        // Compare document structure
+        DocumentStructureAnalyzer structureAnalyzer = new DocumentStructureAnalyzer();
+        result.setStructureDifferences(structureAnalyzer.compareDocumentStructure(baseDocument, compareDocument));
+
+        // Compare each page
+        List<PageComparisonResult> pageDifferences = new ArrayList<>();
+        if (baseDocument.getPages() != null && compareDocument.getPages() != null) {
+            int maxPages = Math.max(baseDocument.getPages().size(), compareDocument.getPages().size());
+            for (int i = 0; i < maxPages; i++) {
+                PDFPageModel basePage = i < baseDocument.getPages().size() ? baseDocument.getPages().get(i) : null;
+                PDFPageModel comparePage = i < compareDocument.getPages().size() ? compareDocument.get(i) : null;
+                pageDifferences.add(comparePage(basePage, comparePage));
+            }
+        }
+        result.setPageDifferences(pageDifferences);
+
+        // Calculate total differences
+        int totalDifferences = 0;
+        for (PageComparisonResult pageResult : pageDifferences) {
+            totalDifferences += pageResult.getTotalDifferences();
+        }
+        result.setTotalDifferences(totalDifferences);
+
+        // Set page counts
         result.setBasePageCount(baseDocument.getPageCount());
         result.setComparePageCount(compareDocument.getPageCount());
-
-        logger.debug("Base document page count: {}, Compare document page count: {}",
-                baseDocument.getPageCount(), compareDocument.getPageCount());
-
-        // Compare pages
-        List<PageComparisonResult> pageDiffs = new ArrayList<>();
-        int maxPages = Math.max(baseDocument.getPageCount(), compareDocument.getPageCount());
-
-        for (int i = 0; i < maxPages; i++) {
-            PageComparisonResult pageResult;
-
-            if (i < baseDocument.getPageCount() && i < compareDocument.getPageCount()) {
-                // Compare existing pages
-                logger.debug("Comparing page {}", i + 1);
-                pageResult = comparePage(baseDocument.getPages().get(i), compareDocument.getPages().get(i));
-            } else if (i < baseDocument.getPageCount()) {
-                // Page exists only in base document
-                logger.debug("Page {} exists only in base document", i + 1);
-                pageResult = new PageComparisonResult();
-                pageResult.setPageNumber(i + 1);
-                pageResult.setOnlyInBase(true);
-            } else {
-                // Page exists only in compare document
-                logger.debug("Page {} exists only in compare document", i + 1);
-                pageResult = new PageComparisonResult();
-                pageResult.setPageNumber(i + 1);
-                pageResult.setOnlyInCompare(true);
-            }
-
-            pageDiffs.add(pageResult);
-        }
-
-        result.setPageDifferences(pageDiffs);
-
-        // Calculate summary statistics
-        calculateSummaryStatistics(result);
-
-        logger.info("Document comparison completed. Found {} total differences",
-                result.getTotalDifferences());
+        result.setPageCountDifferent(baseDocument.getPageCount() != compareDocument.getPageCount());
 
         return result;
     }
 
     /**
-     * Compare metadata between two documents
-     * @param baseMetadata The base document metadata
-     * @param compareMetadata The comparison document metadata
-     * @return Map of metadata differences
+     * Compare two PDF pages and return the comparison result
+     *
+     * @param basePage    The base PDF page model
+     * @param comparePage The PDF page model to compare against the base
+     * @return PageComparisonResult The result of the page comparison
      */
-    Map<String, MetadataDifference> compareMetadata(Map<String, String> baseMetadata, Map<String, String> compareMetadata) {
-        Map<String, MetadataDifference> differences = new HashMap<>();
-
-        // Check for all keys in base document
-        for (String key : baseMetadata.keySet()) {
-            String baseValue = baseMetadata.get(key);
-            String compareValue = compareMetadata.get(key);
-
-            if (compareValue == null) {
-                // Key exists only in base document
-                MetadataDifference diff = new MetadataDifference();
-                diff.setKey(key);
-                diff.setBaseValue(baseValue);
-                diff.setCompareValue(null);
-                diff.setOnlyInBase(true);
-                differences.put(key, diff);
-                logger.debug("Metadata key '{}' only exists in base document", key);
-            } else if (!baseValue.equals(compareValue)) {
-                // Key exists in both but values differ
-                MetadataDifference diff = new MetadataDifference();
-                diff.setKey(key);
-                diff.setBaseValue(baseValue);
-                diff.setCompareValue(compareValue);
-                diff.setValueDifferent(true);
-                differences.put(key, diff);
-                logger.debug("Metadata key '{}' has different values: '{}' vs '{}'",
-                        key, baseValue, compareValue);
-            }
-        }
-
-        // Check for keys only in compare document
-        for (String key : compareMetadata.keySet()) {
-            if (!baseMetadata.containsKey(key)) {
-                // Key exists only in compare document
-                MetadataDifference diff = new MetadataDifference();
-                diff.setKey(key);
-                diff.setBaseValue(null);
-                diff.setCompareValue(compareMetadata.get(key));
-                diff.setOnlyInCompare(true);
-                differences.put(key, diff);
-                logger.debug("Metadata key '{}' only exists in compare document", key);
-            }
-        }
-
-        return differences;
-    }
-
-    /**
-     * Compare two pages and identify differences
-     * @param basePage The base page model
-     * @param comparePage The page to compare against the base
-     * @return A page comparison result containing all differences
-     */
-    PageComparisonResult comparePage(PDFPageModel basePage, PDFPageModel comparePage) {
+    public PageComparisonResult comparePage(PDFPageModel basePage, PDFPageModel comparePage) {
         PageComparisonResult result = new PageComparisonResult();
-        result.setPageNumber(basePage.getPageNumber());
+
+        if (basePage == null && comparePage == null) {
+            return result; // Both pages are null, return empty result
+        }
+
+        if (basePage == null || comparePage == null) {
+            // One of the pages is null, mark as different
+            result.setHasDifferences(true);
+            result.setTotalDifferences(1); // Consider a missing page as 1 difference
+            return result;
+        }
 
         // Compare page dimensions
-        boolean dimensionsDifferent = Math.abs(basePage.getWidth() - comparePage.getWidth()) > 0.1 ||
-                Math.abs(basePage.getHeight() - comparePage.getHeight()) > 0.1;
-        result.setDimensionsDifferent(dimensionsDifferent);
+        result.setDimensionsDifferent(basePage.getWidth() != comparePage.getWidth() ||
+                basePage.getHeight() != comparePage.getHeight());
         result.setBaseDimensions(new float[]{basePage.getWidth(), basePage.getHeight()});
         result.setCompareDimensions(new float[]{comparePage.getWidth(), comparePage.getHeight()});
 
-        if (dimensionsDifferent) {
-            logger.debug("Page {} dimensions differ: base [{}x{}], compare [{}x{}]",
-                    basePage.getPageNumber(),
-                    basePage.getWidth(), basePage.getHeight(),
-                    comparePage.getWidth(), comparePage.getHeight());
-        }
+        // Compare page text
+        TextComparisonResult textComparisonResult = compareText(basePage, comparePage);
+        result.setTextDifferences(textComparisonResult);
 
-        // Compare text content using diff algorithm
-        TextComparisonResult textDiff = compareText(basePage.getText(), comparePage.getText());
-        result.setTextDifferences(textDiff);
-
-        if (textDiff.getDifferenceCount() > 0) {
-            logger.debug("Page {} has {} text differences",
-                    basePage.getPageNumber(), textDiff.getDifferenceCount());
-        }
-
-        // Compare text elements (with style information)
-        List<TextElementDifference> textElementDiffs = compareTextElements(basePage.getTextElements(), comparePage.getTextElements());
-        result.setTextElementDifferences(textElementDiffs);
-
-        if (!textElementDiffs.isEmpty()) {
-            logger.debug("Page {} has {} text element differences",
-                    basePage.getPageNumber(), textElementDiffs.size());
-        }
+        // Compare text elements (including style)
+        List<TextElementDifference> textElementDifferences = compareTextElements(basePage, comparePage);
+        result.setTextElementDifferences(textElementDifferences);
 
         // Compare images
-        List<ImageDifference> imageDiffs = compareImages(basePage.getImages(), comparePage.getImages());
-        result.setImageDifferences(imageDiffs);
-
-        if (!imageDiffs.isEmpty()) {
-            logger.debug("Page {} has {} image differences",
-                    basePage.getPageNumber(), imageDiffs.size());
-        }
+        List<ImageDifference> imageDifferences = compareImages(basePage, comparePage);
+        result.setImageDifferences(imageDifferences);
 
         // Compare fonts
-        List<FontDifference> fontDiffs = compareFonts(basePage.getFonts(), comparePage.getFonts());
-        result.setFontDifferences(fontDiffs);
+        List<FontDifference> fontDifferences = compareFonts(basePage, comparePage);
+        result.setFontDifferences(fontDifferences);
 
-        if (!fontDiffs.isEmpty()) {
-            logger.debug("Page {} has {} font differences",
-                    basePage.getPageNumber(), fontDiffs.size());
+        // Calculate total differences for this page
+        int totalDiffs = 0;
+        if (result.getTextDifferences() != null) {
+            totalDiffs += result.getTextDifferences().getDifferences().size();
         }
+        if (result.getTextElementDifferences() != null) {
+            totalDiffs += result.getTextElementDifferences().size();
+        }
+        if (result.getImageDifferences() != null) {
+            totalDiffs += result.getImageDifferences().size();
+        }
+        if (result.getFontDifferences() != null) {
+            totalDiffs += result.getFontDifferences().size();
+        }
+        result.setTotalDifferences(totalDiffs);
 
         return result;
     }
 
     /**
-     * Compare text content using a diff algorithm
-     * @param baseText The base text content
-     * @param compareText The text to compare against the base
-     * @return A text comparison result
+     * Compare text content of two pages
+     *
+     * @param basePage    The base PDF page model
+     * @param comparePage The PDF page model to compare against the base
+     * @return TextComparisonResult The result of the text comparison
      */
-    private TextComparisonResult compareText(String baseText, String compareText) {
+    private TextComparisonResult compareText(PDFPageModel basePage, PDFPageModel comparePage) {
         TextComparisonResult result = new TextComparisonResult();
+        result.setDifferences(new ArrayList<>());
 
-        // Special case - handle null or empty texts properly
-        if ((baseText == null || baseText.trim().isEmpty()) &&
-                (compareText == null || compareText.trim().isEmpty())) {
-            // Both texts are empty or null - no differences
-            result.setDifferences(new ArrayList<>());
-            result.setDifferenceCount(0);
-            return result;
+        if (basePage.getText() == null && comparePage.getText() == null) {
+            return result; // Both texts are null, return empty result
         }
 
-        // Handle case where one text is null and the other isn't
-        if (baseText == null || baseText.trim().isEmpty()) {
-            TextDifferenceItem diff = new TextDifferenceItem();
-            diff.setLineNumber(1);
-            diff.setBaseText("");
-            diff.setCompareText(compareText);
-            diff.setDifferenceType(TextDifferenceType.ADDED);
-            result.setDifferences(Collections.singletonList(diff));
-            result.setDifferenceCount(1);
-            return result;
-        }
+        String baseText = basePage.getText() != null ? basePage.getText() : "";
+        String compareText = comparePage.getText() != null ? comparePage.getText() : "";
 
-        if (compareText == null || compareText.trim().isEmpty()) {
+        // Calculate Levenshtein distance
+        int levenshteinDistance = PDFComparisonUtility.calculateLevenshteinDistance(baseText, compareText);
+        result.setLevenshteinDistance(levenshteinDistance);
+
+        // Simple text difference detection (can be improved)
+        if (!baseText.equals(compareText)) {
             TextDifferenceItem diff = new TextDifferenceItem();
-            diff.setLineNumber(1);
+            diff.setType(TextDifferenceType.CONTENT_CHANGE);
             diff.setBaseText(baseText);
-            diff.setCompareText("");
-            diff.setDifferenceType(TextDifferenceType.DELETED);
-            result.setDifferences(Collections.singletonList(diff));
-            result.setDifferenceCount(1);
-            return result;
-        }
-
-        // Normalize line endings
-        baseText = baseText.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
-        compareText = compareText.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
-
-        // Split texts into lines for line-by-line comparison
-        String[] baseLines = baseText.split("\n");
-        String[] compareLines = compareText.split("\n");
-
-        List<TextDifferenceItem> differences = new ArrayList<>();
-        int maxLines = Math.max(baseLines.length, compareLines.length);
-
-        for (int i = 0; i < maxLines; i++) {
-            if (i < baseLines.length && i < compareLines.length) {
-                // Both lines exist - compare them
-                if (!baseLines[i].equals(compareLines[i])) {
-                    TextDifferenceItem diff = new TextDifferenceItem();
-                    diff.setLineNumber(i + 1);
-                    diff.setBaseText(baseLines[i]);
-                    diff.setCompareText(compareLines[i]);
-                    diff.setDifferenceType(TextDifferenceType.MODIFIED);
-                    differences.add(diff);
-                    logger.debug("Modified text at line {}: '{}' vs '{}'",
-                            i + 1, baseLines[i], compareLines[i]);
-                }
-            } else if (i < baseLines.length) {
-                // Line only in base document
-                TextDifferenceItem diff = new TextDifferenceItem();
-                diff.setLineNumber(i + 1);
-                diff.setBaseText(baseLines[i]);
-                diff.setCompareText("");
-                diff.setDifferenceType(TextDifferenceType.DELETED);
-                differences.add(diff);
-                logger.debug("Deleted text at line {}: '{}'", i + 1, baseLines[i]);
-            } else {
-                // Line only in compare document
-                TextDifferenceItem diff = new TextDifferenceItem();
-                diff.setLineNumber(i + 1);
-                diff.setBaseText("");
-                diff.setCompareText(compareLines[i]);
-                diff.setDifferenceType(TextDifferenceType.ADDED);
-                differences.add(diff);
-                logger.debug("Added text at line {}: '{}'", i + 1, compareLines[i]);
-            }
-        }
-
-        result.setDifferences(differences);
-        result.setDifferenceCount(differences.size());
-
-        // Log the comparison results clearly
-        logger.info("Text comparison found {} differences between texts", differences.size());
-        if (differences.size() > 0) {
-            logger.debug("Text differences sample: {}", differences.get(0).toString());
+            diff.setCompareText(compareText);
+            result.getDifferences().add(diff);
         }
 
         return result;
     }
 
     /**
-     * Compare text elements with style information
-     * @param baseElements The base text elements
-     * @param compareElements The text elements to compare against the base
-     * @return List of text element differences
+     * Compare text elements (including style) of two pages
+     *
+     * @param basePage    The base PDF page model
+     * @param comparePage The PDF page model to compare against the base
+     * @return List<TextElementDifference> The list of text element differences
      */
-    private List<TextElementDifference> compareTextElements(List<TextElement> baseElements, List<TextElement> compareElements) {
+    private List<TextElementDifference> compareTextElements(PDFPageModel basePage, PDFPageModel comparePage) {
         List<TextElementDifference> differences = new ArrayList<>();
 
-        // Handle null cases
-        if (baseElements == null) baseElements = new ArrayList<>();
-        if (compareElements == null) compareElements = new ArrayList<>();
-
-        // Enhanced logging
-        logger.debug("Comparing {} base text elements with {} compare text elements",
-                baseElements.size(), compareElements.size());
-
-        // Create maps for quicker lookup - improve the key calculation
-        Map<String, TextElement> baseElementMap = new HashMap<>();
-        for (TextElement element : baseElements) {
-            // Create a unique key combining text and position (rounded)
-            String key = element.getText() + "_" + Math.round(element.getX()) + "_" + Math.round(element.getY());
-            baseElementMap.put(key, element);
+        if (basePage.getTextElements() == null && comparePage.getTextElements() == null) {
+            return differences; // Both are null, return empty list
         }
 
-        Map<String, TextElement> compareElementMap = new HashMap<>();
-        for (TextElement element : compareElements) {
-            // Create a unique key combining text and position (rounded)
-            String key = element.getText() + "_" + Math.round(element.getX()) + "_" + Math.round(element.getY());
-            compareElementMap.put(key, element);
-        }
+        List<TextElement> baseElements = basePage.getTextElements() != null ? basePage.getTextElements() : new ArrayList<>();
+        List<TextElement> compareElements = comparePage.getTextElements() != null ? comparePage.getTextElements() : new ArrayList<>();
 
-        // Find differences in base elements
-        for (String key : baseElementMap.keySet()) {
-            TextElement baseElement = baseElementMap.get(key);
-            TextElement compareElement = compareElementMap.get(key);
-
-            if (compareElement == null) {
-                // Element exists only in base document
-                TextElementDifference diff = new TextElementDifference();
-                diff.setBaseElement(baseElement);
-                diff.setCompareElement(null);
-                diff.setOnlyInBase(true);
-                differences.add(diff);
-                logger.debug("Text element '{}' only exists in base document",
-                        baseElement.getText());
-            } else {
-                // Element exists in both, check for style differences
-                boolean stylesDiffer = !compareTextElementStyles(baseElement, compareElement);
-                if (stylesDiffer) {
-                    TextElementDifference diff = new TextElementDifference();
-                    diff.setBaseElement(baseElement);
-                    diff.setCompareElement(compareElement);
-                    diff.setStyleDifferent(true);
-                    differences.add(diff);
-                    logger.debug("Text element '{}' has style differences", baseElement.getText());
-
-                    // Add detailed logging for style differences
-                    if (baseElement.getFontName() != null && compareElement.getFontName() != null &&
-                            !baseElement.getFontName().equals(compareElement.getFontName())) {
-                        logger.debug("  Font name differs: '{}' vs '{}'",
-                                baseElement.getFontName(), compareElement.getFontName());
-                    }
-
-                    if (Math.abs(baseElement.getFontSize() - compareElement.getFontSize()) > 0.1) {
-                        logger.debug("  Font size differs: {} vs {}",
-                                baseElement.getFontSize(), compareElement.getFontSize());
-                    }
-
-                    // Log other style differences...
-                }
-
-                // Remove from compare map to track processed elements
-                compareElementMap.remove(key);
-            }
-        }
-
-        // Add elements that exist only in compare document
-        for (TextElement element : compareElementMap.values()) {
+        // Simple comparison (can be improved with more sophisticated matching)
+        int minElements = Math.min(baseElements.size(), compareElements.size());
+        for (int i = 0; i < minElements; i++) {
+            TextElement baseElement = baseElements.get(i);
+            TextElement compareElement = compareElements.get(i);
             TextElementDifference diff = new TextElementDifference();
-            diff.setBaseElement(null);
-            diff.setCompareElement(element);
-            diff.setOnlyInCompare(true);
+
+            diff.setTextDifferent(!baseElement.getText().equals(compareElement.getText()));
+            diff.setPositionDifferent(baseElement.getX() != compareElement.getX() || baseElement.getY() != compareElement.getY());
+            diff.setWidthDifferent(baseElement.getWidth() != compareElement.getWidth());
+            diff.setHeightDifferent(baseElement.getHeight() != compareElement.getHeight());
+            diff.setFontDifferent(baseElement.getFontName().equals(compareElement.getFontName()));
+            diff.setFontSizeDifferent(baseElement.getFontSize() != compareElement.getFontSize());
+            diff.setFontStyleDifferent(baseElement.getFontStyle().equals(compareElement.getFontStyle()));
+
+            // Enhanced Style Comparison
+            diff.setStyleDifferent(isStyleDifferent(baseElement, compareElement));
+
             differences.add(diff);
-            logger.debug("Text element '{}' only exists in compare document", element.getText());
         }
 
-        logger.info("Found {} text element differences", differences.size());
         return differences;
     }
 
     /**
-     * Compare styles of two text elements
-     * @param baseElement The base text element
+     * Enhanced Style Comparison Logic
+     *
+     * @param baseElement    The base text element
      * @param compareElement The text element to compare against the base
-     * @return True if styles match, false otherwise
+     * @return boolean  True if style is different, false otherwise
      */
-    private boolean compareTextElementStyles(TextElement baseElement, TextElement compareElement) {
-        // Compare font name
-        if (!Objects.equals(baseElement.getFontName(), compareElement.getFontName())) {
-            logger.debug("Font name differs: '{}' vs '{}'",
-                    baseElement.getFontName(), compareElement.getFontName());
-            return false;
+    private boolean isStyleDifferent(TextElement baseElement, TextElement compareElement) {
+        boolean styleDifferent = false;
+
+        // Check font weight (bold)
+        boolean fontWeightDifferent = !baseElement.getFontStyle().equals(compareElement.getFontStyle());
+
+        // Check font style (italic)
+        boolean fontStyleDifferent = !baseElement.getFontStyle().equals(compareElement.getFontStyle());
+
+        // Check font size
+        boolean fontSizeDifferent = baseElement.getFontSize() != compareElement.getFontSize();
+
+        // Heuristics to detect significant style changes
+        if (fontWeightDifferent || fontStyleDifferent || fontSizeDifferent) {
+            styleDifferent = true; // Consider any of these differences as style change
         }
 
-        // Compare font size (with small tolerance for floating point differences)
-        if (Math.abs(baseElement.getFontSize() - compareElement.getFontSize()) > 0.1) {
-            logger.debug("Font size differs: {} vs {}",
-                    baseElement.getFontSize(), compareElement.getFontSize());
-            return false;
-        }
-
-        // Compare font style
-        if (!Objects.equals(baseElement.getFontStyle(), compareElement.getFontStyle())) {
-            logger.debug("Font style differs: '{}' vs '{}'",
-                    baseElement.getFontStyle(), compareElement.getFontStyle());
-            return false;
-        }
-
-        // Compare color
-        if (!Arrays.equals(baseElement.getColor(), compareElement.getColor())) {
-            logger.debug("Text color differs");
-            return false;
-        }
-
-        return true;
+        return styleDifferent;
     }
 
     /**
-     * Compare images between two pages
-     * @param baseImages The base page images
-     * @param compareImages The images to compare against the base
-     * @return List of image differences
+     * Compare images of two pages
+     *
+     * @param basePage    The base PDF page model
+     * @param comparePage The PDF page model to compare against the base
+     * @return List<ImageDifference> The list of image differences
      */
-    private List<ImageDifference> compareImages(List<ImageElement> baseImages, List<ImageElement> compareImages) {
+    private List<ImageDifference> compareImages(PDFPageModel basePage, PDFPageModel comparePage) {
         List<ImageDifference> differences = new ArrayList<>();
 
-        // Match images by name if available, otherwise by position and size
-        Map<String, ImageElement> baseImageMap = new HashMap<>();
-        for (ImageElement image : baseImages) {
-            String key = image.getName() != null ? image.getName() :
-                    Math.round(image.getX()) + "_" + Math.round(image.getY()) + "_" +
-                            Math.round(image.getWidth()) + "_" + Math.round(image.getHeight());
-            baseImageMap.put(key, image);
+        if (basePage.getImages() == null && comparePage.getImages() == null) {
+            return differences; // Both are null, return empty list
         }
 
-        Map<String, ImageElement> compareImageMap = new HashMap<>();
-        for (ImageElement image : compareImages) {
-            String key = image.getName() != null ? image.getName() :
-                    Math.round(image.getX()) + "_" + Math.round(image.getY()) + "_" +
-                            Math.round(image.getWidth()) + "_" + Math.round(image.getHeight());
-            compareImageMap.put(key, image);
-        }
+        List<ImageElement> baseImages = basePage.getImages() != null ? basePage.getImages() : new ArrayList<>();
+        List<ImageElement> compareImages = comparePage.getImages() != null ? comparePage.getImages() : new ArrayList<>();
 
-        // Find differences in base images
-        for (String key : baseImageMap.keySet()) {
-            ImageElement baseImage = baseImageMap.get(key);
-            ImageElement compareImage = compareImageMap.get(key);
-
-            if (compareImage == null) {
-                // Image exists only in base document
-                ImageDifference diff = new ImageDifference();
-                diff.setBaseImage(baseImage);
-                diff.setCompareImage(null);
-                diff.setOnlyInBase(true);
-                differences.add(diff);
-                logger.debug("Image '{}' only exists in base document",
-                        baseImage.getName() != null ? baseImage.getName() : "unnamed");
-            } else {
-                // Image exists in both, check for differences
-                boolean dimensionsDiffer = Math.abs(baseImage.getWidth() - compareImage.getWidth()) > 0.1 ||
-                        Math.abs(baseImage.getHeight() - compareImage.getHeight()) > 0.1;
-                boolean positionDiffers = Math.abs(baseImage.getX() - compareImage.getX()) > 0.1 ||
-                        Math.abs(baseImage.getY() - compareImage.getY()) > 0.1;
-                boolean formatDiffers = !Objects.equals(baseImage.getFormat(), compareImage.getFormat());
-
-                if (dimensionsDiffer || positionDiffers || formatDiffers) {
-                    ImageDifference diff = new ImageDifference();
-                    diff.setBaseImage(baseImage);
-                    diff.setCompareImage(compareImage);
-                    diff.setDimensionsDifferent(dimensionsDiffer);
-                    diff.setPositionDifferent(positionDiffers);
-                    diff.setFormatDifferent(formatDiffers);
-                    differences.add(diff);
-
-                    if (dimensionsDiffer) {
-                        logger.debug("Image '{}' has different dimensions: [{}x{}] vs [{}x{}]",
-                                baseImage.getName() != null ? baseImage.getName() : "unnamed",
-                                baseImage.getWidth(), baseImage.getHeight(),
-                                compareImage.getWidth(), compareImage.getHeight());
-                    }
-                    if (positionDiffers) {
-                        logger.debug("Image '{}' has different position: [{},{}] vs [{},{}]",
-                                baseImage.getName() != null ? baseImage.getName() : "unnamed",
-                                baseImage.getX(), baseImage.getY(),
-                                compareImage.getX(), compareImage.getY());
-                    }
-                    if (formatDiffers) {
-                        logger.debug("Image '{}' has different format: '{}' vs '{}'",
-                                baseImage.getName() != null ? baseImage.getName() : "unnamed",
-                                baseImage.getFormat(), compareImage.getFormat());
-                    }
-                }
-
-                // Remove from compare map to track processed elements
-                compareImageMap.remove(key);
-            }
-        }
-
-        // Add images that exist only in compare document
-        for (ImageElement image : compareImageMap.values()) {
+        // Simple comparison (can be improved with image hashing or other techniques)
+        if (baseImages.size() != compareImages.size()) {
             ImageDifference diff = new ImageDifference();
-            diff.setBaseImage(null);
-            diff.setCompareImage(image);
-            diff.setOnlyInCompare(true);
+            diff.setDifferenceType("Image count difference");
+            diff.setBaseImageCount(baseImages.size());
+            diff.setCompareImageCount(compareImages.size());
             differences.add(diff);
-            logger.debug("Image '{}' only exists in compare document",
-                    image.getName() != null ? image.getName() : "unnamed");
         }
 
         return differences;
     }
 
     /**
-     * Compare fonts between two pages
-     * @param baseFonts The base page fonts
-     * @param compareFonts The fonts to compare against the base
-     * @return List of font differences
+     * Compare fonts of two pages
+     *
+     * @param basePage    The base PDF page model
+     * @param comparePage The PDF page model to compare against the base
+     * @return List<FontDifference> The list of font differences
      */
-    private List<FontDifference> compareFonts(List<FontInfo> baseFonts, List<FontInfo> compareFonts) {
+    private List<FontDifference> compareFonts(PDFPageModel basePage, PDFPageModel comparePage) {
         List<FontDifference> differences = new ArrayList<>();
 
-        // Match fonts by name
-        Map<String, FontInfo> baseFontMap = new HashMap<>();
-        for (FontInfo font : baseFonts) {
-            baseFontMap.put(font.getName(), font);
+        if (basePage.getFonts() == null && comparePage.getFonts() == null) {
+            return differences; // Both are null, return empty list
         }
 
-        Map<String, FontInfo> compareFontMap = new HashMap<>();
-        for (FontInfo font : compareFonts) {
-            compareFontMap.put(font.getName(), font);
-        }
+        List<FontInfo> baseFonts = basePage.getFonts() != null ? basePage.getFonts() : new ArrayList<>();
+        List<FontInfo> compareFonts = comparePage.getFonts() != null ? comparePage.getFonts() : new ArrayList<>();
 
-        // Find differences in base fonts
-        for (String name : baseFontMap.keySet()) {
-            FontInfo baseFont = baseFontMap.get(name);
-            FontInfo compareFont = compareFontMap.get(name);
-
-            if (compareFont == null) {
-                // Font exists only in base document
-                FontDifference diff = new FontDifference();
-                diff.setBaseFont(baseFont);
-                diff.setCompareFont(null);
-                diff.setOnlyInBase(true);
-                differences.add(diff);
-                logger.debug("Font '{}' only exists in base document", baseFont.getName());
-            } else {
-                // Font exists in both, check for differences
-                boolean embeddingDiffers = baseFont.isEmbedded() != compareFont.isEmbedded();
-                boolean subsetDiffers = baseFont.isSubset() != compareFont.isSubset();
-
-                if (embeddingDiffers || subsetDiffers) {
-                    FontDifference diff = new FontDifference();
-                    diff.setBaseFont(baseFont);
-                    diff.setCompareFont(compareFont);
-                    diff.setEmbeddingDifferent(embeddingDiffers);
-                    diff.setSubsetDifferent(subsetDiffers);
-                    differences.add(diff);
-
-                    if (embeddingDiffers) {
-                        logger.debug("Font '{}' has different embedding: {} vs {}",
-                                baseFont.getName(),
-                                baseFont.isEmbedded(), compareFont.isEmbedded());
-                    }
-                    if (subsetDiffers) {
-                        logger.debug("Font '{}' has different subsetting: {} vs {}",
-                                baseFont.getName(),
-                                baseFont.isSubset(), compareFont.isSubset());
-                    }
-                }
-
-                // Remove from compare map to track processed elements
-                compareFontMap.remove(name);
-            }
-        }
-
-        // Add fonts that exist only in compare document
-        for (FontInfo font : compareFontMap.values()) {
+        // Simple comparison (can be improved with font properties comparison)
+        if (baseFonts.size() != compareFonts.size()) {
             FontDifference diff = new FontDifference();
-            diff.setBaseFont(null);
-            diff.setCompareFont(font);
-            diff.setOnlyInCompare(true);
+            diff.setDifferenceType("Font count difference");
+            diff.setBaseFontCount(baseFonts.size());
+            diff.setCompareFontCount(compareFonts.size());
             differences.add(diff);
-            logger.debug("Font '{}' only exists in compare document", font.getName());
         }
 
         return differences;
     }
 
     /**
-     * Calculate summary statistics for comparison result
-     * @param result The comparison result to update with statistics
+     * Compare metadata of two documents
+     *
+     * @param baseDocument    The base PDF document model
+     * @param compareDocument The PDF document model to compare against the base
+     * @return List<MetadataDifference> The list of metadata differences
      */
-    private void calculateSummaryStatistics(PDFComparisonResult result) {
-        int totalDifferences = 0;
-        int textDifferences = 0;
-        int imageDifferences = 0;
-        int fontDifferences = 0;
-        int styleDifferences = 0;
+    private List<MetadataDifference> compareMetadata(PDFDocumentModel baseDocument, PDFDocumentModel compareDocument) {
+        List<MetadataDifference> differences = new ArrayList<>();
 
-        // Count metadata differences
-        if (result.getMetadataDifferences() != null) {
-            totalDifferences += result.getMetadataDifferences().size();
-        }
+        // Placeholder for metadata comparison logic
+        // This is a simplified implementation. A real-world implementation would
+        // compare individual metadata fields (author, title, etc.) and identify differences.
 
-        // Count page structure differences
-        if (result.isPageCountDifferent()) {
-            totalDifferences++;
-        }
-
-        // Count differences for each page
-        for (PageComparisonResult page : result.getPageDifferences()) {
-            // Count page structure differences
-            if (page.isOnlyInBase() || page.isOnlyInCompare()) {
-                totalDifferences++;
-            } else if (page.isDimensionsDifferent()) {
-                totalDifferences++;
-            }
-
-            // Count text differences
-            if (page.getTextDifferences() != null && page.getTextDifferences().getDifferences() != null) {
-                int pageDiffs = page.getTextDifferences().getDifferences().size();
-                textDifferences += pageDiffs;
-                totalDifferences += pageDiffs;
-            }
-
-            // Count text element differences
-            if (page.getTextElementDifferences() != null) {
-                for (TextElementDifference diff : page.getTextElementDifferences()) {
-                    if (diff.isStyleDifferent()) {
-                        styleDifferences++;
-                    } else {
-                        textDifferences++;
-                    }
-                    totalDifferences++;
-                }
-            }
-
-            // Count image differences
-            if (page.getImageDifferences() != null) {
-                int pageDiffs = page.getImageDifferences().size();
-                imageDifferences += pageDiffs;
-                totalDifferences += pageDiffs;
-            }
-
-            // Count font differences
-            if (page.getFontDifferences() != null) {
-                int pageDiffs = page.getFontDifferences().size();
-                fontDifferences += pageDiffs;
-                totalDifferences += pageDiffs;
-            }
-        }
-
-        // Set statistics
-        result.setTotalDifferences(totalDifferences);
-        result.setTotalTextDifferences(textDifferences);
-        result.setTotalImageDifferences(imageDifferences);
-        result.setTotalFontDifferences(fontDifferences);
-        result.setTotalStyleDifferences(styleDifferences);
-
-        logger.info("Comparison statistics: total={}, text={}, image={}, font={}, style={}",
-                totalDifferences, textDifferences, imageDifferences, fontDifferences, styleDifferences);
+        return differences;
     }
 }

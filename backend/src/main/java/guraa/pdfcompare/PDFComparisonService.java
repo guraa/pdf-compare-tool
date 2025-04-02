@@ -121,6 +121,24 @@ public class PDFComparisonService {
         });
     }
 
+
+    /**
+     * Store a temporary result for report generation
+     * @param comparisonId The comparison ID
+     * @param result The comparison result to store
+     */
+    public void storeTemporaryResult(String comparisonId, PDFComparisonResult result) {
+        if (comparisonId == null || result == null) {
+            logger.warn("Cannot store null comparison ID or result");
+            return;
+        }
+
+        // Store the result directly in the comparison results map
+        ComparisonResultData resultData = new ComparisonResultData(result);
+        comparisonResults.put(comparisonId, resultData);
+        logger.info("Stored temporary result for comparison ID: {}", comparisonId);
+    }
+
     /**
      * Compare documents in batches to prevent memory issues with large files
      */

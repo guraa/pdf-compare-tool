@@ -10,6 +10,18 @@ import java.util.Arrays;
 public class TextSimilarityCalculator {
 
     /**
+     * Calculate similarity between two text strings
+     * Uses Jaccard similarity by default
+     *
+     * @param text1 First text string
+     * @param text2 Second text string
+     * @return Similarity score (0.0-1.0)
+     */
+    public double calculateTextSimilarity(String text1, String text2) {
+        return calculateJaccardSimilarity(text1, text2);
+    }
+
+    /**
      * Calculate Jaccard similarity between two text strings
      * Jaccard similarity = size of intersection / size of union
      */

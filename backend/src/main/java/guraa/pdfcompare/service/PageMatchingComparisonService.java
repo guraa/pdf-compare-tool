@@ -2,20 +2,19 @@ package guraa.pdfcompare.service;
 
 import guraa.pdfcompare.PDFComparisonEngine;
 import guraa.pdfcompare.comparison.PDFComparisonResult;
-import guraa.pdfcompare.comparison.PageComparisonResult;
 import guraa.pdfcompare.core.PDFDocumentModel;
 import guraa.pdfcompare.core.PDFPageModel;
 import guraa.pdfcompare.core.TextSimilarityCalculator;
 import guraa.pdfcompare.visual.VisualMatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Service for comparing PDFs by matching individual pages based on similarity
@@ -34,11 +33,8 @@ public class PageMatchingComparisonService {
     // Storage for page matching results
     private final Map<String, PageMatchingResult> matchingResults = new ConcurrentHashMap<>();
 
-    private final PDFComparisonEngine comparisonEngine;
-
-    public PageMatchingComparisonService(PDFComparisonEngine comparisonEngine) {
-        this.comparisonEngine = comparisonEngine;
-    }
+    @Autowired
+    private PDFComparisonEngine comparisonEngine;
 
     /**
      * Compare two PDFs using page-by-page matching
@@ -96,7 +92,7 @@ public class PageMatchingComparisonService {
         result.setMatchingId(matchingId);  // Add this field to PDFComparisonResult
 
         // Compare matched pages
-        List<PageComparisonResult> pageDifferences = compareMatchedPages(
+        List<guraa.pdfcompare.comparison.PageComparisonResult> pageDifferences = compareMatchedPages(
                 baseDocument, compareDocument, pageMatches);
         result.setPageDifferences(pageDifferences);
 
@@ -245,19 +241,20 @@ public class PageMatchingComparisonService {
             return 0.0;
         }
 
-        // Use the existing text similarity calculator or implement a simple one
-        return TextSimilarityCalculator.calculateJaccardSimilarity(baseText, compareText);
+        // Use the text similarity calculator
+        TextSimilarityCalculator calculator = new TextSimilarityCalculator();
+        return calculator.calculateTextSimilarity(baseText, compareText);
     }
 
     /**
      * Compare matched pages and generate page comparison results
      */
-    private List<PageComparisonResult> compareMatchedPages(
+    private List<guraa.pdfcompare.comparison.PageComparisonResult> compareMatchedPages(
             PDFDocumentModel baseDocument,
             PDFDocumentModel compareDocument,
             PageMatchingResult pageMatches) {
 
-        List<PageComparisonResult> results = new ArrayList<>();
+        List<guraa.pdfcompare.comparison.PageComparisonResult> results = new ArrayList<>();
 
         // Compare matched pages
         for (Map.Entry<Integer, Integer> match : pageMatches.getMatchedPages().entrySet()) {
@@ -267,7 +264,8 @@ public class PageMatchingComparisonService {
             PDFPageModel basePage = baseDocument.getPages().get(baseIdx);
             PDFPageModel comparePage = compareDocument.getPages().get(compareIdx);
 
-            PageComparisonResult comparison = comparisonEngine.comparePage(basePage, comparePage);
+            guraa.pdfcompare.comparison.PageComparisonResult comparison =
+                    comparisonEngine.comparePage(basePage, comparePage);
 
             // Add page matching information
             comparison.setOriginalBasePageNumber(baseIdx + 1);
@@ -278,7 +276,8 @@ public class PageMatchingComparisonService {
 
         // Add unmatched base pages
         for (Integer baseIdx : pageMatches.getUnmatchedBasePages()) {
-            PageComparisonResult result = new PageComparisonResult();
+            guraa.pdfcompare.comparison.PageComparisonResult result =
+                    new guraa.pdfcompare.comparison.PageComparisonResult();
             result.setPageNumber(baseIdx + 1);
             result.setOriginalBasePageNumber(baseIdx + 1);
             result.setOnlyInBase(true);
@@ -287,7 +286,8 @@ public class PageMatchingComparisonService {
 
         // Add unmatched compare pages
         for (Integer compareIdx : pageMatches.getUnmatchedComparePages()) {
-            PageComparisonResult result = new PageComparisonResult();
+            guraa.pdfcompare.comparison.PageComparisonResult result =
+                    new guraa.pdfcompare.comparison.PageComparisonResult();
             result.setPageNumber(compareIdx + 1);
             result.setOriginalComparePageNumber(compareIdx + 1);
             result.setOnlyInCompare(true);
@@ -295,8 +295,10 @@ public class PageMatchingComparisonService {
         }
 
         // Sort results by base page number for consistent presentation
-        results.sort(Comparator.comparing(PageComparisonResult::getOriginalBasePageNumber,
-                Comparator.nullsLast(Comparator.naturalOrder())));
+        results.sort(Comparator.comparing(page -> {
+            Integer basePage = page.getOriginalBasePageNumber();
+            return basePage != null ? basePage : Integer.MAX_VALUE;
+        }));
 
         return results;
     }
@@ -322,7 +324,7 @@ public class PageMatchingComparisonService {
         }
 
         // Count differences for each page
-        for (PageComparisonResult page : result.getPageDifferences()) {
+        for (guraa.pdfcompare.comparison.PageComparisonResult page : result.getPageDifferences()) {
             // Count page structure differences
             if (page.isOnlyInBase() || page.isOnlyInCompare()) {
                 totalDifferences++;
