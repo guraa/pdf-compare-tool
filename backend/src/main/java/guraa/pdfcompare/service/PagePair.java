@@ -1,93 +1,140 @@
 package guraa.pdfcompare.service;
 
+import guraa.pdfcompare.core.PageFingerprint;
+
 /**
  * Represents a pair of matched pages from base and compare documents.
  */
 public class PagePair {
-    private int basePageIndex;
-    private int comparePageIndex;
-    private double similarity;
     private PageFingerprint baseFingerprint;
     private PageFingerprint compareFingerprint;
+    private double similarityScore;
 
+    /**
+     * Default constructor
+     */
     public PagePair() {
     }
 
-    public PagePair(int basePageIndex, int comparePageIndex, double similarity) {
-        this.basePageIndex = basePageIndex;
-        this.comparePageIndex = comparePageIndex;
-        this.similarity = similarity;
-    }
-    
-    public PagePair(PageFingerprint baseFingerprint, PageFingerprint compareFingerprint, double similarity) {
+    /**
+     * Constructor with all fields
+     *
+     * @param baseFingerprint Base page fingerprint
+     * @param compareFingerprint Compare page fingerprint
+     * @param similarityScore Similarity score between pages
+     */
+    public PagePair(PageFingerprint baseFingerprint, PageFingerprint compareFingerprint, double similarityScore) {
         this.baseFingerprint = baseFingerprint;
         this.compareFingerprint = compareFingerprint;
-        this.similarity = similarity;
-        
-        if (baseFingerprint != null) {
-            this.basePageIndex = baseFingerprint.getPageIndex();
-        }
-        
-        if (compareFingerprint != null) {
-            this.comparePageIndex = compareFingerprint.getPageIndex();
-        }
+        this.similarityScore = similarityScore;
     }
 
-    public int getBasePageIndex() {
-        return basePageIndex;
-    }
-
-    public void setBasePageIndex(int basePageIndex) {
-        this.basePageIndex = basePageIndex;
-    }
-
-    public int getComparePageIndex() {
-        return comparePageIndex;
-    }
-
-    public void setComparePageIndex(int comparePageIndex) {
-        this.comparePageIndex = comparePageIndex;
-    }
-
-    public double getSimilarity() {
-        return similarity;
-    }
-
-    public void setSimilarity(double similarity) {
-        this.similarity = similarity;
-    }
-    
-    // Alias method for compatibility
-    public double getSimilarityScore() {
-        return similarity;
-    }
-    
-    public PageFingerprint getBaseFingerprint() {
-        return baseFingerprint;
-    }
-    
-    public void setBaseFingerprint(PageFingerprint baseFingerprint) {
-        this.baseFingerprint = baseFingerprint;
-    }
-    
-    public PageFingerprint getCompareFingerprint() {
-        return compareFingerprint;
-    }
-    
-    public void setCompareFingerprint(PageFingerprint compareFingerprint) {
-        this.compareFingerprint = compareFingerprint;
-    }
-    
+    /**
+     * Check if both pages are present (matched pair)
+     *
+     * @return true if both fingerprints are present
+     */
     public boolean isMatched() {
         return baseFingerprint != null && compareFingerprint != null;
     }
 
+    /**
+     * Get the base page fingerprint
+     *
+     * @return Base page fingerprint
+     */
+    public PageFingerprint getBaseFingerprint() {
+        return baseFingerprint;
+    }
+
+    /**
+     * Set the base page fingerprint
+     *
+     * @param baseFingerprint Base page fingerprint
+     */
+    public void setBaseFingerprint(PageFingerprint baseFingerprint) {
+        this.baseFingerprint = baseFingerprint;
+    }
+
+    /**
+     * Get the compare page fingerprint
+     *
+     * @return Compare page fingerprint
+     */
+    public PageFingerprint getCompareFingerprint() {
+        return compareFingerprint;
+    }
+
+    /**
+     * Set the compare page fingerprint
+     *
+     * @param compareFingerprint Compare page fingerprint
+     */
+    public void setCompareFingerprint(PageFingerprint compareFingerprint) {
+        this.compareFingerprint = compareFingerprint;
+    }
+
+    /**
+     * Get the similarity score
+     *
+     * @return Similarity score (0.0-1.0)
+     */
+    public double getSimilarityScore() {
+        return similarityScore;
+    }
+
+    /**
+     * Set the similarity score
+     *
+     * @param similarityScore Similarity score (0.0-1.0)
+     */
+    public void setSimilarityScore(double similarityScore) {
+        this.similarityScore = similarityScore;
+    }
+
+    /**
+     * Get the base page index
+     *
+     * @return Base page index or -1 if no base page
+     */
+    public int getBasePageIndex() {
+        return baseFingerprint != null ? guraa.pdfcompare.service.FingerprintAdapter.getPageIndex(baseFingerprint) : -1;
+    }
+
+    /**
+     * Get the compare page index
+     *
+     * @return Compare page index or -1 if no compare page
+     */
+    public int getComparePageIndex() {
+        return compareFingerprint != null ? guraa.pdfcompare.service.FingerprintAdapter.getPageIndex(compareFingerprint) : -1;
+    }
+
+    /**
+     * Get a string representation of the page pair
+     */
     @Override
     public String toString() {
-        return "PagePair{" +
-                "basePageIndex=" + basePageIndex +
-                ", comparePageIndex=" + comparePageIndex +
-                ", similarity=" + similarity +
-                '}';
+        StringBuilder sb = new StringBuilder("PagePair{");
+
+        if (baseFingerprint != null) {
+            sb.append("basePage=").append(guraa.pdfcompare.service.FingerprintAdapter.getPageIndex(baseFingerprint) + 1);
+        } else {
+            sb.append("basePage=none");
+        }
+
+        sb.append(", ");
+
+        if (compareFingerprint != null) {
+            sb.append("comparePage=").append(guraa.pdfcompare.service.FingerprintAdapter.getPageIndex(compareFingerprint) + 1);
+        } else {
+            sb.append("comparePage=none");
+        }
+
+        sb.append(", similarity=").append(String.format("%.2f", similarityScore))
+                .append(", matched=").append(isMatched())
+                .append("}");
+
+        return sb.toString();
     }
 }

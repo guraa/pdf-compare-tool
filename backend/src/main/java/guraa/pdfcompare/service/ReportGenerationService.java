@@ -207,11 +207,11 @@ public class ReportGenerationService {
                             if (textDiff.getDifferenceType() == TextDifferenceType.ADDED) {
                                 diffTable.addCell("Text added: " +
                                         (textDiff.getCompareText() != null ?
-                                                truncate(textDiff.getCompareText(), 50) : "(empty)"));
+                                                truncate(textDiff.getCompareText(), 20) : "(empty)"));
                             } else if (textDiff.getDifferenceType() == TextDifferenceType.DELETED) {
                                 diffTable.addCell("Text deleted: " +
                                         (textDiff.getBaseText() != null ?
-                                                truncate(textDiff.getBaseText(), 50) : "(empty)"));
+                                                truncate(textDiff.getBaseText(), 20) : "(empty)"));
                             } else {
                                 diffTable.addCell("Text modified: from \"" +
                                         truncate(textDiff.getBaseText(), 25) + "\" to \"" +

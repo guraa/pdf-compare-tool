@@ -1,299 +1,31 @@
 package guraa.pdfcompare.comparison;
 
-import guraa.pdfcompare.core.CustomPageDifference;
-import guraa.pdfcompare.core.ImageElement;
-import guraa.pdfcompare.core.TextElement;
 import guraa.pdfcompare.service.PagePair;
 
-import java.util.*;
+import java.util.List;
 
 /**
- * Class representing comparison results for a single page
+ * Represents the result of comparing two pages.
+ * This is a service-level class that wraps the core PageComparisonResult.
  */
 public class PageComparisonResult {
-    private int pageNumber;
-    private boolean onlyInBase;
-    private boolean onlyInCompare;
-    private boolean dimensionsDifferent;
-    private float[] baseDimensions;
-    private PageDifference pageDifference;
-    private float[] compareDimensions;
+    private PagePair pagePair;
+    private String changeType;  // "IDENTICAL", "MODIFIED", "ADDITION", "DELETION"
+    private boolean hasDifferences;
+    private int totalDifferences;
+    private String error;
+
+    // References to the core result components
     private TextComparisonResult textDifferences;
     private List<TextElementDifference> textElementDifferences;
     private List<ImageDifference> imageDifferences;
     private List<FontDifference> fontDifferences;
 
-    // Fields from the service version
-    private Integer originalBasePageNumber;
-    private Integer originalComparePageNumber;
-    private PDFComparisonResult comparisonResult;
-    private PagePair pagePair;
-    private boolean hasDifferences;
-    private int totalDifferences;
-    private String changeType;
-    private String error;
-    private CustomPageDifference customPageDifference;
+    // Additional metadata
+    private float[] baseDimensions;
+    private float[] compareDimensions;
+    private boolean dimensionsDifferent;
 
-
-
-    public void setComparisonResult(PDFComparisonResult comparisonResult) {
-        this.comparisonResult = comparisonResult;
-
-        // If we have a comparison result with page differences, extract the first one
-        if (comparisonResult != null && comparisonResult.getPageDifferences() != null
-                && !comparisonResult.getPageDifferences().isEmpty()) {
-            guraa.pdfcompare.comparison.PageComparisonResult pageResult =
-                    comparisonResult.getPageDifferences().get(0);
-
-            // Copy properties from the comparison result to this object for compatibility
-            this.pageNumber = pageResult.getPageNumber();
-            this.onlyInBase = pageResult.isOnlyInBase();
-            this.onlyInCompare = pageResult.isOnlyInCompare();
-            this.dimensionsDifferent = pageResult.isDimensionsDifferent();
-            this.baseDimensions = pageResult.getBaseDimensions();
-            this.compareDimensions = pageResult.getCompareDimensions();
-            this.textDifferences = pageResult.getTextDifferences();
-            this.textElementDifferences = pageResult.getTextElementDifferences();
-            this.imageDifferences = pageResult.getImageDifferences();
-            this.fontDifferences = pageResult.getFontDifferences();
-        }
-    }
-
-    /**
-     * Extract page differences as a list of items for API response
-     * @param isBase Whether to extract differences from base or comparison document
-     * @return List of difference items
-     */
-    public List<Map<String, Object>> extractPageDifferences(boolean isBase) {
-        List<Map<String, Object>> differences = new ArrayList<>();
-
-        // If page exists only in one document
-        if (onlyInBase && !isBase) {
-            Map<String, Object> diff = new HashMap<>();
-            diff.put("id", "page-" + pageNumber + "-missing");
-            diff.put("type", "structure");
-            diff.put("description", "Page only exists in base document");
-            diff.put("severity", "critical");
-            diff.put("changeType", "deleted");
-            differences.add(diff);
-            return differences;
-        }
-
-        if (onlyInCompare && isBase) {
-            Map<String, Object> diff = new HashMap<>();
-            diff.put("id", "page-" + pageNumber + "-missing");
-            diff.put("type", "structure");
-            diff.put("description", "Page only exists in comparison document");
-            diff.put("severity", "critical");
-            diff.put("changeType", "added");
-            differences.add(diff);
-            return differences;
-        }
-
-        // Add text differences
-        if (textDifferences != null && textDifferences.getDifferences() != null) {
-            for (int i = 0; i < textDifferences.getDifferences().size(); i++) {
-                TextDifferenceItem textDiff = textDifferences.getDifferences().get(i);
-
-                Map<String, Object> diff = new HashMap<>();
-                diff.put("id", "text-" + pageNumber + "-" + i);
-                diff.put("type", "text");
-
-                TextDifferenceType diffType = textDiff.getDifferenceType();
-                if (diffType == TextDifferenceType.ADDED) {
-                    if (isBase) continue; // Skip added text for base document
-                    diff.put("changeType", "added");
-                    diff.put("compareText", textDiff.getCompareText());
-                    diff.put("description", "Text added: " + textDiff.getCompareText());
-                } else if (diffType == TextDifferenceType.DELETED) {
-                    if (!isBase) continue; // Skip deleted text for compare document
-                    diff.put("changeType", "deleted");
-                    diff.put("baseText", textDiff.getBaseText());
-                    diff.put("description", "Text deleted: " + textDiff.getBaseText());
-                } else if (diffType == TextDifferenceType.MODIFIED) {
-                    diff.put("changeType", "modified");
-                    diff.put("baseText", textDiff.getBaseText());
-                    diff.put("compareText", textDiff.getCompareText());
-                    diff.put("description", "Text modified from \"" +
-                            (isBase ? textDiff.getBaseText() : textDiff.getCompareText()) +
-                            "\" to \"" +
-                            (isBase ? textDiff.getCompareText() : textDiff.getBaseText()) + "\"");
-                }
-
-                diff.put("lineNumber", textDiff.getLineNumber());
-                diff.put("severity", "minor");
-
-                differences.add(diff);
-            }
-        }
-
-        // Add text element differences
-        if (textElementDifferences != null) {
-            for (int i = 0; i < textElementDifferences.size(); i++) {
-                TextElementDifference elementDiff = textElementDifferences.get(i);
-
-                // Skip differences not relevant to current document
-                if (isBase && elementDiff.isOnlyInCompare()) continue;
-                if (!isBase && elementDiff.isOnlyInBase()) continue;
-
-                Map<String, Object> diff = new HashMap<>();
-                diff.put("id", "element-" + pageNumber + "-" + i);
-
-                if (elementDiff.isStyleDifferent()) {
-                    diff.put("type", "style");
-                    diff.put("changeType", "modified");
-
-                    TextElement element = isBase ? elementDiff.getBaseElement() : elementDiff.getCompareElement();
-                    if (element != null) {
-                        diff.put("text", element.getText());
-
-                        Map<String, Object> style = new HashMap<>();
-                        style.put("fontName", element.getFontName());
-                        style.put("fontSize", element.getFontSize());
-                        style.put("fontStyle", element.getFontStyle());
-                        style.put("color", element.getColor());
-
-                        if (isBase) {
-                            diff.put("baseStyle", style);
-                        } else {
-                            diff.put("compareStyle", style);
-                        }
-                    }
-
-                    diff.put("severity", "minor");
-                    diff.put("description", "Text style differs");
-                } else {
-                    diff.put("type", "text");
-
-                    if (elementDiff.isOnlyInBase()) {
-                        diff.put("changeType", "deleted");
-                        diff.put("baseText", elementDiff.getBaseElement().getText());
-                        diff.put("description", "Text deleted: " + elementDiff.getBaseElement().getText());
-                    } else if (elementDiff.isOnlyInCompare()) {
-                        diff.put("changeType", "added");
-                        diff.put("compareText", elementDiff.getCompareElement().getText());
-                        diff.put("description", "Text added: " + elementDiff.getCompareElement().getText());
-                    }
-
-                    diff.put("severity", "minor");
-                }
-
-                // Set position bounds for highlighting
-                TextElement element = isBase ? elementDiff.getBaseElement() : elementDiff.getCompareElement();
-                if (element != null) {
-                    Map<String, Float> bounds = new HashMap<>();
-                    bounds.put("x", element.getX());
-                    bounds.put("y", element.getY());
-                    bounds.put("width", element.getWidth());
-                    bounds.put("height", element.getHeight());
-                    diff.put("bounds", bounds);
-
-                    Map<String, Float> position = new HashMap<>();
-                    position.put("x", element.getX());
-                    position.put("y", element.getY());
-                    diff.put("position", position);
-                }
-
-                differences.add(diff);
-            }
-        }
-
-        // Add image differences
-        if (imageDifferences != null) {
-            for (int i = 0; i < imageDifferences.size(); i++) {
-                ImageDifference imageDiff = imageDifferences.get(i);
-
-                // Skip differences not relevant to current document
-                if (isBase && imageDiff.isOnlyInCompare()) continue;
-                if (!isBase && imageDiff.isOnlyInBase()) continue;
-
-                Map<String, Object> diff = new HashMap<>();
-                diff.put("id", "image-" + pageNumber + "-" + i);
-                diff.put("type", "image");
-
-                ImageElement image = isBase ? imageDiff.getBaseImage() : imageDiff.getCompareImage();
-
-                if (imageDiff.isOnlyInBase()) {
-                    diff.put("changeType", "deleted");
-                    diff.put("description", "Image deleted");
-                } else if (imageDiff.isOnlyInCompare()) {
-                    diff.put("changeType", "added");
-                    diff.put("description", "Image added");
-                } else {
-                    diff.put("changeType", "modified");
-
-                    List<String> changes = new ArrayList<>();
-                    if (imageDiff.isDimensionsDifferent()) {
-                        changes.add("Dimensions differ");
-                    }
-                    if (imageDiff.isPositionDifferent()) {
-                        changes.add("Position differs");
-                    }
-                    if (imageDiff.isFormatDifferent()) {
-                        changes.add("Format differs");
-                    }
-
-                    diff.put("changes", changes);
-                    diff.put("description", String.join(", ", changes));
-                }
-
-                if (image != null) {
-                    diff.put("imageName", image.getName());
-                    diff.put("format", image.getFormat());
-
-                    Map<String, Float> dimensions = new HashMap<>();
-                    dimensions.put("width", image.getWidth());
-                    dimensions.put("height", image.getHeight());
-                    diff.put("dimensions", dimensions);
-
-                    // Set position bounds for highlighting
-                    Map<String, Float> bounds = new HashMap<>();
-                    bounds.put("x", image.getX());
-                    bounds.put("y", image.getY());
-                    bounds.put("width", image.getWidth());
-                    bounds.put("height", image.getHeight());
-                    diff.put("bounds", bounds);
-
-                    Map<String, Float> position = new HashMap<>();
-                    position.put("x", image.getX());
-                    position.put("y", image.getY());
-                    diff.put("position", position);
-                }
-
-                diff.put("severity", "major");
-
-                differences.add(diff);
-            }
-        }
-
-        // Add font differences
-        if (fontDifferences != null) {
-            for (int i = 0; i < fontDifferences.size(); i++) {
-                // Implementation for font differences would go here
-                // Similar to the other difference types
-            }
-        }
-
-        return differences;
-    }
-
-    // Getters and setters from the original class
-
-    /**
-     * Get the page difference information
-     * @return Page difference object
-     */
-    public PageDifference getPageDifference() {
-        return pageDifference;
-    }
-
-    /**
-     * Set the page difference information
-     * @param pageDifference Page difference object
-     */
-    public void setPageDifference(PageDifference pageDifference) {
-        this.pageDifference = pageDifference;
-    }
     /**
      * Default constructor
      */
@@ -301,199 +33,265 @@ public class PageComparisonResult {
     }
 
     /**
-     * Create a result with a page pair
+     * Constructor with page pair
      * @param pagePair The page pair being compared
      */
     public PageComparisonResult(PagePair pagePair) {
         this.pagePair = pagePair;
     }
 
-    public Integer getOriginalBasePageNumber() {
-        return originalBasePageNumber;
+    /**
+     * Check if this represents a matched page pair
+     * @return true if the page pair is matched
+     */
+    public boolean isMatched() {
+        return pagePair != null && pagePair.isMatched();
     }
 
-    public void setOriginalBasePageNumber(Integer originalBasePageNumber) {
-        this.originalBasePageNumber = originalBasePageNumber;
-    }
-
-    public Integer getOriginalComparePageNumber() {
-        return originalComparePageNumber;
-    }
-
-    public void setOriginalComparePageNumber(Integer originalComparePageNumber) {
-        this.originalComparePageNumber = originalComparePageNumber;
-    }
-
-    public int getPageNumber() {
-        return pageNumber;
-    }
-
-    public void setPageNumber(int pageNumber) {
-        this.pageNumber = pageNumber;
-    }
-
-    public boolean isOnlyInBase() {
-        return onlyInBase;
-    }
-
-    public void setOnlyInBase(boolean onlyInBase) {
-        this.onlyInBase = onlyInBase;
-    }
-
-    public boolean isOnlyInCompare() {
-        return onlyInCompare;
-    }
-
-    public void setOnlyInCompare(boolean onlyInCompare) {
-        this.onlyInCompare = onlyInCompare;
-    }
-
-    public boolean isDimensionsDifferent() {
-        return dimensionsDifferent;
-    }
-
-    public void setDimensionsDifferent(boolean dimensionsDifferent) {
-        this.dimensionsDifferent = dimensionsDifferent;
-    }
-
-    public float[] getBaseDimensions() {
-        return baseDimensions;
-    }
-
-    public void setBaseDimensions(float[] baseDimensions) {
-        this.baseDimensions = baseDimensions;
-    }
-
-    public float[] getCompareDimensions() {
-        return compareDimensions;
-    }
-
-    public void setCompareDimensions(float[] compareDimensions) {
-        this.compareDimensions = compareDimensions;
-    }
-
-    public TextComparisonResult getTextDifferences() {
-        return textDifferences;
-    }
-
-    public void setTextDifferences(TextComparisonResult textDifferences) {
-        this.textDifferences = textDifferences;
-    }
-
-    public List<TextElementDifference> getTextElementDifferences() {
-        return textElementDifferences;
-    }
-
-    public void setTextElementDifferences(List<TextElementDifference> textElementDifferences) {
-        this.textElementDifferences = textElementDifferences;
-    }
-
-    public List<ImageDifference> getImageDifferences() {
-        return imageDifferences;
-    }
-
-    public void setImageDifferences(List<ImageDifference> imageDifferences) {
-        this.imageDifferences = imageDifferences;
-    }
-
-    public List<FontDifference> getFontDifferences() {
-        return fontDifferences;
-    }
-
-    public void setFontDifferences(List<FontDifference> fontDifferences) {
-        this.fontDifferences = fontDifferences;
-    }
-
-    // Additional methods from the service version
+    /**
+     * Get the page pair
+     * @return The page pair
+     */
     public PagePair getPagePair() {
         return pagePair;
     }
 
+    /**
+     * Set the page pair
+     * @param pagePair The page pair
+     */
     public void setPagePair(PagePair pagePair) {
         this.pagePair = pagePair;
     }
 
-    public boolean isHasDifferences() {
-        return hasDifferences;
-    }
-
-    public void setHasDifferences(boolean hasDifferences) {
-        this.hasDifferences = hasDifferences;
-    }
-
-    public int getTotalDifferences() {
-        return totalDifferences;
-    }
-
-    public void setTotalDifferences(int totalDifferences) {
-        this.totalDifferences = totalDifferences;
-    }
-
-    public CustomPageDifference getCustomPageDifference() {
-        return customPageDifference;
-    }
-
-    public void setCustomPageDifference(CustomPageDifference customPageDifference) {
-        this.customPageDifference = customPageDifference;
-    }
-
+    /**
+     * Get the change type
+     * @return The change type
+     */
     public String getChangeType() {
-        if (changeType != null) {
-            return changeType;
-        }
-
-        if (!hasDifferences && pagePair != null && pagePair.isMatched()) {
-            return "IDENTICAL";
-        } else if (pagePair != null && pagePair.isMatched()) {
-            return "MODIFIED";
-        } else if (pagePair != null && pagePair.getBaseFingerprint() != null) {
-            return "DELETION";
-        } else {
-            return "ADDITION";
-        }
+        return changeType;
     }
 
+    /**
+     * Set the change type
+     * @param changeType The change type
+     */
     public void setChangeType(String changeType) {
         this.changeType = changeType;
     }
 
+    /**
+     * Check if the page has differences
+     * @return true if there are differences
+     */
+    public boolean isHasDifferences() {
+        return hasDifferences;
+    }
+
+    /**
+     * Set whether the page has differences
+     * @param hasDifferences Whether the page has differences
+     */
+    public void setHasDifferences(boolean hasDifferences) {
+        this.hasDifferences = hasDifferences;
+    }
+
+    /**
+     * Get the total number of differences
+     * @return Total differences
+     */
+    public int getTotalDifferences() {
+        return totalDifferences;
+    }
+
+    /**
+     * Set the total number of differences
+     * @param totalDifferences Total differences
+     */
+    public void setTotalDifferences(int totalDifferences) {
+        this.totalDifferences = totalDifferences;
+    }
+
+    /**
+     * Get the error message
+     * @return Error message
+     */
     public String getError() {
         return error;
     }
 
+    /**
+     * Set the error message
+     * @param error Error message
+     */
     public void setError(String error) {
         this.error = error;
     }
 
+    /**
+     * Check if there's an error
+     * @return true if there's an error
+     */
     public boolean hasError() {
         return error != null && !error.isEmpty();
     }
 
+    /**
+     * Get the text differences
+     * @return Text differences
+     */
+    public TextComparisonResult getTextDifferences() {
+        return textDifferences;
+    }
+
+    /**
+     * Set the text differences
+     * @param textDifferences Text differences
+     */
+    public void setTextDifferences(TextComparisonResult textDifferences) {
+        this.textDifferences = textDifferences;
+    }
+
+    /**
+     * Get the text element differences
+     * @return Text element differences
+     */
+    public List<TextElementDifference> getTextElementDifferences() {
+        return textElementDifferences;
+    }
+
+    /**
+     * Set the text element differences
+     * @param textElementDifferences Text element differences
+     */
+    public void setTextElementDifferences(List<TextElementDifference> textElementDifferences) {
+        this.textElementDifferences = textElementDifferences;
+    }
+
+    /**
+     * Get the image differences
+     * @return Image differences
+     */
+    public List<ImageDifference> getImageDifferences() {
+        return imageDifferences;
+    }
+
+    /**
+     * Set the image differences
+     * @param imageDifferences Image differences
+     */
+    public void setImageDifferences(List<ImageDifference> imageDifferences) {
+        this.imageDifferences = imageDifferences;
+    }
+
+    /**
+     * Get the font differences
+     * @return Font differences
+     */
+    public List<FontDifference> getFontDifferences() {
+        return fontDifferences;
+    }
+
+    /**
+     * Set the font differences
+     * @param fontDifferences Font differences
+     */
+    public void setFontDifferences(List<FontDifference> fontDifferences) {
+        this.fontDifferences = fontDifferences;
+    }
+
+    /**
+     * Get the base dimensions
+     * @return Base dimensions
+     */
+    public float[] getBaseDimensions() {
+        return baseDimensions;
+    }
+
+    /**
+     * Set the base dimensions
+     * @param baseDimensions Base dimensions
+     */
+    public void setBaseDimensions(float[] baseDimensions) {
+        this.baseDimensions = baseDimensions;
+    }
+
+    /**
+     * Get the compare dimensions
+     * @return Compare dimensions
+     */
+    public float[] getCompareDimensions() {
+        return compareDimensions;
+    }
+
+    /**
+     * Set the compare dimensions
+     * @param compareDimensions Compare dimensions
+     */
+    public void setCompareDimensions(float[] compareDimensions) {
+        this.compareDimensions = compareDimensions;
+    }
+
+    /**
+     * Check if dimensions are different
+     * @return true if dimensions are different
+     */
+    public boolean isDimensionsDifferent() {
+        return dimensionsDifferent;
+    }
+
+    /**
+     * Set whether dimensions are different
+     * @param dimensionsDifferent Whether dimensions are different
+     */
+    public void setDimensionsDifferent(boolean dimensionsDifferent) {
+        this.dimensionsDifferent = dimensionsDifferent;
+    }
+
+    /**
+     * Check if the result indicates an addition
+     * @return true if the result is an addition
+     */
     public boolean isAddition() {
-        return "ADDITION".equals(getChangeType());
+        return "ADDITION".equals(changeType);
     }
 
+    /**
+     * Check if the result indicates a deletion
+     * @return true if the result is a deletion
+     */
     public boolean isDeletion() {
-        return "DELETION".equals(getChangeType());
+        return "DELETION".equals(changeType);
     }
 
+    /**
+     * Check if the result indicates a modification
+     * @return true if the result is a modification
+     */
     public boolean isModification() {
-        return "MODIFIED".equals(getChangeType());
+        return "MODIFIED".equals(changeType);
     }
 
+    /**
+     * Check if the result indicates identical pages
+     * @return true if the pages are identical
+     */
     public boolean isIdentical() {
-        return "IDENTICAL".equals(getChangeType());
+        return "IDENTICAL".equals(changeType);
     }
 
+    /**
+     * Get a summary of the comparison
+     * @return Summary string
+     */
     public String getSummary() {
         if (hasError()) {
             return "Error: " + error;
         }
 
         StringBuilder summary = new StringBuilder();
-        String type = getChangeType();
 
-        switch (type) {
+        switch (changeType) {
             case "ADDITION":
                 summary.append("Page added in compare document");
                 break;
@@ -516,7 +314,7 @@ public class PageComparisonResult {
     @Override
     public String toString() {
         return "PageComparisonResult{" +
-                "changeType='" + getChangeType() + '\'' +
+                "changeType='" + changeType + '\'' +
                 ", hasDifferences=" + hasDifferences +
                 ", totalDifferences=" + totalDifferences +
                 ", summary='" + getSummary() + '\'' +

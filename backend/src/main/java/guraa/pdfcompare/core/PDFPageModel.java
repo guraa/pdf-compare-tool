@@ -14,7 +14,12 @@ public class PDFPageModel {
     private List<ImageElement> images;
     private List<FontInfo> fonts;
 
+
     // Getters and setters
+    public String getTextContent() {
+        return text;
+    }
+
     public int getPageNumber() {
         return pageNumber;
     }

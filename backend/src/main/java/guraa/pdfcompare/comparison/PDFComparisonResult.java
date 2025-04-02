@@ -20,11 +20,21 @@ public class PDFComparisonResult {
     private int totalFontDifferences;
     private int totalStyleDifferences;
     private String matchingId;
+    private Map<Integer, Integer> pageMapping;
 
     // New field for document pairs
     private List<DocumentPair> documentPairs;
 
     // Getters and setters
+
+    public Map<Integer, Integer> getPageMapping() {
+        return pageMapping;
+    }
+
+    public void setPageMapping(Map<Integer, Integer> pageMapping) {
+        this.pageMapping = pageMapping;
+    }
+
     public Map<String, MetadataDifference> getMetadataDifferences() {
         return metadataDifferences;
     }

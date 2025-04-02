@@ -1,9 +1,13 @@
 package guraa.pdfcompare;
 
-import guraa.pdfcompare.comparison.*;
+import guraa.pdfcompare.comparison.PDFComparisonResult;
+import guraa.pdfcompare.comparison.PageComparisonResult;
+import guraa.pdfcompare.comparison.TextElementDifference;
 import guraa.pdfcompare.core.PDFDocumentModel;
+import guraa.pdfcompare.core.PDFPageModel;
 import guraa.pdfcompare.core.PDFProcessor;
 import guraa.pdfcompare.service.ReportGenerationService;
+import org.apache.commons.text.similarity.LevenshteinDistance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -145,44 +149,75 @@ public class PDFComparisonService {
     private PDFComparisonResult compareDocumentsInBatches(PDFComparisonEngine engine,
                                                           PDFDocumentModel baseDocument,
                                                           PDFDocumentModel compareDocument) {
-        // Create initial result with document metadata
         PDFComparisonResult result = new PDFComparisonResult();
         result.setBasePageCount(baseDocument.getPageCount());
         result.setComparePageCount(compareDocument.getPageCount());
         result.setPageCountDifferent(baseDocument.getPageCount() != compareDocument.getPageCount());
 
-        // Compare metadata
-        Map<String, MetadataDifference> metadataDiffs =
-                engine.compareMetadata(baseDocument.getMetadata(), compareDocument.getMetadata());
-        result.setMetadataDifferences(metadataDiffs);
+        // Steg 1: Extrahera text från sidorna
+        Map<Integer, String> baseText = extractTextByPage(baseDocument.getPages());
+        Map<Integer, String> compareText = extractTextByPage(compareDocument.getPages());
 
-        // Process pages in batches
+        // Steg 2: Matcha sidor innehållsmässigt
+        Map<Integer, Integer> pageMatches = matchPagesSmartly(baseText, compareText);
+        result.setPageMapping(pageMatches);
+
+        // Steg 3: Jämför de matchade sidorna
         List<PageComparisonResult> allPageDifferences = new ArrayList<>();
-        int totalPages = Math.max(baseDocument.getPageCount(), compareDocument.getPageCount());
 
-        for (int batchStart = 0; batchStart < totalPages; batchStart += MAX_PAGES_PER_BATCH) {
-            int batchEnd = Math.min(totalPages, batchStart + MAX_PAGES_PER_BATCH);
-            logger.info("Processing page batch {}-{} of {}", batchStart + 1, batchEnd, totalPages);
+        for (Map.Entry<Integer, Integer> entry : pageMatches.entrySet()) {
+            int baseIndex = entry.getKey();
+            int compareIndex = entry.getValue();
 
-            List<PageComparisonResult> batchResults =
-                    comparePageBatch(engine, baseDocument, compareDocument, batchStart, batchEnd);
+            if (baseIndex < baseDocument.getPageCount() && compareIndex < compareDocument.getPageCount()) {
+                logger.debug("Comparing matched pages: base {} ↔ compare {}", baseIndex + 1, compareIndex + 1);
 
-            allPageDifferences.addAll(batchResults);
+                PageComparisonResult pageResult = engine.comparePage(
+                        baseDocument.getPages().get(baseIndex),
+                        compareDocument.getPages().get(compareIndex)
+                );
 
-            // Force garbage collection after each batch
-            if (getUsedMemoryMB() > MEMORY_THRESHOLD_MB) {
-                System.gc();
-                logger.debug("Triggered GC after page batch. Memory used: {}MB", getUsedMemoryMB());
+                pageResult.setPageNumber(baseIndex + 1); // för visning
+                pageResult.setBasePageIndex(baseIndex);
+                pageResult.setComparePageIndex(compareIndex);
+
+                allPageDifferences.add(pageResult);
+            }
+        }
+
+        // Steg 4: Lägg till sidor som bara finns i base
+        for (int i = 0; i < baseDocument.getPageCount(); i++) {
+            if (!pageMatches.containsKey(i)) {
+                PageComparisonResult onlyInBase = new PageComparisonResult();
+                onlyInBase.setPageNumber(i + 1);
+                onlyInBase.setOnlyInBase(true);
+                onlyInBase.setBasePageIndex(i);
+                onlyInBase.setComparePageIndex(-1);
+                allPageDifferences.add(onlyInBase);
+            }
+        }
+
+        // Steg 5: Lägg till sidor som bara finns i compare
+        for (int j = 0; j < compareDocument.getPageCount(); j++) {
+            if (!pageMatches.containsValue(j)) {
+                PageComparisonResult onlyInCompare = new PageComparisonResult();
+                onlyInCompare.setPageNumber(j + 1);
+                onlyInCompare.setOnlyInCompare(true);
+                onlyInCompare.setBasePageIndex(-1);
+                onlyInCompare.setComparePageIndex(j);
+                allPageDifferences.add(onlyInCompare);
             }
         }
 
         result.setPageDifferences(allPageDifferences);
 
-        // Calculate summary statistics
+        // Steg 6: Summera
         calculateSummaryStatistics(result);
 
         return result;
     }
+
+
 
     /**
      * Compare a batch of pages
@@ -400,4 +435,80 @@ public class PDFComparisonService {
         logger.info("Comparison statistics: total={}, text={}, image={}, font={}, style={}",
                 totalDifferences, textDifferences, imageDifferences, fontDifferences, styleDifferences);
     }
+
+    private Map<Integer, String> extractTextByPage(List<PDFPageModel> pages) {
+        Map<Integer, String> result = new HashMap<>();
+        for (int i = 0; i < pages.size(); i++) {
+            result.put(i, pages.get(i).getTextContent().toLowerCase());
+        }
+        return result;
+    }
+
+
+    private Map<Integer, Integer> matchPagesSmartly(Map<Integer, String> basePages, Map<Integer, String> comparePages) {
+        Map<Integer, Integer> matches = new HashMap<>();
+        Set<Integer> usedCompare = new HashSet<>();
+        LevenshteinDistance levenshtein = new LevenshteinDistance();
+
+        double threshold = 0.6; // justera vid behov
+        int minLength = 50;     // ignorera väldigt korta sidor
+
+        for (Map.Entry<Integer, String> baseEntry : basePages.entrySet()) {
+            int baseIndex = baseEntry.getKey();
+            String baseText = baseEntry.getValue();
+
+            if (baseText == null || baseText.length() < minLength) continue;
+
+            double bestScore = 0.0;
+            int bestCompareIndex = -1;
+
+            for (Map.Entry<Integer, String> compareEntry : comparePages.entrySet()) {
+                int compareIndex = compareEntry.getKey();
+                if (usedCompare.contains(compareIndex)) continue;
+
+                String compareText = compareEntry.getValue();
+                if (compareText == null || compareText.length() < minLength) continue;
+
+                double jaccard = computeJaccardSimilarity(baseText, compareText);
+                double levRatio = computeLevenshteinRatio(levenshtein, baseText, compareText);
+
+                double score = (0.5 * jaccard) + (0.5 * levRatio);
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestCompareIndex = compareIndex;
+                }
+            }
+
+            if (bestCompareIndex != -1 && bestScore > threshold) {
+                matches.put(baseIndex, bestCompareIndex);
+                usedCompare.add(bestCompareIndex);
+                logger.info("✅ Matched base page {} to compare page {} (score: {})", baseIndex, bestCompareIndex, bestScore);
+            } else {
+                logger.info("❌ No match for base page {} (best score: {})", baseIndex, bestScore);
+            }
+        }
+
+        return matches;
+    }
+    private double computeJaccardSimilarity(String a, String b) {
+        Set<String> setA = new HashSet<>(Arrays.asList(a.split("\\s+")));
+        Set<String> setB = new HashSet<>(Arrays.asList(b.split("\\s+")));
+
+        Set<String> intersection = new HashSet<>(setA);
+        intersection.retainAll(setB);
+
+        Set<String> union = new HashSet<>(setA);
+        union.addAll(setB);
+
+        return union.isEmpty() ? 0.0 : (double) intersection.size() / union.size();
+    }
+
+    private double computeLevenshteinRatio(LevenshteinDistance levenshtein, String s1, String s2) {
+        int distance = levenshtein.apply(s1, s2);
+        int maxLen = Math.max(s1.length(), s2.length());
+        return maxLen == 0 ? 1.0 : 1.0 - ((double) distance / maxLen);
+    }
+
+
 }

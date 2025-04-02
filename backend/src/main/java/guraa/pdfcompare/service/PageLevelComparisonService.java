@@ -2,10 +2,7 @@ package guraa.pdfcompare.service;
 
 import guraa.pdfcompare.PDFComparisonEngine;
 import guraa.pdfcompare.comparison.PageComparisonResult;
-import guraa.pdfcompare.core.CustomPageDifference;
-import guraa.pdfcompare.core.PDFDocumentModel;
-import guraa.pdfcompare.core.PDFPageModel;
-import guraa.pdfcompare.core.TextElement;
+import guraa.pdfcompare.core.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
