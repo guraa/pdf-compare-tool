@@ -1,8 +1,10 @@
 package guraa.pdfcompare.config;
 
 import guraa.pdfcompare.PDFComparisonEngine;
+import guraa.pdfcompare.PDFComparisonService;
 import guraa.pdfcompare.service.EnhancedMatchingService;
 import guraa.pdfcompare.service.EnhancedPageMatcher;
+import guraa.pdfcompare.service.PageLevelComparisonService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -29,10 +31,15 @@ public class EnhancedMatchingConfig {
     /**
      * Configure the enhanced matching service
      * @param comparisonEngine The PDF comparison engine
+     * @param comparisonService The PDF comparison service
+     * @param pageLevelComparisonService The page level comparison service
      * @return EnhancedMatchingService
      */
     @Bean
-    public EnhancedMatchingService enhancedMatchingService(PDFComparisonEngine comparisonEngine) {
+    public EnhancedMatchingService enhancedMatchingService(
+            PDFComparisonEngine comparisonEngine,
+            PDFComparisonService comparisonService,
+            PageLevelComparisonService pageLevelComparisonService) {
         return new EnhancedMatchingService(comparisonEngine);
     }
 

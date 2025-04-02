@@ -66,7 +66,7 @@ public class PageLevelComparisonService {
         List<PagePair> pagePairs = findOptimalPageMatching(similarityMatrix, baseFingerprints, compareFingerprints);
 
         // Compare matched pages in detail
-        List<PageComparisonResult> pageResults = compareMatchedPages(pagePairs, baseDoc, compareDoc);
+        List<guraa.pdfcompare.service.PageComparisonResult> pageResults = compareMatchedPages(pagePairs, baseDoc, compareDoc);
 
         // Create a summary of the comparison
         PageLevelComparisonSummary summary = createComparisonSummary(pagePairs, pageResults);
@@ -91,9 +91,7 @@ public class PageLevelComparisonService {
             int pageIndex = i;
 
             // Create basic fingerprint
-            PageFingerprint fingerprint = new PageFingerprint();
-            fingerprint.setSourceType(sourceType);
-            fingerprint.setPageIndex(pageIndex);
+            PageFingerprint fingerprint = new PageFingerprint(sourceType, pageIndex);
             fingerprint.setPage(page);
 
             // Extract text
@@ -401,31 +399,32 @@ public class PageLevelComparisonService {
      * @param compareDoc Compare document
      * @return List of page comparison results
      */
-    private List<PageComparisonResult> compareMatchedPages(List<PagePair> pagePairs,
+    private List<guraa.pdfcompare.service.PageComparisonResult> compareMatchedPages(List<PagePair> pagePairs,
                                                            PDFDocumentModel baseDoc,
                                                            PDFDocumentModel compareDoc) {
-        List<CompletableFuture<PageComparisonResult>> futures = new ArrayList<>();
+        List<CompletableFuture<guraa.pdfcompare.service.PageComparisonResult>> futures = new ArrayList<>();
 
         for (PagePair pair : pagePairs) {
+            final PagePair finalPair = pair;
             futures.add(CompletableFuture.supplyAsync(() -> {
                 try {
-                    PageComparisonResult result = new PageComparisonResult();
-                    result.setPagePair(pair);
+                    guraa.pdfcompare.service.PageComparisonResult result = new guraa.pdfcompare.service.PageComparisonResult();
+                    result.setPagePair(finalPair);
 
-                    if (pair.isMatched()) {
+                    if (finalPair.isMatched()) {
                         // Get the page models for this pair
-                        PDFPageModel basePage = baseDoc.getPages().get(pair.getBaseFingerprint().getPageIndex());
-                        PDFPageModel comparePage = compareDoc.getPages().get(pair.getCompareFingerprint().getPageIndex());
+                        PDFPageModel basePage = baseDoc.getPages().get(finalPair.getBaseFingerprint().getPageIndex());
+                        PDFPageModel comparePage = compareDoc.getPages().get(finalPair.getCompareFingerprint().getPageIndex());
 
                         // Use the comparison engine to compare pages
                         guraa.pdfcompare.comparison.PageComparisonResult comparisonResult =
                                 comparisonEngine.comparePage(basePage, comparePage);
 
                         // Convert the comparison result to service result using adapter
-                        PageComparisonResult adaptedResult = PageComparisonResultAdapter.toServiceResult(comparisonResult);
+                        guraa.pdfcompare.service.PageComparisonResult adaptedResult = PageComparisonResultAdapter.toServiceResult(comparisonResult);
 
                         // Set the page pair and maintain other service-specific properties
-                        adaptedResult.setPagePair(pair);
+                        adaptedResult.setPagePair(finalPair);
 
                         // Return the adapted result
                         return adaptedResult;
@@ -435,27 +434,27 @@ public class PageLevelComparisonService {
                         result.setTotalDifferences(1);  // Count as one major difference
 
                         // Create an appropriate page difference
-                        CustomPageDifference difference = new CustomPageDifference();
-                        if (pair.getBaseFingerprint() != null) {
-                            difference.setPageNumber(pair.getBaseFingerprint().getPageIndex() + 1);
-                            difference.setBasePageExists(true);
-                            difference.setComparePageExists(false);
+                        PageDifference difference = new PageDifference();
+                        if (finalPair.getBaseFingerprint() != null) {
+                            difference.setPageNumber(finalPair.getBaseFingerprint().getPageIndex() + 1);
+                            difference.setOnlyInBase(true);
+                            difference.setOnlyInCompare(false);
                             result.setChangeType("DELETION");
                         } else {
-                            difference.setPageNumber(pair.getCompareFingerprint().getPageIndex() + 1);
-                            difference.setBasePageExists(false);
-                            difference.setComparePageExists(true);
+                            difference.setPageNumber(finalPair.getCompareFingerprint().getPageIndex() + 1);
+                            difference.setOnlyInBase(false);
+                            difference.setOnlyInCompare(true);
                             result.setChangeType("ADDITION");
                         }
 
-                        result.setCustomPageDifference(difference);
+                        result.setPageDifference(difference);
                     }
 
                     return result;
                 } catch (Exception e) {
                     logger.error("Error comparing page pair", e);
-                    PageComparisonResult errorResult = new PageComparisonResult();
-                    errorResult.setPagePair(pair);
+                    guraa.pdfcompare.service.PageComparisonResult errorResult = new guraa.pdfcompare.service.PageComparisonResult();
+                    errorResult.setPagePair(finalPair);
                     errorResult.setError("Error comparing pages: " + e.getMessage());
                     errorResult.setHasDifferences(true);
                     return errorResult;
@@ -476,7 +475,7 @@ public class PageLevelComparisonService {
      * @return Comparison summary
      */
     private PageLevelComparisonSummary createComparisonSummary(List<PagePair> pagePairs,
-                                                               List<PageComparisonResult> pageResults) {
+                                                               List<guraa.pdfcompare.service.PageComparisonResult> pageResults) {
         PageLevelComparisonSummary summary = new PageLevelComparisonSummary();
 
         // Count matched and unmatched pages
@@ -507,14 +506,14 @@ public class PageLevelComparisonService {
         int totalFontDifferences = 0;
         int totalStyleDifferences = 0;
 
-        for (PageComparisonResult result : pageResults) {
+        for (guraa.pdfcompare.service.PageComparisonResult result : pageResults) {
             if (result.isHasDifferences()) {
                 pagesWithDifferences++;
                 totalDifferences += result.getTotalDifferences();
 
                 // Count specific types of differences
-                if (result.getTextDifferences() != null && result.getTextDifferences().getDifferences() != null) {
-                    totalTextDifferences += result.getTextDifferences().getDifferences().size();
+                if (result.getTextDifferences() != null && result.getTextDifferences().getDifferenceItems() != null) {
+                    totalTextDifferences += result.getTextDifferences().getDifferenceItems().size();
                 }
 
                 if (result.getImageDifferences() != null) {

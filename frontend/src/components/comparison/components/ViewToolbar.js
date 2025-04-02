@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { getDocumentPageDetails } from '../../../services/api';
 
 const ViewToolbar = ({ 
   viewMode,
@@ -28,9 +29,118 @@ const ViewToolbar = ({
     }
   };
   
+  // State to track if we're currently checking for differences
+  const [isCheckingDifferences, setIsCheckingDifferences] = useState(false);
+
+  // Helper function to check if a page has differences
+  const checkPageForDifferences = async (comparisonId, pairIndex, pageNumber) => {
+    try {
+      console.log(`Checking page ${pageNumber} for differences...`);
+      const pageDetails = await getDocumentPageDetails(comparisonId, pairIndex, pageNumber);
+      
+      // Check for specific messages
+      if (pageDetails && pageDetails.message) {
+        // Skip pages that don't exist in the document pair
+        if (pageDetails.message.includes("Page not found")) {
+          console.log(`Page ${pageNumber} not found in document pair, skipping`);
+          return { exists: false, hasDifferences: false };
+        }
+        
+        // Handle pages that exist but don't have differences
+        if (pageDetails.message.includes("Page exists but has no differences")) {
+          console.log(`Page ${pageNumber} exists but has no differences`);
+          return { exists: true, hasDifferences: false };
+        }
+      }
+      
+      // Check if the page has any differences
+      const hasDifferencesOnPage = 
+        (pageDetails.baseDifferences && pageDetails.baseDifferences.length > 0) ||
+        (pageDetails.compareDifferences && pageDetails.compareDifferences.length > 0);
+      
+      console.log(`Page ${pageNumber} has differences: ${hasDifferencesOnPage}`);
+      return { exists: true, hasDifferences: hasDifferencesOnPage };
+    } catch (err) {
+      console.error(`Error checking page ${pageNumber} for differences:`, err);
+      return { exists: false, hasDifferences: false };
+    }
+  };
+
   // Go to the next page that has differences
-  const handleNextDifferencePage = () => {
-    if (!result || !result.pageDifferences) return;
+  const handleNextDifferencePage = async () => {
+    if (!result || isCheckingDifferences) return;
+    
+    // Handle smart comparison mode differently
+    if (result.documentPairs && result.documentPairs.length > 0) {
+      try {
+        setIsCheckingDifferences(true);
+        
+        // In smart mode, we need to check if the page exists in the current document pair
+        const currentPair = result.documentPairs[0]; // Assuming we're working with the first pair
+        const comparisonId = result.id;
+        
+        // Get the page counts for both documents
+        const basePageCount = currentPair.basePageCount || 0;
+        const comparePageCount = currentPair.comparePageCount || 0;
+        const maxPage = Math.max(basePageCount, comparePageCount);
+        
+        // Safety check - don't try to navigate beyond the document
+        if (maxPage <= 0) {
+          console.warn("Document pair has no pages");
+          setIsCheckingDifferences(false);
+          return;
+        }
+        
+        // If we're already at the last page, go back to page 1
+        if (currentPage >= maxPage) {
+          setSelectedPage(1);
+          setIsCheckingDifferences(false);
+          return;
+        }
+        
+        // Try to find the next page with differences
+        console.log("Smart comparison mode: looking for next page with differences");
+        
+        // Check pages from current+1 to maxPage
+        for (let i = currentPage + 1; i <= maxPage; i++) {
+          const result = await checkPageForDifferences(comparisonId, 0, i);
+          if (result.exists && result.hasDifferences) {
+            console.log(`Found differences on page ${i}, navigating there`);
+            setSelectedPage(i);
+            setIsCheckingDifferences(false);
+            return;
+          }
+        }
+        
+        // If we reached the end, start from the beginning
+        for (let i = 1; i < currentPage; i++) {
+          const result = await checkPageForDifferences(comparisonId, 0, i);
+          if (result.exists && result.hasDifferences) {
+            console.log(`Found differences on page ${i} (wrapped), navigating there`);
+            setSelectedPage(i);
+            setIsCheckingDifferences(false);
+            return;
+          }
+        }
+        
+        // If we couldn't find any page with differences, just go to the next page
+        console.log("No pages with differences found, falling back to simple page navigation");
+        let nextPage = currentPage + 1;
+        if (nextPage > maxPage) {
+          nextPage = 1;
+        }
+        
+        setSelectedPage(nextPage);
+        setIsCheckingDifferences(false);
+      } catch (err) {
+        console.error("Error navigating to next difference page:", err);
+        setIsCheckingDifferences(false);
+      }
+      return;
+    }
+    
+    // Original logic for non-smart mode
+    if (!result.pageDifferences) return;
     
     // Find the next page with differences
     for (let i = currentPage; i < totalPages; i++) {
@@ -52,8 +162,73 @@ const ViewToolbar = ({
   };
   
   // Go to the previous page that has differences
-  const handlePreviousDifferencePage = () => {
-    if (!result || !result.pageDifferences) return;
+  const handlePreviousDifferencePage = async () => {
+    if (!result || isCheckingDifferences) return;
+    
+    // Handle smart comparison mode differently
+    if (result.documentPairs && result.documentPairs.length > 0) {
+      try {
+        setIsCheckingDifferences(true);
+        
+        // In smart mode, we need to check if the page exists in the current document pair
+        const currentPair = result.documentPairs[0]; // Assuming we're working with the first pair
+        const comparisonId = result.id;
+        
+        // Get the page counts for both documents
+        const basePageCount = currentPair.basePageCount || 0;
+        const comparePageCount = currentPair.comparePageCount || 0;
+        const maxPage = Math.max(basePageCount, comparePageCount);
+        
+        // Safety check - don't try to navigate beyond the document
+        if (maxPage <= 0) {
+          console.warn("Document pair has no pages");
+          setIsCheckingDifferences(false);
+          return;
+        }
+        
+        // Try to find the previous page with differences
+        console.log("Smart comparison mode: looking for previous page with differences");
+        
+        // Check pages from current-1 down to 1
+        for (let i = currentPage - 1; i >= 1; i--) {
+          const result = await checkPageForDifferences(comparisonId, 0, i);
+          if (result.exists && result.hasDifferences) {
+            console.log(`Found differences on page ${i}, navigating there`);
+            setSelectedPage(i);
+            setIsCheckingDifferences(false);
+            return;
+          }
+        }
+        
+        // If we reached the beginning, start from the end
+        for (let i = maxPage; i > currentPage; i--) {
+          const result = await checkPageForDifferences(comparisonId, 0, i);
+          if (result.exists && result.hasDifferences) {
+            console.log(`Found differences on page ${i} (wrapped), navigating there`);
+            setSelectedPage(i);
+            setIsCheckingDifferences(false);
+            return;
+          }
+        }
+        
+        // If we couldn't find any page with differences, just go to the previous page
+        console.log("No pages with differences found, falling back to simple page navigation");
+        let prevPage = currentPage - 1;
+        if (prevPage < 1) {
+          prevPage = maxPage;
+        }
+        
+        setSelectedPage(prevPage);
+        setIsCheckingDifferences(false);
+      } catch (err) {
+        console.error("Error navigating to previous difference page:", err);
+        setIsCheckingDifferences(false);
+      }
+      return;
+    }
+    
+    // Original logic for non-smart mode
+    if (!result.pageDifferences) return;
     
     // Find the previous page with differences
     for (let i = currentPage - 2; i >= 0; i--) {

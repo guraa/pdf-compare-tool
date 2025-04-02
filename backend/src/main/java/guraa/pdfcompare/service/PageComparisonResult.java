@@ -1,16 +1,24 @@
-package guraa.pdfcompare.comparison;
+package guraa.pdfcompare.service;
 
+import guraa.pdfcompare.comparison.TextComparisonResult;
+import guraa.pdfcompare.comparison.TextElementDifference;
+import guraa.pdfcompare.comparison.ImageDifference;
+import guraa.pdfcompare.comparison.FontDifference;
+
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Represents the result of comparing two pages.
- * This is a core-level class that is used by the comparison engine.
+ * This is a service-level class that wraps the core comparison result.
  */
 public class PageComparisonResult {
+    private PagePair pagePair;
     private String changeType;  // "IDENTICAL", "MODIFIED", "ADDITION", "DELETION"
     private boolean hasDifferences;
     private int totalDifferences;
     private String error;
+    private CustomPageDifference customPageDifference;
 
     // References to the core result components
     private TextComparisonResult textDifferences;
@@ -25,17 +33,48 @@ public class PageComparisonResult {
     private boolean onlyInCompare;
     private boolean onlyInBase;
     private float pageNumber;
-    private int basePageIndex;
-    private int comparePageIndex;
     private int originalBasePageNumber;
     private int originalComparePageNumber;
-    private guraa.pdfcompare.service.PagePair pagePair;
-    private guraa.pdfcompare.service.PageDifference pageDifference;
+    private int basePageIndex;
+    private int comparePageIndex;
+    private PageDifference pageDifference;
 
     /**
      * Default constructor
      */
     public PageComparisonResult() {
+    }
+
+    /**
+     * Constructor with page pair
+     * @param pagePair The page pair being compared
+     */
+    public PageComparisonResult(PagePair pagePair) {
+        this.pagePair = pagePair;
+    }
+
+    /**
+     * Check if this represents a matched page pair
+     * @return true if the page pair is matched
+     */
+    public boolean isMatched() {
+        return pagePair != null && pagePair.isMatched();
+    }
+
+    /**
+     * Get the page pair
+     * @return The page pair
+     */
+    public PagePair getPagePair() {
+        return pagePair;
+    }
+
+    /**
+     * Set the page pair
+     * @param pagePair The page pair
+     */
+    public void setPagePair(PagePair pagePair) {
+        this.pagePair = pagePair;
     }
 
     /**
@@ -173,6 +212,70 @@ public class PageComparisonResult {
     public void setPageNumber(float pageNumber) {
         this.pageNumber = pageNumber;
     }
+    
+    /**
+     * Get the base page index
+     * @return Base page index
+     */
+    public int getBasePageIndex() {
+        return basePageIndex;
+    }
+    
+    /**
+     * Set the base page index
+     * @param basePageIndex Base page index
+     */
+    public void setBasePageIndex(int basePageIndex) {
+        this.basePageIndex = basePageIndex;
+    }
+    
+    /**
+     * Get the compare page index
+     * @return Compare page index
+     */
+    public int getComparePageIndex() {
+        return comparePageIndex;
+    }
+
+    /**
+     * Set the compare page index
+     * @param comparePageIndex Compare page index
+     */
+    public void setComparePageIndex(int comparePageIndex) {
+        this.comparePageIndex = comparePageIndex;
+    }
+    
+    /**
+     * Get the original base page number
+     * @return Original base page number
+     */
+    public int getOriginalBasePageNumber() {
+        return originalBasePageNumber;
+    }
+    
+    /**
+     * Set the original base page number
+     * @param originalBasePageNumber Original base page number
+     */
+    public void setOriginalBasePageNumber(int originalBasePageNumber) {
+        this.originalBasePageNumber = originalBasePageNumber;
+    }
+    
+    /**
+     * Get the original compare page number
+     * @return Original compare page number
+     */
+    public int getOriginalComparePageNumber() {
+        return originalComparePageNumber;
+    }
+    
+    /**
+     * Set the original compare page number
+     * @param originalComparePageNumber Original compare page number
+     */
+    public void setOriginalComparePageNumber(int originalComparePageNumber) {
+        this.originalComparePageNumber = originalComparePageNumber;
+    }
 
     /**
      * Check if the page is only in the base document
@@ -271,67 +374,11 @@ public class PageComparisonResult {
     }
 
     /**
-     * Get the base page index
-     * @return Base page index
+     * Get the custom page difference
+     * @return Custom page difference
      */
-    public int getBasePageIndex() {
-        return basePageIndex;
-    }
-
-    /**
-     * Set the base page index
-     * @param basePageIndex Base page index
-     */
-    public void setBasePageIndex(int basePageIndex) {
-        this.basePageIndex = basePageIndex;
-    }
-
-    /**
-     * Get the compare page index
-     * @return Compare page index
-     */
-    public int getComparePageIndex() {
-        return comparePageIndex;
-    }
-
-    /**
-     * Set the compare page index
-     * @param comparePageIndex Compare page index
-     */
-    public void setComparePageIndex(int comparePageIndex) {
-        this.comparePageIndex = comparePageIndex;
-    }
-    
-    /**
-     * Get the original base page number
-     * @return Original base page number
-     */
-    public int getOriginalBasePageNumber() {
-        return originalBasePageNumber;
-    }
-    
-    /**
-     * Set the original base page number
-     * @param originalBasePageNumber Original base page number
-     */
-    public void setOriginalBasePageNumber(int originalBasePageNumber) {
-        this.originalBasePageNumber = originalBasePageNumber;
-    }
-    
-    /**
-     * Get the original compare page number
-     * @return Original compare page number
-     */
-    public int getOriginalComparePageNumber() {
-        return originalComparePageNumber;
-    }
-    
-    /**
-     * Set the original compare page number
-     * @param originalComparePageNumber Original compare page number
-     */
-    public void setOriginalComparePageNumber(int originalComparePageNumber) {
-        this.originalComparePageNumber = originalComparePageNumber;
+    public CustomPageDifference getCustomPageDifference() {
+        return customPageDifference;
     }
 
     /**
@@ -402,26 +449,10 @@ public class PageComparisonResult {
     }
 
     /**
-     * Get the page pair
-     * @return The page pair
-     */
-    public guraa.pdfcompare.service.PagePair getPagePair() {
-        return pagePair;
-    }
-
-    /**
-     * Set the page pair
-     * @param pagePair The page pair
-     */
-    public void setPagePair(guraa.pdfcompare.service.PagePair pagePair) {
-        this.pagePair = pagePair;
-    }
-    
-    /**
      * Get the page difference
      * @return Page difference
      */
-    public guraa.pdfcompare.service.PageDifference getPageDifference() {
+    public PageDifference getPageDifference() {
         return pageDifference;
     }
     
@@ -429,8 +460,25 @@ public class PageComparisonResult {
      * Set the page difference
      * @param pageDifference Page difference
      */
-    public void setPageDifference(guraa.pdfcompare.service.PageDifference pageDifference) {
+    public void setPageDifference(PageDifference pageDifference) {
         this.pageDifference = pageDifference;
+    }
+    
+    /**
+     * Set the custom page difference
+     * @param customPageDifference Custom page difference
+     */
+    public void setCustomPageDifference(CustomPageDifference customPageDifference) {
+        this.customPageDifference = customPageDifference;
+        
+        // Create a standard page difference from the custom one
+        if (customPageDifference != null) {
+            PageDifference difference = new PageDifference();
+            difference.setPageNumber(customPageDifference.getPageNumber());
+            difference.setOnlyInBase(customPageDifference.isBasePageExists() && !customPageDifference.isComparePageExists());
+            difference.setOnlyInCompare(customPageDifference.isComparePageExists() && !customPageDifference.isBasePageExists());
+            this.pageDifference = difference;
+        }
     }
     
     /**
@@ -438,14 +486,14 @@ public class PageComparisonResult {
      * @param detailed Whether to include detailed differences
      * @return List of page differences
      */
-    public java.util.List<guraa.pdfcompare.service.PageDifference> extractPageDifferences(boolean detailed) {
-        java.util.List<guraa.pdfcompare.service.PageDifference> differences = new java.util.ArrayList<>();
+    public List<PageDifference> extractPageDifferences(boolean detailed) {
+        List<PageDifference> differences = new ArrayList<>();
         
         if (pageDifference != null) {
             differences.add(pageDifference);
         } else {
             // Create a new page difference from the comparison result
-            guraa.pdfcompare.service.PageDifference difference = new guraa.pdfcompare.service.PageDifference();
+            PageDifference difference = new PageDifference();
             difference.setPageNumber((int)pageNumber);
             difference.setOnlyInBase(onlyInBase);
             difference.setOnlyInCompare(onlyInCompare);

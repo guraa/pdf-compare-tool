@@ -1,4 +1,4 @@
-package guraa.pdfcompare.service;
+package guraa.pdfcompare.core;
 
 import guraa.pdfcompare.core.PageFingerprint;
 import guraa.pdfcompare.core.PDFPageModel;
@@ -18,7 +18,7 @@ public class FingerprintAdapter {
      * @return Page fingerprint with enhanced features
      */
     public static PageFingerprint createEnhancedFingerprint(PDFPageModel page, String sourceType, int pageIndex) {
-        PageFingerprint fingerprint = new PageFingerprint();
+        PageFingerprint fingerprint = new PageFingerprint(sourceType, pageIndex);
 
         // Set basic properties that exist in core PageFingerprint
         fingerprint.setName(sourceType + "-page-" + pageIndex);

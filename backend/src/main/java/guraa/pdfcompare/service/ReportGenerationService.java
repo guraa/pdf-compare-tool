@@ -193,36 +193,39 @@ public class ReportGenerationService {
                         diffTable.addCell("Page dimensions differ");
                     }
 
-                    // Add text differences if available
+                        // Add text differences if available
                     if (page.getTextDifferences() != null &&
-                            page.getTextDifferences().getDifferences() != null &&
-                            !page.getTextDifferences().getDifferences().isEmpty()) {
+                            page.getTextDifferences().getDifferenceItems() != null &&
+                            !page.getTextDifferences().getDifferenceItems().isEmpty()) {
 
-                        int diffsToShow = Math.min(3, page.getTextDifferences().getDifferences().size());
+                        int diffsToShow = Math.min(3, page.getTextDifferences().getDifferenceItems().size());
                         for (int i = 0; i < diffsToShow; i++) {
-                            TextDifferenceItem textDiff = page.getTextDifferences().getDifferences().get(i);
+                            TextDifferenceItem textDiff = page.getTextDifferences().getDifferenceItems().get(i);
                             diffTable.addCell(pageNumber);
                             diffTable.addCell("Text");
 
-                            if (textDiff.getDifferenceType() == TextDifferenceType.ADDED) {
-                                diffTable.addCell("Text added: " +
-                                        (textDiff.getCompareText() != null ?
-                                                truncate(textDiff.getCompareText(), 20) : "(empty)"));
-                            } else if (textDiff.getDifferenceType() == TextDifferenceType.DELETED) {
-                                diffTable.addCell("Text deleted: " +
-                                        (textDiff.getBaseText() != null ?
-                                                truncate(textDiff.getBaseText(), 20) : "(empty)"));
-                            } else {
+                            switch (textDiff.getDifferenceType()) {
+                                case ADDITION:
+                                    diffTable.addCell("Text added: " +
+                                            (textDiff.getCompareText() != null ?
+                                                    truncate(textDiff.getCompareText(), 20) : "(empty)"));
+                                    break;
+                                case DELETION:
+                                    diffTable.addCell("Text deleted: " +
+                                            (textDiff.getBaseText() != null ?
+                                                    truncate(textDiff.getBaseText(), 20) : "(empty)"));
+                                    break;
+                                default:
                                 diffTable.addCell("Text modified: from \"" +
                                         truncate(textDiff.getBaseText(), 25) + "\" to \"" +
                                         truncate(textDiff.getCompareText(), 25) + "\"");
                             }
                         }
 
-                        if (page.getTextDifferences().getDifferences().size() > diffsToShow) {
+                        if (page.getTextDifferences().getDifferenceItems().size() > diffsToShow) {
                             diffTable.addCell(pageNumber);
                             diffTable.addCell("Text");
-                            diffTable.addCell("... " + (page.getTextDifferences().getDifferences().size() - diffsToShow) +
+                            diffTable.addCell("... " + (page.getTextDifferences().getDifferenceItems().size() - diffsToShow) +
                                     " more text differences...");
                         }
                     }
@@ -389,7 +392,7 @@ public class ReportGenerationService {
                     html.append("    <h4>Text Differences</h4>\n")
                             .append("    <ul>\n");
 
-                    List<TextDifferenceItem> textDiffs = page.getTextDifferences().getDifferences();
+                    List<TextDifferenceItem> textDiffs = page.getTextDifferences().getDifferenceItems();
                     int limit = Math.min(20, textDiffs.size());
 
                     for (int i = 0; i < limit; i++) {
@@ -397,12 +400,12 @@ public class ReportGenerationService {
                         html.append("      <li>Line ").append(textDiff.getLineNumber()).append(": ");
 
                         switch (textDiff.getDifferenceType()) {
-                            case ADDED:
+                            case ADDITION:
                                 html.append("<span class=\"text-added\">Added: \"")
                                         .append(escapeHtml(textDiff.getCompareText()))
                                         .append("\"</span>");
                                 break;
-                            case DELETED:
+                            case DELETION:
                                 html.append("<span class=\"text-deleted\">Deleted: \"")
                                         .append(escapeHtml(textDiff.getBaseText()))
                                         .append("\"</span>");
@@ -611,19 +614,19 @@ public class ReportGenerationService {
                 }
 
                 // Create limited text differences
-                if (page.getTextDifferences() != null && page.getTextDifferences().getDifferences() != null) {
+                if (page.getTextDifferences() != null && page.getTextDifferences().getDifferenceItems() != null) {
                     TextComparisonResult lightTextResult = new TextComparisonResult();
                     lightTextResult.setDifferenceCount(page.getTextDifferences().getDifferenceCount());
 
                     // Limit to 20 most important text differences
                     List<TextDifferenceItem> lightDiffs = new ArrayList<>();
-                    int textLimit = Math.min(20, page.getTextDifferences().getDifferences().size());
+                    int textLimit = Math.min(20, page.getTextDifferences().getDifferenceItems().size());
 
                     for (int i = 0; i < textLimit; i++) {
-                        lightDiffs.add(page.getTextDifferences().getDifferences().get(i));
+                        lightDiffs.add(page.getTextDifferences().getDifferenceItems().get(i));
                     }
 
-                    lightTextResult.setDifferences(lightDiffs);
+                    lightTextResult.setDifferenceItems(lightDiffs);
                     lightPage.setTextDifferences(lightTextResult);
                 }
 

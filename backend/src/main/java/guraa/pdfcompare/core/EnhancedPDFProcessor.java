@@ -103,7 +103,7 @@ public class EnhancedPDFProcessor {
         textStripper.setSortByPosition(true);
         textStripper.setAddMoreFormatting(true);
         String text = textStripper.getText(document);
-        pageModel.setText(text);
+        pageModel.setText(text != null ? text : "");
 
         logger.debug("Extracted {} characters of text from page {}",
                 text != null ? text.length() : 0, pageIndex + 1);
@@ -115,37 +115,61 @@ public class EnhancedPDFProcessor {
             backupStripper.setStartPage(pageIndex + 1);
             backupStripper.setEndPage(pageIndex + 1);
             text = backupStripper.getText(document);
-            pageModel.setText(text);
+            pageModel.setText(text != null ? text : "");
 
             logger.debug("Backup extraction method yielded {} characters",
                     text != null ? text.length() : 0);
         }
 
-        // Extract text elements with style using enhanced extractor
-        EnhancedTextStyleExtractor styleExtractor = new EnhancedTextStyleExtractor();
-        List<TextElement> textElements = styleExtractor.extractTextElements(document, pageIndex + 1);
-        pageModel.setTextElements(textElements);
+        // Extract text elements with style using enhanced extractor - safely handle nulls
+        try {
+            EnhancedTextStyleExtractor styleExtractor = new EnhancedTextStyleExtractor();
+            List<TextElement> textElements = styleExtractor.extractTextElements(document, pageIndex + 1);
+            if (textElements != null) {
+                pageModel.setTextElements(textElements);
+                logger.debug("Extracted {} text elements with style information from page {}",
+                        textElements.size(), pageIndex + 1);
+            } else {
+                pageModel.setTextElements(new ArrayList<>());
+                logger.debug("No text elements extracted from page {}", pageIndex + 1);
+            }
+        } catch (Exception e) {
+            logger.error("Error extracting text elements from page {}: {}", pageIndex + 1, e.getMessage());
+            pageModel.setTextElements(new ArrayList<>());
+        }
 
-        logger.debug("Extracted {} text elements with style information from page {}",
-                textElements.size(), pageIndex + 1);
+        // Extract images - safely handle nulls
+        try {
+            List<ImageElement> images = extractImages(document, page);
+            if (images != null) {
+                pageModel.setImages(images);
+                logger.debug("Extracted {} images from page {}", images.size(), pageIndex + 1);
+            } else {
+                pageModel.setImages(new ArrayList<>());
+                logger.debug("No images extracted from page {}", pageIndex + 1);
+            }
+        } catch (Exception e) {
+            logger.error("Error extracting images from page {}: {}", pageIndex + 1, e.getMessage());
+            pageModel.setImages(new ArrayList<>());
+        }
 
-        // Extract images
-        List<ImageElement> images = extractImages(document, page);
-        pageModel.setImages(images);
-
-        logger.debug("Extracted {} images from page {}",
-                images.size(), pageIndex + 1);
-
-        // Extract fonts
-        Set<FontInfo> fonts = extractFonts(page);
-        pageModel.setFonts(new ArrayList<>(fonts));
-
-        logger.debug("Extracted {} fonts from page {}",
-                fonts.size(), pageIndex + 1);
+        // Extract fonts - safely handle nulls
+        try {
+            Set<FontInfo> fonts = extractFonts(page);
+            if (fonts != null) {
+                pageModel.setFonts(new ArrayList<>(fonts));
+                logger.debug("Extracted {} fonts from page {}", fonts.size(), pageIndex + 1);
+            } else {
+                pageModel.setFonts(new ArrayList<>());
+                logger.debug("No fonts extracted from page {}", pageIndex + 1);
+            }
+        } catch (Exception e) {
+            logger.error("Error extracting fonts from page {}: {}", pageIndex + 1, e.getMessage());
+            pageModel.setFonts(new ArrayList<>());
+        }
 
         return pageModel;
     }
-
     /**
      * Extract images from a page
      * @param document The PDF document

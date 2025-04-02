@@ -47,14 +47,24 @@ const SideBySideView = ({ comparisonId, result }) => {
     if (pair) {
       basePageCount = pair.basePageCount || 0;
       comparePageCount = pair.comparePageCount || 0;
+      console.log(`Document pair ${selectedPairIndex} page counts: base=${basePageCount}, compare=${comparePageCount}`);
     }
   } else if (result) {
     basePageCount = result.basePageCount || 0;
     comparePageCount = result.comparePageCount || 0;
+    console.log(`Overall document page counts: base=${basePageCount}, compare=${comparePageCount}`);
   }
   
   // Total pages is the maximum of base and compare
   const totalPages = Math.max(basePageCount, comparePageCount);
+  
+  // Ensure we don't try to access pages beyond the document pair's page count
+  useEffect(() => {
+    if (state.selectedPage > totalPages && totalPages > 0) {
+      console.log(`Selected page ${state.selectedPage} is beyond total pages ${totalPages}, resetting to page 1`);
+      setSelectedPage(1);
+    }
+  }, [state.selectedPage, totalPages, setSelectedPage]);
   
   // Ensure we have a valid selected page
   useEffect(() => {
@@ -292,6 +302,10 @@ const SideBySideView = ({ comparisonId, result }) => {
       </div>
     );
   }
+  
+  // We no longer show an error when a page doesn't exist in one of the documents
+  // Instead, we'll let the SideBySidePanel handle this case by showing a message
+  // for the missing page while still displaying the page that does exist
 
   return (
     <div className="side-by-side-view">
@@ -370,12 +384,32 @@ const SideBySideView = ({ comparisonId, result }) => {
           </svg>
         </button>
         
-        {differencesCount === 0 && !loading && pageDetails && (
-          <div className="no-differences-warning">
-            <p>No differences found on this page. 
-              Try checking other pages or review the Overview tab for a summary of all differences.</p>
-          </div>
-        )}
+        {differencesCount === 0 && !loading && pageDetails && (() => {
+          // Calculate if pages exist using the same logic as SideBySidePanel
+          let selectedPage = state.selectedPage || 1;
+          
+          // Get the document pair if in smart mode
+          const documentPair = isSmartComparisonMode && result.documentPairs && result.documentPairs.length > 0 ? 
+            result.documentPairs[selectedPairIndex] : null;
+          
+          // Calculate if pages exist
+          const basePageExists = isSmartComparisonMode && documentPair ? 
+            (selectedPage <= (documentPair.baseEndPage - documentPair.baseStartPage + 1)) :
+            (result && result.basePageCount >= selectedPage);
+            
+          const comparePageExists = isSmartComparisonMode && documentPair ? 
+            (selectedPage <= (documentPair.compareEndPage - documentPair.compareStartPage + 1)) :
+            (result && result.comparePageCount >= selectedPage);
+          
+          // Only show the "No differences found" message if both pages exist
+          // If one page exists and the other doesn't, there's an implicit difference
+          return (basePageExists && comparePageExists) ? (
+            <div className="no-differences-warning">
+              <p>No differences found on this page. 
+                Try checking other pages or review the Overview tab for a summary of all differences.</p>
+            </div>
+          ) : null;
+        })()}
         
         {showDifferencePanel && (
           <DifferenceViewer 

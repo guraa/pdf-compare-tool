@@ -69,8 +69,8 @@ public class PageMatchingComparisonService {
         result.setMetadataDifferences(metadataDiffs);
 
         // Compute visual hashes for both documents (if files are provided)
-        List<String> baseVisualHashes = null;
-        List<String> compareVisualHashes = null;
+        Map<String, String> baseVisualHashes = null;
+        Map<String, String> compareVisualHashes = null;
 
         if (baseFile != null && compareFile != null) {
             try {
@@ -115,8 +115,8 @@ public class PageMatchingComparisonService {
     private PageMatchingResult findBestPageMatches(
             PDFDocumentModel baseDocument,
             PDFDocumentModel compareDocument,
-            List<String> baseVisualHashes,
-            List<String> compareVisualHashes) {
+            Map<String, String> baseVisualHashes,
+            Map<String, String> compareVisualHashes) {
 
         logger.info("Finding best page matches between documents");
 
@@ -187,8 +187,8 @@ public class PageMatchingComparisonService {
     private double[][] calculatePageSimilarityMatrix(
             PDFDocumentModel baseDocument,
             PDFDocumentModel compareDocument,
-            List<String> baseVisualHashes,
-            List<String> compareVisualHashes) {
+            Map<String, String> baseVisualHashes,
+            Map<String, String> compareVisualHashes) {
 
         int basePageCount = baseDocument.getPageCount();
         int comparePageCount = compareDocument.getPageCount();
@@ -207,11 +207,12 @@ public class PageMatchingComparisonService {
 
                 // Calculate visual similarity if hashes are available
                 double visualSimilarity = 0.0;
-                if (baseVisualHashes != null && compareVisualHashes != null &&
-                        baseIdx < baseVisualHashes.size() && compareIdx < compareVisualHashes.size()) {
-                    String baseHash = baseVisualHashes.get(baseIdx);
-                    String compareHash = compareVisualHashes.get(compareIdx);
-                    visualSimilarity = VisualMatcher.compareHashes(baseHash, compareHash);
+                if (baseVisualHashes != null && compareVisualHashes != null) {
+                    String baseHash = baseVisualHashes.get("page_" + baseIdx);
+                    String compareHash = compareVisualHashes.get("page_" + compareIdx);
+                    if (baseHash != null && compareHash != null) {
+                        visualSimilarity = VisualMatcher.compareHashes(baseHash, compareHash);
+                    }
                 }
 
                 // Combine similarities with weights
@@ -270,35 +271,40 @@ public class PageMatchingComparisonService {
                     comparisonEngine.comparePage(basePage, comparePage);
 
             // Add page matching information
-            comparison.setOriginalBasePageNumber(baseIdx + 1);
-            comparison.setOriginalComparePageNumber(compareIdx + 1);
+            // Use adapter to convert comparison result to service result
+            guraa.pdfcompare.service.PageComparisonResult serviceResult = PageComparisonResultAdapter.toServiceResult(comparison);
+            serviceResult.setOriginalBasePageNumber(baseIdx + 1);
+            serviceResult.setOriginalComparePageNumber(compareIdx + 1);
+            comparison = PageComparisonResultAdapter.toComparisonResult(serviceResult);
 
             results.add(comparison);
         }
 
         // Add unmatched base pages
         for (Integer baseIdx : pageMatches.getUnmatchedBasePages()) {
-            PageComparisonResult result =
-                    new PageComparisonResult();
-            result.setPageNumber(baseIdx + 1);
-            result.setOriginalBasePageNumber(baseIdx + 1);
-            result.setOnlyInBase(true);
+            guraa.pdfcompare.service.PageComparisonResult serviceResult = new guraa.pdfcompare.service.PageComparisonResult();
+            serviceResult.setPageNumber(baseIdx + 1);
+            serviceResult.setOriginalBasePageNumber(baseIdx + 1);
+            serviceResult.setOnlyInBase(true);
+            guraa.pdfcompare.comparison.PageComparisonResult result = PageComparisonResultAdapter.toComparisonResult(serviceResult);
             results.add(result);
         }
 
         // Add unmatched compare pages
         for (Integer compareIdx : pageMatches.getUnmatchedComparePages()) {
-            PageComparisonResult result =
-                    new PageComparisonResult();
-            result.setPageNumber(compareIdx + 1);
-            result.setOriginalComparePageNumber(compareIdx + 1);
-            result.setOnlyInCompare(true);
+            guraa.pdfcompare.service.PageComparisonResult serviceResult = new guraa.pdfcompare.service.PageComparisonResult();
+            serviceResult.setPageNumber(compareIdx + 1);
+            serviceResult.setOriginalComparePageNumber(compareIdx + 1);
+            serviceResult.setOnlyInCompare(true);
+            guraa.pdfcompare.comparison.PageComparisonResult result = PageComparisonResultAdapter.toComparisonResult(serviceResult);
             results.add(result);
         }
 
         // Sort results by base page number for consistent presentation
         results.sort(Comparator.comparing(page -> {
-            Integer basePage = page.getOriginalBasePageNumber();
+            // Use adapter to get original base page number
+            guraa.pdfcompare.service.PageComparisonResult serviceResult = PageComparisonResultAdapter.toServiceResult(page);
+            Integer basePage = serviceResult.getOriginalBasePageNumber();
             return basePage != null ? basePage : Integer.MAX_VALUE;
         }));
 

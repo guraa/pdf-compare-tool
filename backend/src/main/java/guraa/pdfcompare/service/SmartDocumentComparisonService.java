@@ -312,7 +312,7 @@ public class SmartDocumentComparisonService {
      * Convert a page comparison result to a full comparison result
      */
     private PDFComparisonResult convertToComparisonResult(
-            guraa.pdfcompare.comparison.PageComparisonResult pageResult,
+            guraa.pdfcompare.service.PageComparisonResult pageResult,
             PDFDocumentModel baseDocument,
             PDFDocumentModel compareDocument) {
 
@@ -338,21 +338,9 @@ public class SmartDocumentComparisonService {
         // Set page differences
         List<guraa.pdfcompare.comparison.PageComparisonResult> pageDifferences = new ArrayList<>();
         
-        // Create a comparison page result
+        // Convert service.PageComparisonResult to comparison.PageComparisonResult using the adapter
         guraa.pdfcompare.comparison.PageComparisonResult comparisonPageResult = 
-                new guraa.pdfcompare.comparison.PageComparisonResult();
-        
-        // Copy properties from service.PageComparisonResult to comparison.PageComparisonResult
-        comparisonPageResult.setPageNumber(pageResult.getPageNumber());
-        comparisonPageResult.setOnlyInBase(pageResult.isOnlyInBase());
-        comparisonPageResult.setOnlyInCompare(pageResult.isOnlyInCompare());
-        comparisonPageResult.setDimensionsDifferent(pageResult.isDimensionsDifferent());
-        comparisonPageResult.setBaseDimensions(pageResult.getBaseDimensions());
-        comparisonPageResult.setCompareDimensions(pageResult.getCompareDimensions());
-        comparisonPageResult.setTextDifferences(pageResult.getTextDifferences());
-        comparisonPageResult.setTextElementDifferences(pageResult.getTextElementDifferences());
-        comparisonPageResult.setImageDifferences(pageResult.getImageDifferences());
-        comparisonPageResult.setFontDifferences(pageResult.getFontDifferences());
+                PageComparisonResultAdapter.toComparisonResult(pageResult);
         
         pageDifferences.add(comparisonPageResult);
         result.setPageDifferences(pageDifferences);

@@ -20,7 +20,7 @@ public class EnhancedVisualMatcher {
 
     // Configuration parameters
     private static final int HASH_SIZE = 64; // Larger hash for more precision
-    private static final double SIMILARITY_THRESHOLD = 0.7; // 70% similarity threshold
+    private static final double SIMILARITY_THRESHOLD = 0.95; // Increased to 0.95 (95%) to only match nearly identical documents
 
     /**
      * Compute perceptual hashes for all pages in a document

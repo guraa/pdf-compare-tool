@@ -146,7 +146,10 @@ export const getComparisonDetails = async (comparisonId, page, filters = {}) => 
       // Convert filter objects to query parameters
       const params = {};
       
-      if (filters && filters.differenceTypes && filters.differenceTypes.length > 0) {
+      // Always include all difference types if not specified
+      if (!filters || !filters.differenceTypes || filters.differenceTypes.length === 0) {
+        params.types = 'text,font,image,style,metadata,structure';
+      } else {
         params.types = filters.differenceTypes.join(',');
       }
       
@@ -162,7 +165,7 @@ export const getComparisonDetails = async (comparisonId, page, filters = {}) => 
       const pageNumber = parseInt(page) || 1;
       
       // Debug logging
-      console.log(`Making API request to: /pdfs/comparison/${comparisonId}/page/${pageNumber}`, params);
+      console.log(`Making API request to: /pdfs/comparison/${comparisonId}/page/${pageNumber} with types: ${params.types}`, params);
       
       try {
         const response = await api.get(`/pdfs/comparison/${comparisonId}/page/${pageNumber}`, { 
@@ -276,8 +279,10 @@ export const getDocumentPairs = async (comparisonId) => {
     // Convert filter objects to simple string parameters
     const params = {};
     
-    // Handle filter parameters properly
-    if (filters && filters.differenceTypes && filters.differenceTypes.length > 0) {
+    // Always include all difference types if not specified
+    if (!filters || !filters.differenceTypes || filters.differenceTypes.length === 0) {
+      params.types = 'text,font,image,style,metadata,structure';
+    } else {
       params.types = filters.differenceTypes.join(',');
     }
     
@@ -290,13 +295,31 @@ export const getDocumentPairs = async (comparisonId) => {
     }
     
     // Log debug info
-    console.log(`Getting document page details for comparison: ${comparisonId}, pair: ${pairIndex}, page: ${pageNumber}`);
+    console.log(`Getting document page details for comparison: ${comparisonId}, pair: ${pairIndex}, page: ${pageNumber} with types: ${params.types}`);
     
     try {
+      // Check if the page number is valid (not greater than the document's page count)
+      // This is a client-side validation to prevent unnecessary 404 errors
       const response = await api.get(
         `/pdfs/comparison/${comparisonId}/documents/${pairIndex}/page/${pageNumber}`, 
-        { params }
+        { 
+          params,
+          // Add validateStatus to accept 404 responses
+          validateStatus: function (status) {
+            return status === 200 || status === 404;
+          }
+        }
       );
+      
+      // If we got a 404 response, return empty data with a message
+      if (response.status === 404) {
+        console.log("Endpoint returned 404, returning empty data structure with page not found message");
+        return {
+          baseDifferences: [],
+          compareDifferences: [],
+          message: "Page not found in document pair"
+        };
+      }
       
       // Add default empty arrays if missing
       if (!response.data.baseDifferences) {
@@ -311,30 +334,14 @@ export const getDocumentPairs = async (comparisonId) => {
     } catch (error) {
       console.error(`Error fetching page details for page ${pageNumber} of document pair ${pairIndex}:`, error);
       
-      // Try fallback endpoint for backward compatibility
+      // If the original request fails with 404, return empty data with a message
       if (error.response && error.response.status === 404) {
-        try {
-          console.log("Trying fallback endpoint format...");
-          
-          const fallbackResponse = await api.get(
-            `/pdfs/comparison/${comparisonId}/page/${pageNumber}`,
-            { params }
-          );
-          
-          // Add default empty arrays if missing
-          if (!fallbackResponse.data.baseDifferences) {
-            fallbackResponse.data.baseDifferences = [];
-          }
-          
-          if (!fallbackResponse.data.compareDifferences) {
-            fallbackResponse.data.compareDifferences = [];
-          }
-          
-          return fallbackResponse.data;
-        } catch (fallbackError) {
-          console.error("Fallback endpoint also failed:", fallbackError);
-          throw fallbackError;
-        }
+        console.log("Endpoint returned 404, returning empty data structure with page not found message");
+        return {
+          baseDifferences: [],
+          compareDifferences: [],
+          message: "Page not found in document pair"
+        };
       }
       
       throw error;

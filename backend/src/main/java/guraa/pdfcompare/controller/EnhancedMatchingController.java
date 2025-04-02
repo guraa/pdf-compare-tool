@@ -306,15 +306,20 @@ public class EnhancedMatchingController {
 
             // Add text differences
             if (result.getTextDifferences() != null &&
-                    result.getTextDifferences().getDifferences() != null) {
+                    result.getTextDifferences().getDifferenceItems() != null) {
                 for (guraa.pdfcompare.comparison.TextDifferenceItem textDiff :
-                        result.getTextDifferences().getDifferences()) {
+                        result.getTextDifferences().getDifferenceItems()) {
                     Map<String, Object> diff = new HashMap<>();
                     diff.put("type", "text");
                     diff.put("lineNumber", textDiff.getLineNumber());
                     diff.put("baseText", textDiff.getBaseText());
                     diff.put("compareText", textDiff.getCompareText());
                     diff.put("differenceType", textDiff.getDifferenceType());
+                    
+                    // Add overall difference type if available
+                    if (result.getTextDifferences().getDifferenceType() != null) {
+                        diff.put("overallDifferenceType", result.getTextDifferences().getDifferenceType());
+                    }
 
                     differences.add(diff);
                 }

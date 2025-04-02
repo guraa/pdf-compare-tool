@@ -1,7 +1,7 @@
 package guraa.pdfcompare.core;
 
 import guraa.pdfcompare.comparison.PDFComparisonResult;
-import guraa.pdfcompare.VisualMatcher;
+import guraa.pdfcompare.visual.VisualMatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,7 +25,7 @@ public class SmartDocumentMatcher {
     private Map<String, Map<Integer, PDFComparisonResult>> pairResultsById = new HashMap<>();
 
     // Configuration parameters
-    private double similarityThreshold = 0.1;
+    private double similarityThreshold = 0.95; // Increased to 0.95 (95%) to only match nearly identical documents
     private int minDocumentPages = 1;
 
     // Feature toggle flags
@@ -52,8 +52,8 @@ public class SmartDocumentMatcher {
         matchingStrategy.setSimilarityThreshold(similarityThreshold);
 
         // Compute visual hashes
-        List<String> baseVisualHashes = VisualMatcher.computeVisualHashes(baseFile);
-        List<String> compareVisualHashes = VisualMatcher.computeVisualHashes(compareFile);
+        Map<String, String> baseVisualHashes = VisualMatcher.computeVisualHashes(baseFile);
+        Map<String, String> compareVisualHashes = VisualMatcher.computeVisualHashes(compareFile);
 
         // Perform document matching with SmartDocumentMatcher.DocumentSegment
         List<DocumentPair> convertedPairs = matchDocumentsWithInternalSegments(
@@ -272,29 +272,38 @@ public class SmartDocumentMatcher {
      */
     private void enhanceMatchingWithVisualHashes(
             List<DocumentPair> matchedPairs,
-            List<String> baseVisualHashes,
-            List<String> compareVisualHashes) {
+            Map<String, String> baseVisualHashes,
+            Map<String, String> compareVisualHashes) {
 
         for (DocumentPair pair : matchedPairs) {
             if (pair.isMatched()) {
-                // Slice visual hashes for the matched segments
-                List<String> baseSegmentHashes = VisualMatcher.sliceHashes(
-                        baseVisualHashes,
-                        pair.getBaseStartPage(),
-                        pair.getBaseEndPage()
-                );
+                // Extract hashes for the matched segments
+                List<String> baseSegmentHashes = new ArrayList<>();
+                List<String> compareSegmentHashes = new ArrayList<>();
+                
+                // Extract page hashes from the maps
+                for (int i = pair.getBaseStartPage(); i <= pair.getBaseEndPage(); i++) {
+                    String hash = baseVisualHashes.get("page_" + i);
+                    if (hash != null) {
+                        baseSegmentHashes.add(hash);
+                    }
+                }
+                
+                for (int i = pair.getCompareStartPage(); i <= pair.getCompareEndPage(); i++) {
+                    String hash = compareVisualHashes.get("page_" + i);
+                    if (hash != null) {
+                        compareSegmentHashes.add(hash);
+                    }
+                }
 
-                List<String> compareSegmentHashes = VisualMatcher.sliceHashes(
-                        compareVisualHashes,
-                        pair.getCompareStartPage(),
-                        pair.getCompareEndPage()
-                );
-
-                // Compare visual hashes
-                double visualSimilarity = VisualMatcher.compareHashLists(
-                        baseSegmentHashes,
-                        compareSegmentHashes
-                );
+                // Compare visual hashes if we have any
+                double visualSimilarity = 0.0;
+                if (!baseSegmentHashes.isEmpty() && !compareSegmentHashes.isEmpty()) {
+                    visualSimilarity = VisualMatcher.compareHashLists(
+                            baseSegmentHashes,
+                            compareSegmentHashes
+                    );
+                }
 
                 // Log visual matching details
                 logger.debug("Visual hash similarity for pair: {}", visualSimilarity);

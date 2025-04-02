@@ -1,7 +1,7 @@
 package guraa.pdfcompare.service;
 
 import guraa.pdfcompare.PDFComparisonService;
-import guraa.pdfcompare.comparison.PageComparisonResult;
+import guraa.pdfcompare.service.PageComparisonResult;
 import guraa.pdfcompare.core.PDFDocumentModel;
 import guraa.pdfcompare.core.PDFProcessor;
 import org.slf4j.Logger;

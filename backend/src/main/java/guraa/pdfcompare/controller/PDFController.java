@@ -268,6 +268,39 @@ public class PDFController {
                     .build();
         }
 
+        // OVERRIDE: Force documents to be treated as completely different
+        // This is a temporary fix to prevent incorrect matching of documents
+        List<SmartDocumentMatcher.DocumentPair> newPairs = new ArrayList<>();
+        
+        // Find the base document pages
+        SmartDocumentMatcher.DocumentPair baseDocPair = null;
+        for (SmartDocumentMatcher.DocumentPair pair : pairs) {
+            if (pair.hasBaseDocument() && pair.hasCompareDocument()) {
+                // Create two separate pairs instead of a matched pair
+                newPairs.add(new SmartDocumentMatcher.DocumentPair(
+                    pair.getBaseStartPage(),
+                    pair.getBaseEndPage(),
+                    -1, // No compare document
+                    -1,
+                    0.0 // Zero similarity
+                ));
+                
+                newPairs.add(new SmartDocumentMatcher.DocumentPair(
+                    -1, // No base document
+                    -1,
+                    pair.getCompareStartPage(),
+                    pair.getCompareEndPage(),
+                    0.0 // Zero similarity
+                ));
+            } else {
+                // Keep unmatched pairs as they are
+                newPairs.add(pair);
+            }
+        }
+        
+        // Replace the original pairs with our modified pairs
+        pairs = newPairs;
+
         // Create a response with more details
         List<Map<String, Object>> pairDetails = new ArrayList<>();
         for (int i = 0; i < pairs.size(); i++) {
@@ -423,7 +456,13 @@ public class PDFController {
                 pageNumber > result.getPageDifferences().size()) {
             logger.warn("Page {} not found in document pair {} of comparison {}",
                     pageNumber, pairIndex, comparisonId);
-            return ResponseEntity.notFound().build();
+            
+            // Return a 200 response with a message instead of 404
+            Map<String, Object> response = new HashMap<>();
+            response.put("baseDifferences", new ArrayList<>());
+            response.put("compareDifferences", new ArrayList<>());
+            response.put("message", "Page not found in document pair");
+            return ResponseEntity.ok(response);
         }
 
         // Get the page comparison result
@@ -435,13 +474,31 @@ public class PDFController {
         if (pageResult == null) {
             logger.warn("Page {} details not found in document pair {} of comparison {}",
                     pageNumber, pairIndex, comparisonId);
-            return ResponseEntity.notFound().build();
+            
+            // Return a 200 response with a message instead of 404
+            Map<String, Object> response = new HashMap<>();
+            response.put("baseDifferences", new ArrayList<>());
+            response.put("compareDifferences", new ArrayList<>());
+            response.put("message", "Page not found in document pair");
+            return ResponseEntity.ok(response);
         }
 
+        // Extract differences
+        var baseDifferences = pageResult.extractPageDifferences(true);
+        var compareDifferences = pageResult.extractPageDifferences(false);
+        
         // Create detailed response
         Map<String, Object> response = new HashMap<>();
-        response.put("baseDifferences", pageResult.extractPageDifferences(true));
-        response.put("compareDifferences", pageResult.extractPageDifferences(false));
+        response.put("baseDifferences", baseDifferences);
+        response.put("compareDifferences", compareDifferences);
+        
+        // Add a specific message if the page exists but has no differences
+        if ((baseDifferences == null || baseDifferences.isEmpty()) && 
+            (compareDifferences == null || compareDifferences.isEmpty())) {
+            response.put("message", "Page exists but has no differences");
+            logger.info("Page {} exists in document pair {} of comparison {} but has no differences",
+                    pageNumber, pairIndex, comparisonId);
+        }
 
         logger.info("Returning details for page {} of document pair {} in comparison {}",
                 pageNumber, pairIndex, comparisonId);

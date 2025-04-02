@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import { usePreferences } from '../../context/PreferencesContext';
-import { getComparisonDetails } from '../../services/api';
+import { getComparisonDetails, getDocumentPageDetails } from '../../services/api';
 import Spinner from '../common/Spinner';
 import './DifferenceList.css';
 
@@ -33,19 +33,54 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
         // Store differences from all pages for an overview
         const allDiffs = [];
         
+        // Determine the correct page count based on whether we're in smart comparison mode
+        let maxPages = 0;
+        
+        if (result.documentPairs && result.documentPairs.length > 0) {
+          // Smart comparison mode - use the page count from the first document pair
+          const firstPair = result.documentPairs[0];
+          maxPages = Math.max(
+            firstPair.basePageCount || 0,
+            firstPair.comparePageCount || 0
+          );
+          console.log(`Smart comparison mode: Using max page count ${maxPages} from document pair`);
+        } else {
+          // Standard mode - use the overall page counts
+          maxPages = Math.max(result.basePageCount || 0, result.comparePageCount || 0);
+          console.log(`Standard mode: Using max page count ${maxPages}`);
+        }
+        
+        // Store pages with differences for navigation
+        const pagesWithDifferences = [];
+        
         // Loop through all pages to collect differences
-        for (let i = 1; i <= Math.max(result.basePageCount, result.comparePageCount); i++) {
+        for (let i = 1; i <= maxPages; i++) {
           try {
-            const pageDetails = await getComparisonDetails(state.comparisonId, i);
+            // In smart mode, use the document pair-specific endpoint
+            let pageDetails;
+            if (result.documentPairs && result.documentPairs.length > 0) {
+              pageDetails = await getDocumentPageDetails(state.comparisonId, 0, i);
+            } else {
+              pageDetails = await getComparisonDetails(state.comparisonId, i);
+            }
             
-            if (pageDetails && pageDetails.baseDifferences) {
+            // Skip pages with "Page not found" message
+            if (pageDetails && pageDetails.message && pageDetails.message.includes("Page not found")) {
+              console.log(`Page ${i} not found in document pair, skipping`);
+              continue;
+            }
+            
+            let hasDifferencesOnPage = false;
+            
+            if (pageDetails && pageDetails.baseDifferences && pageDetails.baseDifferences.length > 0) {
+              hasDifferencesOnPage = true;
               allDiffs.push(...pageDetails.baseDifferences.map(diff => ({
                 ...diff,
                 page: i
               })));
             }
             
-            if (pageDetails && pageDetails.compareDifferences) {
+            if (pageDetails && pageDetails.compareDifferences && pageDetails.compareDifferences.length > 0) {
               // Only add differences not already included from base
               const uniqueCompareDiffs = pageDetails.compareDifferences.filter(
                 compDiff => !pageDetails.baseDifferences.some(
@@ -53,10 +88,19 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
                 )
               );
               
-              allDiffs.push(...uniqueCompareDiffs.map(diff => ({
-                ...diff,
-                page: i
-              })));
+              if (uniqueCompareDiffs.length > 0) {
+                hasDifferencesOnPage = true;
+                allDiffs.push(...uniqueCompareDiffs.map(diff => ({
+                  ...diff,
+                  page: i
+                })));
+              }
+            }
+            
+            // If this page has differences, add it to the list of pages with differences
+            if (hasDifferencesOnPage) {
+              pagesWithDifferences.push(i);
+              console.log(`Page ${i} has differences`);
             }
           } catch (err) {
             console.warn(`Could not load differences for page ${i}:`, err);
@@ -64,6 +108,20 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
         }
         
         console.log(`Loaded ${allDiffs.length} total differences across all pages`);
+        console.log(`Pages with differences: ${pagesWithDifferences.join(', ')}`);
+        
+        // Store the list of pages with differences in the result object for navigation
+        if (result.documentPairs && result.documentPairs.length > 0) {
+          // In smart mode, add the pages with differences to the result object
+          if (!result.pageDifferences) {
+            result.pageDifferences = pagesWithDifferences.map(pageNumber => ({
+              pageNumber,
+              hasDifferences: true
+            }));
+            console.log("Added pageDifferences to result object for navigation:", result.pageDifferences);
+          }
+        }
+        
         setAllDifferences(allDiffs);
         
         // Apply initial filtering
@@ -349,8 +407,8 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
                     >
                       <div className="difference-header">
                         <div className="difference-type">
-                          <span className={`type-icon ${diff.type}`}>
-                            {getTypeIcon(diff.type)}
+                          <span className={`type-icon ${diff.type || 'unknown'}`}>
+                            {getTypeIcon(diff.type || 'unknown')}
                           </span>
                         </div>
                         
@@ -403,8 +461,8 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
                       >
                         <div className="difference-header">
                           <div className="difference-type">
-                            <span className={`type-icon ${diff.type}`}>
-                              {getTypeIcon(diff.type)}
+                            <span className={`type-icon ${diff.type || 'unknown'}`}>
+                              {getTypeIcon(diff.type || 'unknown')}
                             </span>
                           </div>
                           

@@ -152,7 +152,8 @@ const ComparisonSummary = ({ result }) => {
                 content: textDifferenceCount,
                 style: styleDifferenceCount,
                 images: imageDifferenceCount,
-                structure: totalDifferences - textDifferenceCount - styleDifferenceCount - imageDifferenceCount - fontDifferenceCount
+                fonts: fontDifferenceCount,
+                structure: Math.max(0, totalDifferences - textDifferenceCount - styleDifferenceCount - imageDifferenceCount - fontDifferenceCount)
               }).map(([category, count]) => (
                 <div className="chart-item" key={category}>
                   <div className="chart-label">{

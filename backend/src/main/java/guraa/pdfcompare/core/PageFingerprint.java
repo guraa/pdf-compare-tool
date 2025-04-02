@@ -31,6 +31,13 @@ public class PageFingerprint {
     private float height;               // Page height
     private float contentArea;          // Area covered by content elements
 
+
+
+    private String Name;
+    private String Family;
+
+
+    private Map<String, Object> Data;
     // Additional features that might be useful for matching
     private Map<String, Object> additionalFeatures = new HashMap<>();
 
@@ -47,6 +54,31 @@ public class PageFingerprint {
     }
 
     // Getters and setters
+
+    public Map<String, Object> getData() {
+        return Data;
+    }
+    public void setData(Map<String, Object> data) {
+        Data = data;
+    }
+
+    public String getName() {
+        return Name;
+    }
+
+    public void setName(String name) {
+        Name = name;
+    }
+
+    public String getFamily() {
+        return Family;
+    }
+
+    public void setFamily(String family) {
+        Family = family;
+    }
+
+
 
     public String getSourceType() {
         return sourceType;

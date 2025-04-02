@@ -21,7 +21,7 @@ public class DocumentMatchingStrategy {
     // Configuration parameters
     private double visualSimilarityWeight = 0.6;  // Visual similarity gets 60% weight
     private double contentSimilarityWeight = 0.4; // Content similarity gets 40% weight
-    private double similarityThreshold = 0.5;
+    private double similarityThreshold = 0.95;    // Increased to 0.95 (95%) to only match nearly identical documents
 
     // Dependency components
     private final EnhancedVisualMatcher visualMatcher;

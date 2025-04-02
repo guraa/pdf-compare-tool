@@ -50,6 +50,7 @@ public class PDFComparisonEngine {
         int totalImageDifferences = 0;
         int totalFontDifferences = 0;
         int totalStyleDifferences = 0;
+        int totalStructuralDifferences = 0;
 
         for (PageComparisonResult pageResult : pageDifferences) {
             // Count text differences
@@ -71,9 +72,58 @@ public class PDFComparisonEngine {
             if (pageResult.getFontDifferences() != null) {
                 totalFontDifferences += pageResult.getFontDifferences().size();
             }
+            
+            // Count structural differences (pages that only exist in one document)
+            if (pageResult.isOnlyInBase() || pageResult.isOnlyInCompare()) {
+                totalStructuralDifferences++;
+            }
+            
+            // If the page exists in both documents but has no specific differences detected,
+            // and the documents are clearly different (e.g., completely different content),
+            // count it as a text difference
+            if (!pageResult.isOnlyInBase() && !pageResult.isOnlyInCompare() && 
+                pageResult.getTextDifferences() != null &&
+                (pageResult.getTextDifferences().getDifferences() == null || pageResult.getTextDifferences().getDifferences().isEmpty()) &&
+                (pageResult.getTextElementDifferences() == null || pageResult.getTextElementDifferences().isEmpty()) &&
+                (pageResult.getImageDifferences() == null || pageResult.getImageDifferences().isEmpty()) &&
+                (pageResult.getFontDifferences() == null || pageResult.getFontDifferences().isEmpty())) {
+                
+                // Check if the page text is completely different
+                String baseText = null;
+                String compareText = null;
+                
+                if (pageResult.getTextDifferences() != null) {
+                    baseText = pageResult.getTextDifferences().getBaseText();
+                    compareText = pageResult.getTextDifferences().getCompareText();
+                }
+                
+                if ((baseText != null && !baseText.isEmpty()) && 
+                    (compareText != null && !compareText.isEmpty()) &&
+                    !baseText.equals(compareText)) {
+                    // The pages have different text but no specific differences were detected
+                    // This is likely a case where the documents are completely different
+                    
+                    // Create a new TextDifference and add it to the TextComparisonResult
+                    TextDifference textDiff = new TextDifference();
+                    textDiff.setBaseText(baseText);
+                    textDiff.setCompareText(compareText);
+                    textDiff.setBaseStartIndex(0);
+                    textDiff.setBaseEndIndex(baseText.length());
+                    textDiff.setCompareStartIndex(0);
+                    textDiff.setCompareEndIndex(compareText.length());
+                    textDiff.setDifferenceType("MODIFICATION");
+                    
+                    if (pageResult.getTextDifferences().getDifferences() == null) {
+                        pageResult.getTextDifferences().setDifferences(new ArrayList<>());
+                    }
+                    
+                    pageResult.getTextDifferences().getDifferences().add(textDiff);
+                    totalTextDifferences++; // Count as a text difference
+                }
+            }
         }
 
-        totalDifferences = totalTextDifferences + totalStyleDifferences + totalImageDifferences + totalFontDifferences;
+        totalDifferences = totalTextDifferences + totalStyleDifferences + totalImageDifferences + totalFontDifferences + totalStructuralDifferences;
 
         result.setTotalDifferences(totalDifferences);
         result.setTotalTextDifferences(totalTextDifferences);
@@ -154,8 +204,8 @@ public class PDFComparisonEngine {
      */
     private TextComparisonResult compareText(PDFPageModel basePage, PDFPageModel comparePage) {
         TextComparisonResult result = new TextComparisonResult();
-        List<TextDifferenceItem> differences = new ArrayList<>();
-        result.setDifferences(differences);
+        List<TextDifferenceItem> differenceItems = new ArrayList<>();
+        result.setDifferenceItems(differenceItems);
 
         if (basePage.getText() == null && comparePage.getText() == null) {
             return result; // Both texts are null, return empty result
@@ -174,10 +224,21 @@ public class PDFComparisonEngine {
             diff.setBaseText(baseText);
             diff.setCompareText(compareText);
             diff.setDifferenceType(TextDifferenceType.MODIFIED);
-            differences.add(diff);
+            differenceItems.add(diff);
+            
+            // Also create a TextDifference for compatibility
+            TextDifference textDiff = new TextDifference();
+            textDiff.setBaseText(baseText);
+            textDiff.setCompareText(compareText);
+            textDiff.setBaseStartIndex(0);
+            textDiff.setBaseEndIndex(baseText.length());
+            textDiff.setCompareStartIndex(0);
+            textDiff.setCompareEndIndex(compareText.length());
+            textDiff.setDifferenceType("MODIFICATION");
+            result.addDifference(textDiff);
         }
 
-        result.setDifferenceCount(differences.size());
+        result.setDifferenceCount(differenceItems.size());
         return result;
     }
 
