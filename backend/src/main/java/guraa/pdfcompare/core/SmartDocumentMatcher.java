@@ -1,7 +1,7 @@
 package guraa.pdfcompare.core;
 
 import guraa.pdfcompare.comparison.PDFComparisonResult;
-import guraa.pdfcompare.visual.VisualMatcher;
+import guraa.pdfcompare.VisualMatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

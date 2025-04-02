@@ -2,6 +2,8 @@ package guraa.pdfcompare.service;
 
 import guraa.pdfcompare.PDFComparisonEngine;
 import guraa.pdfcompare.comparison.PDFComparisonResult;
+import guraa.pdfcompare.comparison.MetadataDifference;
+import guraa.pdfcompare.comparison.PageComparisonResult;
 import guraa.pdfcompare.core.PDFDocumentModel;
 import guraa.pdfcompare.core.PDFPageModel;
 import guraa.pdfcompare.core.TextSimilarityCalculator;
@@ -62,7 +64,7 @@ public class PageMatchingComparisonService {
         result.setPageCountDifferent(baseDocument.getPageCount() != compareDocument.getPageCount());
 
         // Compare metadata
-        Map<String, guraa.pdfcompare.comparison.MetadataDifference> metadataDiffs =
+        Map<String, MetadataDifference> metadataDiffs =
                 comparisonEngine.compareMetadata(baseDocument.getMetadata(), compareDocument.getMetadata());
         result.setMetadataDifferences(metadataDiffs);
 
@@ -92,7 +94,7 @@ public class PageMatchingComparisonService {
         result.setMatchingId(matchingId);  // Add this field to PDFComparisonResult
 
         // Compare matched pages
-        List<guraa.pdfcompare.comparison.PageComparisonResult> pageDifferences = compareMatchedPages(
+        List<PageComparisonResult> pageDifferences = compareMatchedPages(
                 baseDocument, compareDocument, pageMatches);
         result.setPageDifferences(pageDifferences);
 
@@ -249,12 +251,12 @@ public class PageMatchingComparisonService {
     /**
      * Compare matched pages and generate page comparison results
      */
-    private List<guraa.pdfcompare.comparison.PageComparisonResult> compareMatchedPages(
+    private List<PageComparisonResult> compareMatchedPages(
             PDFDocumentModel baseDocument,
             PDFDocumentModel compareDocument,
             PageMatchingResult pageMatches) {
 
-        List<guraa.pdfcompare.comparison.PageComparisonResult> results = new ArrayList<>();
+        List<PageComparisonResult> results = new ArrayList<>();
 
         // Compare matched pages
         for (Map.Entry<Integer, Integer> match : pageMatches.getMatchedPages().entrySet()) {
@@ -264,7 +266,7 @@ public class PageMatchingComparisonService {
             PDFPageModel basePage = baseDocument.getPages().get(baseIdx);
             PDFPageModel comparePage = compareDocument.getPages().get(compareIdx);
 
-            guraa.pdfcompare.comparison.PageComparisonResult comparison =
+            PageComparisonResult comparison =
                     comparisonEngine.comparePage(basePage, comparePage);
 
             // Add page matching information
@@ -276,8 +278,8 @@ public class PageMatchingComparisonService {
 
         // Add unmatched base pages
         for (Integer baseIdx : pageMatches.getUnmatchedBasePages()) {
-            guraa.pdfcompare.comparison.PageComparisonResult result =
-                    new guraa.pdfcompare.comparison.PageComparisonResult();
+            PageComparisonResult result =
+                    new PageComparisonResult();
             result.setPageNumber(baseIdx + 1);
             result.setOriginalBasePageNumber(baseIdx + 1);
             result.setOnlyInBase(true);
@@ -286,8 +288,8 @@ public class PageMatchingComparisonService {
 
         // Add unmatched compare pages
         for (Integer compareIdx : pageMatches.getUnmatchedComparePages()) {
-            guraa.pdfcompare.comparison.PageComparisonResult result =
-                    new guraa.pdfcompare.comparison.PageComparisonResult();
+            PageComparisonResult result =
+                    new PageComparisonResult();
             result.setPageNumber(compareIdx + 1);
             result.setOriginalComparePageNumber(compareIdx + 1);
             result.setOnlyInCompare(true);
@@ -324,7 +326,7 @@ public class PageMatchingComparisonService {
         }
 
         // Count differences for each page
-        for (guraa.pdfcompare.comparison.PageComparisonResult page : result.getPageDifferences()) {
+        for (PageComparisonResult page : result.getPageDifferences()) {
             // Count page structure differences
             if (page.isOnlyInBase() || page.isOnlyInCompare()) {
                 totalDifferences++;
@@ -341,12 +343,8 @@ public class PageMatchingComparisonService {
 
             // Count text element differences
             if (page.getTextElementDifferences() != null) {
-                for (guraa.pdfcompare.comparison.TextElementDifference diff : page.getTextElementDifferences()) {
-                    if (diff.isStyleDifferent()) {
-                        styleDifferences++;
-                    } else {
-                        textDifferences++;
-                    }
+                for (int i = 0; i < page.getTextElementDifferences().size(); i++) {
+                    styleDifferences++;
                     totalDifferences++;
                 }
             }

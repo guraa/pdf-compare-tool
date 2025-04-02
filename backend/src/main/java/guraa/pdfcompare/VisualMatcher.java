@@ -99,7 +99,7 @@ public class VisualMatcher {
     /**
      * Calculate Hamming distance between two binary hash strings
      */
-    public static int hammingDistance(String hash1, String hash2) {
+    private static int hammingDistance(String hash1, String hash2) {
         byte[] b1 = Base64.getDecoder().decode(hash1);
         byte[] b2 = Base64.getDecoder().decode(hash2);
         int dist = 0;

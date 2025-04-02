@@ -1,7 +1,5 @@
 package guraa.pdfcompare.config;
 
-import guraa.pdfcompare.PDFComparisonEngine;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
@@ -9,13 +7,6 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class PDFComparisonConfig {
-
-    /**
-     * Creates a PDFComparisonEngine bean for dependency injection
-     * @return The PDFComparisonEngine instance
-     */
-    @Bean
-    public PDFComparisonEngine pdfComparisonEngine() {
-        return new PDFComparisonEngine();
-    }
+    // We've removed the PDFComparisonEngine bean definition
+    // since the class itself is already annotated with @Service
 }

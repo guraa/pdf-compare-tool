@@ -1,7 +1,9 @@
 package guraa.pdfcompare.comparison;
 
+import guraa.pdfcompare.core.CustomPageDifference;
 import guraa.pdfcompare.core.ImageElement;
 import guraa.pdfcompare.core.TextElement;
+import guraa.pdfcompare.service.PagePair;
 
 import java.util.*;
 
@@ -14,15 +16,48 @@ public class PageComparisonResult {
     private boolean onlyInCompare;
     private boolean dimensionsDifferent;
     private float[] baseDimensions;
+    private PageDifference pageDifference;
     private float[] compareDimensions;
     private TextComparisonResult textDifferences;
     private List<TextElementDifference> textElementDifferences;
     private List<ImageDifference> imageDifferences;
     private List<FontDifference> fontDifferences;
 
-    // Added fields to support page-level comparison
+    // Fields from the service version
     private Integer originalBasePageNumber;
     private Integer originalComparePageNumber;
+    private PDFComparisonResult comparisonResult;
+    private PagePair pagePair;
+    private boolean hasDifferences;
+    private int totalDifferences;
+    private String changeType;
+    private String error;
+    private CustomPageDifference customPageDifference;
+
+
+
+    public void setComparisonResult(PDFComparisonResult comparisonResult) {
+        this.comparisonResult = comparisonResult;
+
+        // If we have a comparison result with page differences, extract the first one
+        if (comparisonResult != null && comparisonResult.getPageDifferences() != null
+                && !comparisonResult.getPageDifferences().isEmpty()) {
+            guraa.pdfcompare.comparison.PageComparisonResult pageResult =
+                    comparisonResult.getPageDifferences().get(0);
+
+            // Copy properties from the comparison result to this object for compatibility
+            this.pageNumber = pageResult.getPageNumber();
+            this.onlyInBase = pageResult.isOnlyInBase();
+            this.onlyInCompare = pageResult.isOnlyInCompare();
+            this.dimensionsDifferent = pageResult.isDimensionsDifferent();
+            this.baseDimensions = pageResult.getBaseDimensions();
+            this.compareDimensions = pageResult.getCompareDimensions();
+            this.textDifferences = pageResult.getTextDifferences();
+            this.textElementDifferences = pageResult.getTextElementDifferences();
+            this.imageDifferences = pageResult.getImageDifferences();
+            this.fontDifferences = pageResult.getFontDifferences();
+        }
+    }
 
     /**
      * Extract page differences as a list of items for API response
@@ -64,28 +99,25 @@ public class PageComparisonResult {
                 diff.put("id", "text-" + pageNumber + "-" + i);
                 diff.put("type", "text");
 
-                switch (textDiff.getDifferenceType()) {
-                    case ADDED:
-                        if (isBase) continue; // Skip added text for base document
-                        diff.put("changeType", "added");
-                        diff.put("compareText", textDiff.getCompareText());
-                        diff.put("description", "Text added: " + textDiff.getCompareText());
-                        break;
-                    case DELETED:
-                        if (!isBase) continue; // Skip deleted text for compare document
-                        diff.put("changeType", "deleted");
-                        diff.put("baseText", textDiff.getBaseText());
-                        diff.put("description", "Text deleted: " + textDiff.getBaseText());
-                        break;
-                    case MODIFIED:
-                        diff.put("changeType", "modified");
-                        diff.put("baseText", textDiff.getBaseText());
-                        diff.put("compareText", textDiff.getCompareText());
-                        diff.put("description", "Text modified from \"" +
-                                (isBase ? textDiff.getBaseText() : textDiff.getCompareText()) +
-                                "\" to \"" +
-                                (isBase ? textDiff.getCompareText() : textDiff.getBaseText()) + "\"");
-                        break;
+                TextDifferenceType diffType = textDiff.getDifferenceType();
+                if (diffType == TextDifferenceType.ADDED) {
+                    if (isBase) continue; // Skip added text for base document
+                    diff.put("changeType", "added");
+                    diff.put("compareText", textDiff.getCompareText());
+                    diff.put("description", "Text added: " + textDiff.getCompareText());
+                } else if (diffType == TextDifferenceType.DELETED) {
+                    if (!isBase) continue; // Skip deleted text for compare document
+                    diff.put("changeType", "deleted");
+                    diff.put("baseText", textDiff.getBaseText());
+                    diff.put("description", "Text deleted: " + textDiff.getBaseText());
+                } else if (diffType == TextDifferenceType.MODIFIED) {
+                    diff.put("changeType", "modified");
+                    diff.put("baseText", textDiff.getBaseText());
+                    diff.put("compareText", textDiff.getCompareText());
+                    diff.put("description", "Text modified from \"" +
+                            (isBase ? textDiff.getBaseText() : textDiff.getCompareText()) +
+                            "\" to \"" +
+                            (isBase ? textDiff.getCompareText() : textDiff.getBaseText()) + "\"");
                 }
 
                 diff.put("lineNumber", textDiff.getLineNumber());
@@ -245,7 +277,37 @@ public class PageComparisonResult {
         return differences;
     }
 
-    // Getters and setters
+    // Getters and setters from the original class
+
+    /**
+     * Get the page difference information
+     * @return Page difference object
+     */
+    public PageDifference getPageDifference() {
+        return pageDifference;
+    }
+
+    /**
+     * Set the page difference information
+     * @param pageDifference Page difference object
+     */
+    public void setPageDifference(PageDifference pageDifference) {
+        this.pageDifference = pageDifference;
+    }
+    /**
+     * Default constructor
+     */
+    public PageComparisonResult() {
+    }
+
+    /**
+     * Create a result with a page pair
+     * @param pagePair The page pair being compared
+     */
+    public PageComparisonResult(PagePair pagePair) {
+        this.pagePair = pagePair;
+    }
+
     public Integer getOriginalBasePageNumber() {
         return originalBasePageNumber;
     }
@@ -340,5 +402,124 @@ public class PageComparisonResult {
 
     public void setFontDifferences(List<FontDifference> fontDifferences) {
         this.fontDifferences = fontDifferences;
+    }
+
+    // Additional methods from the service version
+    public PagePair getPagePair() {
+        return pagePair;
+    }
+
+    public void setPagePair(PagePair pagePair) {
+        this.pagePair = pagePair;
+    }
+
+    public boolean isHasDifferences() {
+        return hasDifferences;
+    }
+
+    public void setHasDifferences(boolean hasDifferences) {
+        this.hasDifferences = hasDifferences;
+    }
+
+    public int getTotalDifferences() {
+        return totalDifferences;
+    }
+
+    public void setTotalDifferences(int totalDifferences) {
+        this.totalDifferences = totalDifferences;
+    }
+
+    public CustomPageDifference getCustomPageDifference() {
+        return customPageDifference;
+    }
+
+    public void setCustomPageDifference(CustomPageDifference customPageDifference) {
+        this.customPageDifference = customPageDifference;
+    }
+
+    public String getChangeType() {
+        if (changeType != null) {
+            return changeType;
+        }
+
+        if (!hasDifferences && pagePair != null && pagePair.isMatched()) {
+            return "IDENTICAL";
+        } else if (pagePair != null && pagePair.isMatched()) {
+            return "MODIFIED";
+        } else if (pagePair != null && pagePair.getBaseFingerprint() != null) {
+            return "DELETION";
+        } else {
+            return "ADDITION";
+        }
+    }
+
+    public void setChangeType(String changeType) {
+        this.changeType = changeType;
+    }
+
+    public String getError() {
+        return error;
+    }
+
+    public void setError(String error) {
+        this.error = error;
+    }
+
+    public boolean hasError() {
+        return error != null && !error.isEmpty();
+    }
+
+    public boolean isAddition() {
+        return "ADDITION".equals(getChangeType());
+    }
+
+    public boolean isDeletion() {
+        return "DELETION".equals(getChangeType());
+    }
+
+    public boolean isModification() {
+        return "MODIFIED".equals(getChangeType());
+    }
+
+    public boolean isIdentical() {
+        return "IDENTICAL".equals(getChangeType());
+    }
+
+    public String getSummary() {
+        if (hasError()) {
+            return "Error: " + error;
+        }
+
+        StringBuilder summary = new StringBuilder();
+        String type = getChangeType();
+
+        switch (type) {
+            case "ADDITION":
+                summary.append("Page added in compare document");
+                break;
+            case "DELETION":
+                summary.append("Page deleted from base document");
+                break;
+            case "MODIFIED":
+                summary.append("Page modified with ").append(totalDifferences).append(" differences");
+                break;
+            case "IDENTICAL":
+                summary.append("Pages are identical");
+                break;
+            default:
+                summary.append("Unknown change type");
+        }
+
+        return summary.toString();
+    }
+
+    @Override
+    public String toString() {
+        return "PageComparisonResult{" +
+                "changeType='" + getChangeType() + '\'' +
+                ", hasDifferences=" + hasDifferences +
+                ", totalDifferences=" + totalDifferences +
+                ", summary='" + getSummary() + '\'' +
+                '}';
     }
 }

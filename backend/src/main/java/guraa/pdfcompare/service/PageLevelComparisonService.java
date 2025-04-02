@@ -1,6 +1,7 @@
 package guraa.pdfcompare.service;
 
 import guraa.pdfcompare.PDFComparisonEngine;
+import guraa.pdfcompare.comparison.PageComparisonResult;
 import guraa.pdfcompare.core.CustomPageDifference;
 import guraa.pdfcompare.core.PDFDocumentModel;
 import guraa.pdfcompare.core.PDFPageModel;

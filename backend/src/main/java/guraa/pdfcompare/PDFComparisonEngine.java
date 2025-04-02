@@ -9,7 +9,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class PDFComparisonEngine {
@@ -27,11 +29,8 @@ public class PDFComparisonEngine {
         PDFComparisonResult result = new PDFComparisonResult();
 
         // Compare document metadata
-        result.setMetadataDifferences(compareMetadata(baseDocument, compareDocument));
-
-        // Compare document structure
-        DocumentStructureAnalyzer structureAnalyzer = new DocumentStructureAnalyzer();
-        result.setStructureDifferences(structureAnalyzer.compareDocumentStructure(baseDocument, compareDocument));
+        Map<String, MetadataDifference> metadataDiffs = compareMetadata(baseDocument.getMetadata(), compareDocument.getMetadata());
+        result.setMetadataDifferences(metadataDiffs);
 
         // Compare each page
         List<PageComparisonResult> pageDifferences = new ArrayList<>();
@@ -39,7 +38,7 @@ public class PDFComparisonEngine {
             int maxPages = Math.max(baseDocument.getPages().size(), compareDocument.getPages().size());
             for (int i = 0; i < maxPages; i++) {
                 PDFPageModel basePage = i < baseDocument.getPages().size() ? baseDocument.getPages().get(i) : null;
-                PDFPageModel comparePage = i < compareDocument.getPages().size() ? compareDocument.get(i) : null;
+                PDFPageModel comparePage = i < compareDocument.getPages().size() ? compareDocument.getPages().get(i) : null;
                 pageDifferences.add(comparePage(basePage, comparePage));
             }
         }
@@ -47,10 +46,40 @@ public class PDFComparisonEngine {
 
         // Calculate total differences
         int totalDifferences = 0;
+        int totalTextDifferences = 0;
+        int totalImageDifferences = 0;
+        int totalFontDifferences = 0;
+        int totalStyleDifferences = 0;
+
         for (PageComparisonResult pageResult : pageDifferences) {
-            totalDifferences += pageResult.getTotalDifferences();
+            // Count text differences
+            if (pageResult.getTextDifferences() != null && pageResult.getTextDifferences().getDifferences() != null) {
+                totalTextDifferences += pageResult.getTextDifferences().getDifferences().size();
+            }
+
+            // Count text element differences
+            if (pageResult.getTextElementDifferences() != null) {
+                totalStyleDifferences += pageResult.getTextElementDifferences().size();
+            }
+
+            // Count image differences
+            if (pageResult.getImageDifferences() != null) {
+                totalImageDifferences += pageResult.getImageDifferences().size();
+            }
+
+            // Count font differences
+            if (pageResult.getFontDifferences() != null) {
+                totalFontDifferences += pageResult.getFontDifferences().size();
+            }
         }
+
+        totalDifferences = totalTextDifferences + totalStyleDifferences + totalImageDifferences + totalFontDifferences;
+
         result.setTotalDifferences(totalDifferences);
+        result.setTotalTextDifferences(totalTextDifferences);
+        result.setTotalImageDifferences(totalImageDifferences);
+        result.setTotalFontDifferences(totalFontDifferences);
+        result.setTotalStyleDifferences(totalStyleDifferences);
 
         // Set page counts
         result.setBasePageCount(baseDocument.getPageCount());
@@ -74,12 +103,22 @@ public class PDFComparisonEngine {
             return result; // Both pages are null, return empty result
         }
 
-        if (basePage == null || comparePage == null) {
-            // One of the pages is null, mark as different
-            result.setHasDifferences(true);
-            result.setTotalDifferences(1); // Consider a missing page as 1 difference
+        if (basePage == null) {
+            // Base page is null
+            result.setOnlyInCompare(true);
+            result.setPageNumber(comparePage.getPageNumber());
             return result;
         }
+
+        if (comparePage == null) {
+            // Compare page is null
+            result.setOnlyInBase(true);
+            result.setPageNumber(basePage.getPageNumber());
+            return result;
+        }
+
+        // Set page number
+        result.setPageNumber(basePage.getPageNumber());
 
         // Compare page dimensions
         result.setDimensionsDifferent(basePage.getWidth() != comparePage.getWidth() ||
@@ -103,22 +142,6 @@ public class PDFComparisonEngine {
         List<FontDifference> fontDifferences = compareFonts(basePage, comparePage);
         result.setFontDifferences(fontDifferences);
 
-        // Calculate total differences for this page
-        int totalDiffs = 0;
-        if (result.getTextDifferences() != null) {
-            totalDiffs += result.getTextDifferences().getDifferences().size();
-        }
-        if (result.getTextElementDifferences() != null) {
-            totalDiffs += result.getTextElementDifferences().size();
-        }
-        if (result.getImageDifferences() != null) {
-            totalDiffs += result.getImageDifferences().size();
-        }
-        if (result.getFontDifferences() != null) {
-            totalDiffs += result.getFontDifferences().size();
-        }
-        result.setTotalDifferences(totalDiffs);
-
         return result;
     }
 
@@ -131,7 +154,8 @@ public class PDFComparisonEngine {
      */
     private TextComparisonResult compareText(PDFPageModel basePage, PDFPageModel comparePage) {
         TextComparisonResult result = new TextComparisonResult();
-        result.setDifferences(new ArrayList<>());
+        List<TextDifferenceItem> differences = new ArrayList<>();
+        result.setDifferences(differences);
 
         if (basePage.getText() == null && comparePage.getText() == null) {
             return result; // Both texts are null, return empty result
@@ -142,17 +166,18 @@ public class PDFComparisonEngine {
 
         // Calculate Levenshtein distance
         int levenshteinDistance = PDFComparisonUtility.calculateLevenshteinDistance(baseText, compareText);
-        result.setLevenshteinDistance(levenshteinDistance);
 
         // Simple text difference detection (can be improved)
         if (!baseText.equals(compareText)) {
             TextDifferenceItem diff = new TextDifferenceItem();
-            diff.setType(TextDifferenceType.CONTENT_CHANGE);
+            diff.setLineNumber(1); // Default to first line
             diff.setBaseText(baseText);
             diff.setCompareText(compareText);
-            result.getDifferences().add(diff);
+            diff.setDifferenceType(TextDifferenceType.MODIFIED);
+            differences.add(diff);
         }
 
+        result.setDifferenceCount(differences.size());
         return result;
     }
 
@@ -178,19 +203,43 @@ public class PDFComparisonEngine {
         for (int i = 0; i < minElements; i++) {
             TextElement baseElement = baseElements.get(i);
             TextElement compareElement = compareElements.get(i);
-            TextElementDifference diff = new TextElementDifference();
 
-            diff.setTextDifferent(!baseElement.getText().equals(compareElement.getText()));
-            diff.setPositionDifferent(baseElement.getX() != compareElement.getX() || baseElement.getY() != compareElement.getY());
-            diff.setWidthDifferent(baseElement.getWidth() != compareElement.getWidth());
-            diff.setHeightDifferent(baseElement.getHeight() != compareElement.getHeight());
-            diff.setFontDifferent(baseElement.getFontName().equals(compareElement.getFontName()));
-            diff.setFontSizeDifferent(baseElement.getFontSize() != compareElement.getFontSize());
-            diff.setFontStyleDifferent(baseElement.getFontStyle().equals(compareElement.getFontStyle()));
+            // Check for differences
+            boolean textDifferent = !baseElement.getText().equals(compareElement.getText());
+            boolean positionDifferent = baseElement.getX() != compareElement.getX() || baseElement.getY() != compareElement.getY();
+            boolean widthDifferent = baseElement.getWidth() != compareElement.getWidth();
+            boolean heightDifferent = baseElement.getHeight() != compareElement.getHeight();
+            boolean fontNameDifferent = !baseElement.getFontName().equals(compareElement.getFontName());
+            boolean fontSizeDifferent = baseElement.getFontSize() != compareElement.getFontSize();
+            boolean fontStyleDifferent = !baseElement.getFontStyle().equals(compareElement.getFontStyle());
 
             // Enhanced Style Comparison
-            diff.setStyleDifferent(isStyleDifferent(baseElement, compareElement));
+            boolean styleDifferent = isStyleDifferent(baseElement, compareElement);
 
+            if (textDifferent || positionDifferent || widthDifferent || heightDifferent ||
+                    fontNameDifferent || fontSizeDifferent || fontStyleDifferent || styleDifferent) {
+
+                TextElementDifference diff = new TextElementDifference();
+                diff.setBaseElement(baseElement);
+                diff.setCompareElement(compareElement);
+                diff.setStyleDifferent(styleDifferent);
+                differences.add(diff);
+            }
+        }
+
+        // Add elements that only exist in the base document
+        for (int i = minElements; i < baseElements.size(); i++) {
+            TextElementDifference diff = new TextElementDifference();
+            diff.setBaseElement(baseElements.get(i));
+            diff.setOnlyInBase(true);
+            differences.add(diff);
+        }
+
+        // Add elements that only exist in the compare document
+        for (int i = minElements; i < compareElements.size(); i++) {
+            TextElementDifference diff = new TextElementDifference();
+            diff.setCompareElement(compareElements.get(i));
+            diff.setOnlyInCompare(true);
             differences.add(diff);
         }
 
@@ -241,13 +290,46 @@ public class PDFComparisonEngine {
         List<ImageElement> baseImages = basePage.getImages() != null ? basePage.getImages() : new ArrayList<>();
         List<ImageElement> compareImages = comparePage.getImages() != null ? comparePage.getImages() : new ArrayList<>();
 
-        // Simple comparison (can be improved with image hashing or other techniques)
+        // Check for difference in number of images
         if (baseImages.size() != compareImages.size()) {
-            ImageDifference diff = new ImageDifference();
-            diff.setDifferenceType("Image count difference");
-            diff.setBaseImageCount(baseImages.size());
-            diff.setCompareImageCount(compareImages.size());
-            differences.add(diff);
+            // For each image in the base document not matched in compare
+            for (int i = compareImages.size(); i < baseImages.size(); i++) {
+                ImageDifference diff = new ImageDifference();
+                diff.setBaseImage(baseImages.get(i));
+                diff.setOnlyInBase(true);
+                differences.add(diff);
+            }
+
+            // For each image in the compare document not matched in base
+            for (int i = baseImages.size(); i < compareImages.size(); i++) {
+                ImageDifference diff = new ImageDifference();
+                diff.setCompareImage(compareImages.get(i));
+                diff.setOnlyInCompare(true);
+                differences.add(diff);
+            }
+        }
+
+        // Compare matching images
+        int minImages = Math.min(baseImages.size(), compareImages.size());
+        for (int i = 0; i < minImages; i++) {
+            ImageElement baseImage = baseImages.get(i);
+            ImageElement compareImage = compareImages.get(i);
+
+            boolean dimensionsDifferent = baseImage.getWidth() != compareImage.getWidth() ||
+                    baseImage.getHeight() != compareImage.getHeight();
+            boolean positionDifferent = baseImage.getX() != compareImage.getX() ||
+                    baseImage.getY() != compareImage.getY();
+            boolean formatDifferent = !baseImage.getFormat().equals(compareImage.getFormat());
+
+            if (dimensionsDifferent || positionDifferent || formatDifferent) {
+                ImageDifference diff = new ImageDifference();
+                diff.setBaseImage(baseImage);
+                diff.setCompareImage(compareImage);
+                diff.setDimensionsDifferent(dimensionsDifferent);
+                diff.setPositionDifferent(positionDifferent);
+                diff.setFormatDifferent(formatDifferent);
+                differences.add(diff);
+            }
         }
 
         return differences;
@@ -270,13 +352,55 @@ public class PDFComparisonEngine {
         List<FontInfo> baseFonts = basePage.getFonts() != null ? basePage.getFonts() : new ArrayList<>();
         List<FontInfo> compareFonts = comparePage.getFonts() != null ? comparePage.getFonts() : new ArrayList<>();
 
-        // Simple comparison (can be improved with font properties comparison)
-        if (baseFonts.size() != compareFonts.size()) {
-            FontDifference diff = new FontDifference();
-            diff.setDifferenceType("Font count difference");
-            diff.setBaseFontCount(baseFonts.size());
-            diff.setCompareFontCount(compareFonts.size());
-            differences.add(diff);
+        // Create a map of font names to font info for easier lookup
+        Map<String, FontInfo> baseMap = new HashMap<>();
+        for (FontInfo font : baseFonts) {
+            baseMap.put(font.getName(), font);
+        }
+
+        Map<String, FontInfo> compareMap = new HashMap<>();
+        for (FontInfo font : compareFonts) {
+            compareMap.put(font.getName(), font);
+        }
+
+        // Find fonts in base not in compare
+        for (FontInfo baseFont : baseFonts) {
+            if (!compareMap.containsKey(baseFont.getName())) {
+                FontDifference diff = new FontDifference();
+                diff.setBaseFont(baseFont);
+                diff.setOnlyInBase(true);
+                differences.add(diff);
+            }
+        }
+
+        // Find fonts in compare not in base
+        for (FontInfo compareFont : compareFonts) {
+            if (!baseMap.containsKey(compareFont.getName())) {
+                FontDifference diff = new FontDifference();
+                diff.setCompareFont(compareFont);
+                diff.setOnlyInCompare(true);
+                differences.add(diff);
+            }
+        }
+
+        // Compare fonts that exist in both documents
+        for (String fontName : baseMap.keySet()) {
+            if (compareMap.containsKey(fontName)) {
+                FontInfo baseFont = baseMap.get(fontName);
+                FontInfo compareFont = compareMap.get(fontName);
+
+                boolean embeddingDifferent = baseFont.isEmbedded() != compareFont.isEmbedded();
+                boolean subsetDifferent = baseFont.isSubset() != compareFont.isSubset();
+
+                if (embeddingDifferent || subsetDifferent) {
+                    FontDifference diff = new FontDifference();
+                    diff.setBaseFont(baseFont);
+                    diff.setCompareFont(compareFont);
+                    diff.setEmbeddingDifferent(embeddingDifferent);
+                    diff.setSubsetDifferent(subsetDifferent);
+                    differences.add(diff);
+                }
+            }
         }
 
         return differences;
@@ -285,16 +409,55 @@ public class PDFComparisonEngine {
     /**
      * Compare metadata of two documents
      *
-     * @param baseDocument    The base PDF document model
-     * @param compareDocument The PDF document model to compare against the base
-     * @return List<MetadataDifference> The list of metadata differences
+     * @param baseMetadata    The base document metadata
+     * @param compareMetadata The compare document metadata
+     * @return Map<String, MetadataDifference> Map of metadata key to difference
      */
-    private List<MetadataDifference> compareMetadata(PDFDocumentModel baseDocument, PDFDocumentModel compareDocument) {
-        List<MetadataDifference> differences = new ArrayList<>();
+    public Map<String, MetadataDifference> compareMetadata(Map<String, String> baseMetadata, Map<String, String> compareMetadata) {
+        Map<String, MetadataDifference> differences = new HashMap<>();
 
-        // Placeholder for metadata comparison logic
-        // This is a simplified implementation. A real-world implementation would
-        // compare individual metadata fields (author, title, etc.) and identify differences.
+        // Handle null metadata
+        if (baseMetadata == null) baseMetadata = new HashMap<>();
+        if (compareMetadata == null) compareMetadata = new HashMap<>();
+
+        // Check for keys in base not in compare
+        for (String key : baseMetadata.keySet()) {
+            if (!compareMetadata.containsKey(key)) {
+                MetadataDifference diff = new MetadataDifference();
+                diff.setKey(key);
+                diff.setBaseValue(baseMetadata.get(key));
+                diff.setOnlyInBase(true);
+                differences.put(key, diff);
+            }
+        }
+
+        // Check for keys in compare not in base
+        for (String key : compareMetadata.keySet()) {
+            if (!baseMetadata.containsKey(key)) {
+                MetadataDifference diff = new MetadataDifference();
+                diff.setKey(key);
+                diff.setCompareValue(compareMetadata.get(key));
+                diff.setOnlyInCompare(true);
+                differences.put(key, diff);
+            }
+        }
+
+        // Check for differences in values for keys in both documents
+        for (String key : baseMetadata.keySet()) {
+            if (compareMetadata.containsKey(key)) {
+                String baseValue = baseMetadata.get(key);
+                String compareValue = compareMetadata.get(key);
+
+                if (!baseValue.equals(compareValue)) {
+                    MetadataDifference diff = new MetadataDifference();
+                    diff.setKey(key);
+                    diff.setBaseValue(baseValue);
+                    diff.setCompareValue(compareValue);
+                    diff.setValueDifferent(true);
+                    differences.put(key, diff);
+                }
+            }
+        }
 
         return differences;
     }

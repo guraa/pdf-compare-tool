@@ -1,5 +1,7 @@
 package guraa.pdfcompare.service;
 
+import guraa.pdfcompare.comparison.PageComparisonResult;
+
 /**
  * Adapter class to convert between different PageComparisonResult classes
  */

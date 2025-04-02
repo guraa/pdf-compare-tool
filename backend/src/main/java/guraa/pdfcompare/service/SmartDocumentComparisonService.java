@@ -4,11 +4,7 @@ import guraa.pdfcompare.PDFComparisonEngine;
 import guraa.pdfcompare.PDFComparisonService;
 import guraa.pdfcompare.comparison.PDFComparisonResult;
 import guraa.pdfcompare.comparison.PageComparisonResult;
-import guraa.pdfcompare.core.DocumentFeaturesExtractor;
-import guraa.pdfcompare.core.PDFDocumentModel;
-import guraa.pdfcompare.core.PDFPageModel;
-import guraa.pdfcompare.core.PDFProcessor;
-import guraa.pdfcompare.core.SmartDocumentMatcher;
+import guraa.pdfcompare.core.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,14 +12,10 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -145,11 +137,87 @@ public class SmartDocumentComparisonService {
                     performDocumentLevelMatching(comparisonId, baseDocument, compareDocument, baseFile, compareFile);
                 }
 
+                // IMPORTANT: Also store a simplified version of the result in the standard comparison service
+                // for PDF report generation
+                createAndStoreSimplifiedResult(comparisonId, baseDocument, compareDocument);
+
             } catch (Exception e) {
                 logger.error("Error in smart comparison {}: {}", comparisonId, e.getMessage(), e);
                 handleComparisonError(comparisonId, e.getMessage());
             }
         });
+    }
+
+    /**
+     * Create and store a simplified version of the comparison result for PDF generation
+     */
+    private void createAndStoreSimplifiedResult(String comparisonId,
+                                                PDFDocumentModel baseDocument,
+                                                PDFDocumentModel compareDocument) {
+        try {
+            // Create a basic result
+            PDFComparisonResult result = new PDFComparisonResult();
+            result.setBasePageCount(baseDocument.getPageCount());
+            result.setComparePageCount(compareDocument.getPageCount());
+            result.setPageCountDifferent(baseDocument.getPageCount() != compareDocument.getPageCount());
+
+            // Set the same matching ID
+            result.setMatchingId(comparisonId);
+
+            // Get the summary data from our service
+            Map<String, Object> summary = getComparisonSummary(comparisonId);
+
+            // Set the difference counts
+            if (summary.containsKey("totalDifferences")) {
+                result.setTotalDifferences((Integer)summary.get("totalDifferences"));
+            }
+
+            if (summary.containsKey("totalTextDifferences")) {
+                result.setTotalTextDifferences((Integer)summary.get("totalTextDifferences"));
+            }
+
+            if (summary.containsKey("totalImageDifferences")) {
+                result.setTotalImageDifferences((Integer)summary.get("totalImageDifferences"));
+            }
+
+            if (summary.containsKey("totalFontDifferences")) {
+                result.setTotalFontDifferences((Integer)summary.get("totalFontDifferences"));
+            }
+
+            if (summary.containsKey("totalStyleDifferences")) {
+                result.setTotalStyleDifferences((Integer)summary.get("totalStyleDifferences"));
+            }
+
+            // Create a minimal set of page differences
+            List<PageComparisonResult> pageDifferences = new ArrayList<>();
+
+            // For each page pair, create a basic page comparison result
+            List<PagePair> pagePairs = pageLevelResults.getOrDefault(comparisonId, new ArrayList<>());
+            for (PagePair pair : pagePairs) {
+                PageComparisonResult pageResult = new PageComparisonResult();
+
+                if (pair.getBaseFingerprint() != null) {
+                    pageResult.setPageNumber(pair.getBaseFingerprint().getPageIndex() + 1);
+                    if (pair.getCompareFingerprint() == null) {
+                        pageResult.setOnlyInBase(true);
+                    }
+                } else if (pair.getCompareFingerprint() != null) {
+                    pageResult.setPageNumber(pair.getCompareFingerprint().getPageIndex() + 1);
+                    pageResult.setOnlyInCompare(true);
+                }
+
+                pageDifferences.add(pageResult);
+            }
+
+            result.setPageDifferences(pageDifferences);
+
+            // Store it in the comparison service
+            comparisonService.storeTemporaryResult(comparisonId, result);
+            logger.info("Stored simplified result in standard comparison service for PDF generation");
+
+        } catch (Exception e) {
+            logger.error("Error creating simplified result for PDF generation: {}", e.getMessage(), e);
+        }
     }
 
     /**
@@ -244,7 +312,7 @@ public class SmartDocumentComparisonService {
      * Convert a page comparison result to a full comparison result
      */
     private PDFComparisonResult convertToComparisonResult(
-            guraa.pdfcompare.service.PageComparisonResult pageResult,
+            guraa.pdfcompare.comparison.PageComparisonResult pageResult,
             PDFDocumentModel baseDocument,
             PDFDocumentModel compareDocument) {
 

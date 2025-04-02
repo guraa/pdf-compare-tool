@@ -39,6 +39,15 @@ public class ReportGenerationService {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
         try {
+            // Log what we're generating
+            logger.info("Starting PDF report generation for result with ID: {}",
+                    result != null && result.getMatchingId() != null ? result.getMatchingId() : "Unknown");
+
+            if (result == null) {
+                logger.error("Cannot generate PDF report for null result");
+                throw new IllegalArgumentException("Cannot generate PDF report for null result");
+            }
+
             // Create PDF document
             Document document = new Document();
             PdfWriter writer = PdfWriter.getInstance(document, baos);
@@ -68,21 +77,30 @@ public class ReportGenerationService {
             PdfPTable summaryTable = new PdfPTable(2);
             summaryTable.setWidthPercentage(100);
 
-            addTableRow(summaryTable, "Base Document Page Count:", String.valueOf(result.getBasePageCount()));
-            addTableRow(summaryTable, "Compare Document Page Count:", String.valueOf(result.getComparePageCount()));
-            addTableRow(summaryTable, "Page Count Different:", result.isPageCountDifferent() ? "Yes" : "No");
-            addTableRow(summaryTable, "Total Differences:", String.valueOf(result.getTotalDifferences()));
-            addTableRow(summaryTable, "Text Differences:", String.valueOf(result.getTotalTextDifferences()));
-            addTableRow(summaryTable, "Image Differences:", String.valueOf(result.getTotalImageDifferences()));
-            addTableRow(summaryTable, "Font Differences:", String.valueOf(result.getTotalFontDifferences()));
-            addTableRow(summaryTable, "Style Differences:", String.valueOf(result.getTotalStyleDifferences()));
+            // Use default values if not set
+            int basePageCount = result.getBasePageCount();
+            int comparePageCount = result.getComparePageCount();
+            boolean pageCountDifferent = result.isPageCountDifferent();
+            int totalDifferences = result.getTotalDifferences();
+            int totalTextDifferences = result.getTotalTextDifferences();
+            int totalImageDifferences = result.getTotalImageDifferences();
+            int totalFontDifferences = result.getTotalFontDifferences();
+            int totalStyleDifferences = result.getTotalStyleDifferences();
+
+            addTableRow(summaryTable, "Base Document Page Count:", String.valueOf(basePageCount));
+            addTableRow(summaryTable, "Compare Document Page Count:", String.valueOf(comparePageCount));
+            addTableRow(summaryTable, "Page Count Different:", pageCountDifferent ? "Yes" : "No");
+            addTableRow(summaryTable, "Total Differences:", String.valueOf(totalDifferences));
+            addTableRow(summaryTable, "Text Differences:", String.valueOf(totalTextDifferences));
+            addTableRow(summaryTable, "Image Differences:", String.valueOf(totalImageDifferences));
+            addTableRow(summaryTable, "Font Differences:", String.valueOf(totalFontDifferences));
+            addTableRow(summaryTable, "Style Differences:", String.valueOf(totalStyleDifferences));
 
             document.add(summaryTable);
             document.add(Chunk.NEWLINE);
 
-            // Add metadata differences - but only if less than 100 to avoid memory issues
-            if (result.getMetadataDifferences() != null && !result.getMetadataDifferences().isEmpty()
-                    && result.getMetadataDifferences().size() < 100) {
+            // Add metadata differences - check if metadata exists and is not empty
+            if (result.getMetadataDifferences() != null && !result.getMetadataDifferences().isEmpty()) {
                 Paragraph metadataTitle = new Paragraph("Metadata Differences", sectionFont);
                 document.add(metadataTitle);
                 document.add(Chunk.NEWLINE);
@@ -104,7 +122,7 @@ public class ReportGenerationService {
                 metadataTable.addCell(baseCell);
                 metadataTable.addCell(compareCell);
 
-                // Add data rows - limit to top 50 differences to avoid memory issues
+                // Add data rows - limit to top 50 differences
                 int count = 0;
                 int maxEntries = 50;
                 for (MetadataDifference diff : result.getMetadataDifferences().values()) {
@@ -126,158 +144,101 @@ public class ReportGenerationService {
                 document.add(Chunk.NEWLINE);
             }
 
-            // Add page differences - limit to 20 most important pages to avoid memory issues
+            // Add page differences section if available
             if (result.getPageDifferences() != null && !result.getPageDifferences().isEmpty()) {
                 Paragraph pagesTitle = new Paragraph("Page Differences", sectionFont);
                 document.add(pagesTitle);
                 document.add(Chunk.NEWLINE);
 
-                // Sort pages by most significant differences
-                List<guraa.pdfcompare.comparison.PageComparisonResult> significantPages = findMostSignificantPages(result.getPageDifferences(), 20);
+                // Get the page differences
+                List<PageComparisonResult> pageDifferences = result.getPageDifferences();
 
-                for (guraa.pdfcompare.comparison.PageComparisonResult page : significantPages) {
-                    // Skip pages with no differences
-                    if ((page.getTextDifferences() == null || page.getTextDifferences().getDifferenceCount() == 0) &&
-                            (page.getTextElementDifferences() == null || page.getTextElementDifferences().isEmpty()) &&
-                            (page.getImageDifferences() == null || page.getImageDifferences().isEmpty()) &&
-                            (page.getFontDifferences() == null || page.getFontDifferences().isEmpty()) &&
-                            !page.isOnlyInBase() && !page.isOnlyInCompare() && !page.isDimensionsDifferent()) {
-                        continue;
-                    }
+                // Add summary information
+                document.add(new Paragraph("Found differences in " + pageDifferences.size() + " pages."));
+                document.add(Chunk.NEWLINE);
 
-                    Font pageFont = new Font(Font.HELVETICA, 12, Font.BOLD);
-                    Paragraph pageTitle = new Paragraph("Page " + page.getPageNumber(), pageFont);
-                    document.add(pageTitle);
+                // Create a simple table of differences
+                PdfPTable diffTable = new PdfPTable(3);
+                diffTable.setWidthPercentage(100);
+
+                // Add header
+                Font headerFont = new Font(Font.HELVETICA, 12, Font.BOLD);
+                PdfPCell pageCell = new PdfPCell(new Phrase("Page", headerFont));
+                PdfPCell typeCell = new PdfPCell(new Phrase("Type", headerFont));
+                PdfPCell descCell = new PdfPCell(new Phrase("Description", headerFont));
+
+                pageCell.setBackgroundColor(new java.awt.Color(230, 230, 230));
+                typeCell.setBackgroundColor(new java.awt.Color(230, 230, 230));
+                descCell.setBackgroundColor(new java.awt.Color(230, 230, 230));
+
+                diffTable.addCell(pageCell);
+                diffTable.addCell(typeCell);
+                diffTable.addCell(descCell);
+
+                // Add page differences
+                for (PageComparisonResult page : pageDifferences) {
+                    String pageNumber = String.valueOf(page.getPageNumber());
 
                     if (page.isOnlyInBase()) {
-                        document.add(new Paragraph("This page exists only in the base document."));
-                        continue;
+                        diffTable.addCell(pageNumber);
+                        diffTable.addCell("Missing");
+                        diffTable.addCell("Page exists only in base document");
+                    } else if (page.isOnlyInCompare()) {
+                        diffTable.addCell(pageNumber);
+                        diffTable.addCell("Added");
+                        diffTable.addCell("Page exists only in compare document");
+                    } else if (page.isDimensionsDifferent()) {
+                        diffTable.addCell(pageNumber);
+                        diffTable.addCell("Size");
+                        diffTable.addCell("Page dimensions differ");
                     }
 
-                    if (page.isOnlyInCompare()) {
-                        document.add(new Paragraph("This page exists only in the comparison document."));
-                        continue;
-                    }
+                    // Add text differences if available
+                    if (page.getTextDifferences() != null &&
+                            page.getTextDifferences().getDifferences() != null &&
+                            !page.getTextDifferences().getDifferences().isEmpty()) {
 
-                    if (page.isDimensionsDifferent()) {
-                        document.add(new Paragraph(String.format(
-                                "Page dimensions differ: Base [%.2f x %.2f], Compare [%.2f x %.2f]",
-                                page.getBaseDimensions()[0], page.getBaseDimensions()[1],
-                                page.getCompareDimensions()[0], page.getCompareDimensions()[1])));
-                    }
+                        int diffsToShow = Math.min(3, page.getTextDifferences().getDifferences().size());
+                        for (int i = 0; i < diffsToShow; i++) {
+                            TextDifferenceItem textDiff = page.getTextDifferences().getDifferences().get(i);
+                            diffTable.addCell(pageNumber);
+                            diffTable.addCell("Text");
 
-                    // Text differences - limit to top 20 differences per page
-                    if (page.getTextDifferences() != null && page.getTextDifferences().getDifferenceCount() > 0) {
-                        document.add(new Paragraph("Text Differences:"));
-
-                        int diffCount = 0;
-                        int maxDiffs = 20;
-                        for (TextDifferenceItem textDiff : page.getTextDifferences().getDifferences()) {
-                            if (diffCount++ >= maxDiffs) {
-                                document.add(new Paragraph("(additional text differences not shown)"));
-                                break;
-                            }
-
-                            Paragraph diffPara = new Paragraph();
-
-                            // Line number
-                            Chunk lineChunk = new Chunk("Line " + textDiff.getLineNumber() + ": ");
-                            diffPara.add(lineChunk);
-
-                            // Difference type
-                            switch (textDiff.getDifferenceType()) {
-                                case ADDED:
-                                    diffPara.add(new Chunk("Added: ", new Font(Font.HELVETICA, 10, Font.BOLD, new java.awt.Color(0, 128, 0))));
-                                    diffPara.add(new Chunk(textDiff.getCompareText()));
-                                    break;
-                                case DELETED:
-                                    diffPara.add(new Chunk("Deleted: ", new Font(Font.HELVETICA, 10, Font.BOLD, new java.awt.Color(255, 0, 0))));
-                                    diffPara.add(new Chunk(textDiff.getBaseText()));
-                                    break;
-                                case MODIFIED:
-                                    diffPara.add(new Chunk("Modified: ", new Font(Font.HELVETICA, 10, Font.BOLD, new java.awt.Color(0, 0, 255))));
-                                    diffPara.add(new Chunk("From \"" + textDiff.getBaseText() + "\" to \"" + textDiff.getCompareText() + "\""));
-                                    break;
-                            }
-
-                            document.add(diffPara);
-                        }
-
-                        document.add(Chunk.NEWLINE);
-                    }
-
-                    // Image differences - limit to 10 per page
-                    if (page.getImageDifferences() != null && !page.getImageDifferences().isEmpty()) {
-                        document.add(new Paragraph("Image Differences:"));
-
-                        int imgCount = 0;
-                        int maxImgs = 10;
-                        for (ImageDifference imageDiff : page.getImageDifferences()) {
-                            if (imgCount++ >= maxImgs) {
-                                document.add(new Paragraph("(additional image differences not shown)"));
-                                break;
-                            }
-
-                            if (imageDiff.isOnlyInBase()) {
-                                document.add(new Paragraph("- Image only in base document"));
-                            } else if (imageDiff.isOnlyInCompare()) {
-                                document.add(new Paragraph("- Image only in comparison document"));
+                            if (textDiff.getDifferenceType() == TextDifferenceType.ADDED) {
+                                diffTable.addCell("Text added: " +
+                                        (textDiff.getCompareText() != null ?
+                                                truncate(textDiff.getCompareText(), 50) : "(empty)"));
+                            } else if (textDiff.getDifferenceType() == TextDifferenceType.DELETED) {
+                                diffTable.addCell("Text deleted: " +
+                                        (textDiff.getBaseText() != null ?
+                                                truncate(textDiff.getBaseText(), 50) : "(empty)"));
                             } else {
-                                List<String> changes = new ArrayList<>();
-                                if (imageDiff.isDimensionsDifferent()) {
-                                    changes.add("Dimensions differ");
-                                }
-                                if (imageDiff.isPositionDifferent()) {
-                                    changes.add("Position differs");
-                                }
-                                if (imageDiff.isFormatDifferent()) {
-                                    changes.add("Format differs");
-                                }
-
-                                document.add(new Paragraph("- Image modified: " + String.join(", ", changes)));
+                                diffTable.addCell("Text modified: from \"" +
+                                        truncate(textDiff.getBaseText(), 25) + "\" to \"" +
+                                        truncate(textDiff.getCompareText(), 25) + "\"");
                             }
                         }
 
-                        document.add(Chunk.NEWLINE);
-                    }
-
-                    // Font differences - limit to 10 per page
-                    if (page.getFontDifferences() != null && !page.getFontDifferences().isEmpty()) {
-                        document.add(new Paragraph("Font Differences:"));
-
-                        int fontCount = 0;
-                        int maxFonts = 10;
-                        for (FontDifference fontDiff : page.getFontDifferences()) {
-                            if (fontCount++ >= maxFonts) {
-                                document.add(new Paragraph("(additional font differences not shown)"));
-                                break;
-                            }
-
-                            if (fontDiff.isOnlyInBase()) {
-                                document.add(new Paragraph("- Font \"" + fontDiff.getBaseFont().getName() + "\" only in base document"));
-                            } else if (fontDiff.isOnlyInCompare()) {
-                                document.add(new Paragraph("- Font \"" + fontDiff.getCompareFont().getName() + "\" only in comparison document"));
-                            } else {
-                                List<String> changes = new ArrayList<>();
-                                if (fontDiff.isEmbeddingDifferent()) {
-                                    changes.add("Embedding differs");
-                                }
-                                if (fontDiff.isSubsetDifferent()) {
-                                    changes.add("Subsetting differs");
-                                }
-
-                                document.add(new Paragraph("- Font \"" + fontDiff.getBaseFont().getName() + "\" modified: " + String.join(", ", changes)));
-                            }
+                        if (page.getTextDifferences().getDifferences().size() > diffsToShow) {
+                            diffTable.addCell(pageNumber);
+                            diffTable.addCell("Text");
+                            diffTable.addCell("... " + (page.getTextDifferences().getDifferences().size() - diffsToShow) +
+                                    " more text differences...");
                         }
-
-                        document.add(Chunk.NEWLINE);
                     }
-
-                    document.add(Chunk.NEWLINE);
                 }
+
+                document.add(diffTable);
+                document.add(Chunk.NEWLINE);
+
+            } else {
+                // No page differences
+                document.add(new Paragraph("No detailed page differences available."));
+                document.add(Chunk.NEWLINE);
             }
 
             document.close();
+            logger.info("PDF report generation completed successfully");
             return new ByteArrayResource(baos.toByteArray());
         } catch (DocumentException e) {
             logger.error("Error generating PDF report", e);
@@ -285,6 +246,23 @@ public class ReportGenerationService {
         }
     }
 
+    /**
+     * Truncate a string to a maximum length
+     * @param text The text to truncate
+     * @param maxLength The maximum length
+     * @return The truncated text
+     */
+    private String truncate(String text, int maxLength) {
+        if (text == null) {
+            return "";
+        }
+
+        if (text.length() <= maxLength) {
+            return text;
+        }
+
+        return text.substring(0, maxLength) + "...";
+    }
     /**
      * Add a row to a PDF table
      * @param table The table

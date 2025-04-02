@@ -487,64 +487,88 @@ public class PDFController {
             @PathVariable String comparisonId,
             @RequestBody Map<String, Object> request) {
         try {
-            // Check if comparison exists in any of the services
-            boolean comparisonExists = false;
+            // Log the request
+            logger.info("Received report generation request for comparison ID: {}", comparisonId);
 
-            // Check standard comparison service
+            // Check if the standard comparison service has the result
             PDFComparisonResult standardResult = comparisonService.getComparisonResult(comparisonId);
-            if (standardResult != null) {
-                comparisonExists = true;
-                logger.info("Found comparison result in standard service");
-            }
 
-            // Check smart document comparison service
-            if (!comparisonExists && smartComparisonService != null) {
-                boolean isReady = smartComparisonService.isComparisonReady(comparisonId);
-                if (isReady) {
-                    comparisonExists = true;
-                    logger.info("Found comparison result in smart comparison service");
+            if (standardResult == null) {
+                // If the standard service doesn't have it, check if the smart service is ready
+                if (smartComparisonService != null && smartComparisonService.isComparisonReady(comparisonId)) {
+                    // Create a simplified result based on the smart service summary
+                    Map<String, Object> summary = smartComparisonService.getComparisonSummary(comparisonId);
+
+                    PDFComparisonResult simplifiedResult = new PDFComparisonResult();
+                    simplifiedResult.setMatchingId(comparisonId);
+
+                    // Set base info from summary
+                    simplifiedResult.setBasePageCount((int)summary.getOrDefault("basePageCount", 0));
+                    simplifiedResult.setComparePageCount((int)summary.getOrDefault("comparePageCount", 0));
+                    simplifiedResult.setPageCountDifferent(simplifiedResult.getBasePageCount() != simplifiedResult.getComparePageCount());
+
+                    // Set difference counts
+                    simplifiedResult.setTotalDifferences((int)summary.getOrDefault("totalDifferences", 0));
+                    simplifiedResult.setTotalTextDifferences((int)summary.getOrDefault("totalTextDifferences", 0));
+                    simplifiedResult.setTotalImageDifferences((int)summary.getOrDefault("totalImageDifferences", 0));
+                    simplifiedResult.setTotalFontDifferences((int)summary.getOrDefault("totalFontDifferences", 0));
+                    simplifiedResult.setTotalStyleDifferences((int)summary.getOrDefault("totalStyleDifferences", 0));
+
+                    // Set empty pages list to avoid null pointer exceptions
+                    simplifiedResult.setPageDifferences(new ArrayList<>());
+
+                    // Store in standard service
+                    comparisonService.storeTemporaryResult(comparisonId, simplifiedResult);
+                    logger.info("Created and stored simplified result for report generation");
+
+                    // Get it from the standard service
+                    standardResult = comparisonService.getComparisonResult(comparisonId);
+                }
+
+                // If still null, check page-level service
+                if (standardResult == null && pageLevelComparisonService != null &&
+                        pageLevelComparisonService.isComparisonReady(comparisonId)) {
+                    // Create a simplified result based on the page-level service summary
+                    Map<String, Object> summary = pageLevelComparisonService.getComparisonSummary(comparisonId);
+
+                    PDFComparisonResult simplifiedResult = new PDFComparisonResult();
+                    simplifiedResult.setMatchingId(comparisonId);
+
+                    // Set basic info
+                    simplifiedResult.setBasePageCount((int)summary.getOrDefault("totalBasePages", 0));
+                    simplifiedResult.setComparePageCount((int)summary.getOrDefault("totalComparePages", 0));
+                    simplifiedResult.setPageCountDifferent(simplifiedResult.getBasePageCount() != simplifiedResult.getComparePageCount());
+
+                    // Set difference counts
+                    simplifiedResult.setTotalDifferences((int)summary.getOrDefault("totalDifferences", 0));
+                    simplifiedResult.setTotalTextDifferences((int)summary.getOrDefault("totalTextDifferences", 0));
+                    simplifiedResult.setTotalImageDifferences((int)summary.getOrDefault("totalImageDifferences", 0));
+                    simplifiedResult.setTotalFontDifferences((int)summary.getOrDefault("totalFontDifferences", 0));
+                    simplifiedResult.setTotalStyleDifferences((int)summary.getOrDefault("totalStyleDifferences", 0));
+
+                    // Set empty pages list to avoid null pointer exceptions
+                    simplifiedResult.setPageDifferences(new ArrayList<>());
+
+                    // Store in standard service
+                    comparisonService.storeTemporaryResult(comparisonId, simplifiedResult);
+                    logger.info("Created and stored simplified result from page-level service for report generation");
+
+                    // Get it from the standard service
+                    standardResult = comparisonService.getComparisonResult(comparisonId);
                 }
             }
 
-            // Check page-level comparison service (if it exists)
-            if (!comparisonExists && pageLevelComparisonService != null) {
-                boolean isReady = pageLevelComparisonService.isComparisonReady(comparisonId);
-                if (isReady) {
-                    comparisonExists = true;
-                    logger.info("Found comparison result in page-level comparison service");
-                }
-            }
-
-            if (!comparisonExists) {
+            // If we still don't have a result, return not found
+            if (standardResult == null) {
                 logger.warn("No comparison result found in any service for ID: {}", comparisonId);
                 return ResponseEntity.notFound().build();
             }
 
+            // Generate the report
             String format = (String) request.getOrDefault("format", "pdf");
-            Integer pairIndex = request.containsKey("documentPairIndex") ?
-                    (Integer) request.get("documentPairIndex") : null;
-
             logger.info("Generating {} report for comparison {}", format, comparisonId);
 
-            // Use the appropriate service based on where we found the comparison
-            Resource report;
-
-            if (pairIndex != null) {
-                // For document pairs, we need to get the document pair result first
-                PDFComparisonResult pairResult;
-
-                if (smartComparisonService != null) {
-                    pairResult = smartComparisonService.getDocumentPairResult(comparisonId, pairIndex);
-                    if (pairResult != null) {
-                        // We need to store this in the standard service for report generation
-                        comparisonService.storeTemporaryResult(comparisonId, pairResult);
-                        logger.info("Stored document pair result in standard service for report generation");
-                    }
-                }
-            }
-
-            // Generate the report using the standard service
-            report = comparisonService.generateReport(comparisonId, format);
+            Resource report = comparisonService.generateReport(comparisonId, format);
 
             // Set headers
             HttpHeaders headers = new HttpHeaders();
@@ -567,6 +591,7 @@ public class PDFController {
             }
 
             headers.setContentType(mediaType);
+
             if (report != null) {
                 headers.setContentLength(report.contentLength());
                 logger.info("Report generated successfully with size: {} bytes", report.contentLength());
