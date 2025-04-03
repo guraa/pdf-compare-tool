@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import guraa.pdfcompare.util.TextElement;
 
 @Slf4j
 @Service

@@ -1,9 +1,5 @@
 package guraa.pdfcompare.util;
 
-import com.github.difflib.DiffUtils;
-import com.github.difflib.algorithm.DiffException;
-import com.github.difflib.patch.AbstractDelta;
-import com.github.difflib.patch.Patch;
 import guraa.pdfcompare.model.difference.Difference;
 import guraa.pdfcompare.model.difference.TextDifference;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +15,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Utility for calculating differences between PDF content.
+ */
 @Slf4j
 @Component
 public class DifferenceCalculator {
@@ -71,7 +70,7 @@ public class DifferenceCalculator {
             return differences;
         }
 
-        // Case where both texts exist - use diff algorithm
+        // Case where both texts exist - use our own diff algorithm
         try {
             List<String> baseLines;
             List<String> compareLines;
@@ -95,11 +94,11 @@ public class DifferenceCalculator {
                 compareLines = Arrays.asList(compareText.replaceAll("\\s+", " ").trim().split(" "));
             }
 
-            // Calculate differences
-            Patch<String> patch = DiffUtils.diff(baseLines, compareLines);
+            // Calculate differences using our own implementation of diff algorithm
+            List<DiffResult> diffResults = calculateDifferences(baseLines, compareLines);
 
             // Process each delta (change)
-            for (AbstractDelta<String> delta : patch.getDeltas()) {
+            for (DiffResult diffResult : diffResults) {
                 String diffId = UUID.randomUUID().toString();
                 String changeType;
                 String severity = "minor";
@@ -108,16 +107,16 @@ public class DifferenceCalculator {
                 StringBuilder baseStr = new StringBuilder();
                 StringBuilder compareStr = new StringBuilder();
 
-                // Get text from delta source and target
-                for (String s : delta.getSource().getLines()) {
+                // Get text from diff result
+                for (String s : diffResult.getBaseLines()) {
                     baseStr.append(s).append(" ");
                 }
-                for (String s : delta.getTarget().getLines()) {
+                for (String s : diffResult.getCompareLines()) {
                     compareStr.append(s).append(" ");
                 }
 
                 // Determine change type and description
-                switch (delta.getType()) {
+                switch (diffResult.getType()) {
                     case INSERT:
                         changeType = "added";
                         description = "Text added: " + compareStr.toString().trim();
@@ -149,7 +148,7 @@ public class DifferenceCalculator {
 
                 differences.add(diff);
             }
-        } catch (DiffException e) {
+        } catch (Exception e) {
             log.error("Error calculating text differences", e);
         }
 
@@ -158,7 +157,7 @@ public class DifferenceCalculator {
 
     /**
      * Compare two images and calculate their differences.
-     * This method now uses Structural Similarity Index (SSIM) which is better than
+     * This method uses Structural Similarity Index (SSIM) which is better than
      * pixel-by-pixel comparison for detecting visual differences.
      *
      * @param baseImage The base image
@@ -407,71 +406,6 @@ public class DifferenceCalculator {
     }
 
     /**
-     * Create a visual diff of two images, highlighting differences.
-     *
-     * @param baseImage The base image
-     * @param compareImage The comparison image
-     * @return New image with differences highlighted
-     */
-    public BufferedImage createVisualDiff(BufferedImage baseImage, BufferedImage compareImage) {
-        // Use largest dimensions to create output image
-        int width = Math.max(baseImage.getWidth(), compareImage.getWidth());
-        int height = Math.max(baseImage.getHeight(), compareImage.getHeight());
-
-        BufferedImage diffImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-
-        // Overlay background with a light gray color
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                diffImage.setRGB(x, y, Color.LIGHT_GRAY.getRGB());
-            }
-        }
-
-        // Find common dimensions
-        int commonWidth = Math.min(baseImage.getWidth(), compareImage.getWidth());
-        int commonHeight = Math.min(baseImage.getHeight(), compareImage.getHeight());
-
-        // Compare pixel by pixel in common area
-        for (int y = 0; y < commonHeight; y++) {
-            for (int x = 0; x < commonWidth; x++) {
-                int baseRGB = baseImage.getRGB(x, y);
-                int compareRGB = compareImage.getRGB(x, y);
-
-                if (baseRGB == compareRGB) {
-                    // Identical pixels shown in grayscale
-                    Color color = new Color(baseRGB);
-                    int gray = (color.getRed() + color.getGreen() + color.getBlue()) / 3;
-                    Color grayColor = new Color(gray, gray, gray);
-                    diffImage.setRGB(x, y, grayColor.getRGB());
-                } else {
-                    // Highlight different pixels in red
-                    diffImage.setRGB(x, y, Color.RED.getRGB());
-                }
-            }
-        }
-
-        // Highlight areas only in base image (blue)
-        for (int y = 0; y < baseImage.getHeight(); y++) {
-            for (int x = 0; x < baseImage.getWidth(); x++) {
-                if (x >= commonWidth || y >= commonHeight) {
-                    diffImage.setRGB(x, y, Color.BLUE.getRGB());
-                }
-            }
-        }
-
-        // Highlight areas only in compare image (green)
-        for (int y = 0; y < compareImage.getHeight(); y++) {
-            for (int x = 0; x < compareImage.getWidth(); x++) {
-                if (x >= commonWidth || y >= commonHeight) {
-                    diffImage.setRGB(x, y, Color.GREEN.getRGB());
-                }
-            }
-        }
-
-        return diffImage;
-    }
-
-    /**
      * Determine severity of a difference based on change magnitude.
      *
      * @param differenceType The type of difference
@@ -543,5 +477,153 @@ public class DifferenceCalculator {
 
         difference.setPosition(position);
         difference.setBounds(bounds);
+    }
+
+    /**
+     * Enum for the type of difference operation.
+     */
+    private enum DiffType {
+        EQUAL,
+        INSERT,
+        DELETE,
+        CHANGE
+    }
+
+    /**
+     * Class representing a diff result.
+     */
+    private static class DiffResult {
+        private final DiffType type;
+        private final List<String> baseLines;
+        private final List<String> compareLines;
+
+        public DiffResult(DiffType type, List<String> baseLines, List<String> compareLines) {
+            this.type = type;
+            this.baseLines = baseLines;
+            this.compareLines = compareLines;
+        }
+
+        public DiffType getType() {
+            return type;
+        }
+
+        public List<String> getBaseLines() {
+            return baseLines;
+        }
+
+        public List<String> getCompareLines() {
+            return compareLines;
+        }
+    }
+
+    /**
+     * A simplified implementation of the diff algorithm to avoid external dependencies.
+     */
+    private List<DiffResult> calculateDifferences(List<String> baseLines, List<String> compareLines) {
+        List<DiffResult> results = new ArrayList<>();
+
+        int baseIndex = 0;
+        int compareIndex = 0;
+
+        while (baseIndex < baseLines.size() || compareIndex < compareLines.size()) {
+            // If we've reached the end of either list, add the remaining content from the other
+            if (baseIndex >= baseLines.size()) {
+                // Remaining lines in compare are insertions
+                List<String> inserted = compareLines.subList(compareIndex, compareLines.size());
+                results.add(new DiffResult(DiffType.INSERT, new ArrayList<>(), inserted));
+                break;
+            }
+
+            if (compareIndex >= compareLines.size()) {
+                // Remaining lines in base are deletions
+                List<String> deleted = baseLines.subList(baseIndex, baseLines.size());
+                results.add(new DiffResult(DiffType.DELETE, deleted, new ArrayList<>()));
+                break;
+            }
+
+            // Check if current lines match
+            if (baseLines.get(baseIndex).equals(compareLines.get(compareIndex))) {
+                // Equal lines, advance both indices
+                baseIndex++;
+                compareIndex++;
+                continue;
+            }
+
+            // Look ahead for potential matches
+            int matchDistance = findMatchDistance(baseLines, compareLines, baseIndex, compareIndex);
+
+            if (matchDistance > 0) {
+                // There's a match ahead in compare text, so this is an insertion
+                List<String> inserted = compareLines.subList(compareIndex, compareIndex + matchDistance);
+                results.add(new DiffResult(DiffType.INSERT, new ArrayList<>(), inserted));
+                compareIndex += matchDistance;
+            } else if (matchDistance < 0) {
+                // There's a match ahead in base text, so this is a deletion
+                matchDistance = -matchDistance; // Convert to positive
+                List<String> deleted = baseLines.subList(baseIndex, baseIndex + matchDistance);
+                results.add(new DiffResult(DiffType.DELETE, deleted, new ArrayList<>()));
+                baseIndex += matchDistance;
+            } else {
+                // No clear match ahead, treat as a change
+                // Find how many lines to include in the change
+                int changeLength = findChangeLength(baseLines, compareLines, baseIndex, compareIndex);
+
+                List<String> basePart = baseLines.subList(baseIndex, baseIndex + changeLength);
+                List<String> comparePart = compareLines.subList(compareIndex, compareIndex + changeLength);
+
+                results.add(new DiffResult(DiffType.CHANGE, basePart, comparePart));
+
+                baseIndex += changeLength;
+                compareIndex += changeLength;
+            }
+        }
+
+        return results;
+    }
+
+    /**
+     * Find the distance to the next match.
+     *
+     * @return Positive number if match is in compare text, negative if in base text, 0 if no clear match
+     */
+    private int findMatchDistance(List<String> baseLines, List<String> compareLines,
+                                  int baseIndex, int compareIndex) {
+        // Look ahead in compare text for a match with current base line
+        String baseLine = baseLines.get(baseIndex);
+        for (int i = 1; i < 10 && compareIndex + i < compareLines.size(); i++) {
+            if (baseLine.equals(compareLines.get(compareIndex + i))) {
+                return i; // Found match i positions ahead in compare text
+            }
+        }
+
+        // Look ahead in base text for a match with current compare line
+        String compareLine = compareLines.get(compareIndex);
+        for (int i = 1; i < 10 && baseIndex + i < baseLines.size(); i++) {
+            if (compareLine.equals(baseLines.get(baseIndex + i))) {
+                return -i; // Found match i positions ahead in base text
+            }
+        }
+
+        return 0; // No clear match found
+    }
+
+    /**
+     * Find the length of a change (how many lines differ before finding a match).
+     */
+    private int findChangeLength(List<String> baseLines, List<String> compareLines,
+                                 int baseIndex, int compareIndex) {
+        int maxLength = Math.min(baseLines.size() - baseIndex, compareLines.size() - compareIndex);
+        maxLength = Math.min(maxLength, 5); // Limit to 5 lines at most
+
+        for (int i = 1; i <= maxLength; i++) {
+            // If we find a match after i positions, return i as the change length
+            if (baseIndex + i < baseLines.size() && compareIndex + i < compareLines.size() &&
+                    baseLines.get(baseIndex + i).equals(compareLines.get(compareIndex + i))) {
+                return i;
+            }
+        }
+
+        // No match found within the window, return a reasonable default
+        return Math.min(3, maxLength);
     }
 }

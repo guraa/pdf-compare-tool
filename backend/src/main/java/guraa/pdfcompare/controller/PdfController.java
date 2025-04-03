@@ -1,6 +1,5 @@
 package guraa.pdfcompare.controller;
 
-
 import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.service.PdfService;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +11,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -39,12 +40,13 @@ public class PdfController {
             }
 
             PdfDocument document = pdfService.storePdf(file);
-            return ResponseEntity.ok().body(Map.of(
-                    "fileId", document.getFileId(),
-                    "fileName", document.getFileName(),
-                    "pageCount", document.getPageCount(),
-                    "fileSize", document.getFileSize()
-            ));
+            Map<String, Object> response = new HashMap<>();
+            response.put("fileId", document.getFileId());
+            response.put("fileName", document.getFileName());
+            response.put("pageCount", document.getPageCount());
+            response.put("fileSize", document.getFileSize());
+
+            return ResponseEntity.ok().body(response);
         } catch (IOException e) {
             log.error("Failed to upload PDF", e);
             return ResponseEntity.internalServerError().body("{\"error\": \"Failed to upload PDF: " + e.getMessage() + "\"}");
@@ -61,13 +63,14 @@ public class PdfController {
     public ResponseEntity<?> getDocumentInfo(@PathVariable String fileId) {
         try {
             PdfDocument document = pdfService.getDocumentById(fileId);
-            return ResponseEntity.ok().body(Map.of(
-                    "fileId", document.getFileId(),
-                    "fileName", document.getFileName(),
-                    "pageCount", document.getPageCount(),
-                    "fileSize", document.getFileSize(),
-                    "metadata", document.getMetadata()
-            ));
+            Map<String, Object> response = new HashMap<>();
+            response.put("fileId", document.getFileId());
+            response.put("fileName", document.getFileName());
+            response.put("pageCount", document.getPageCount());
+            response.put("fileSize", document.getFileSize());
+            response.put("metadata", document.getMetadata());
+
+            return ResponseEntity.ok().body(response);
         } catch (Exception e) {
             log.error("Failed to get document info", e);
             return ResponseEntity.notFound().build();
@@ -111,9 +114,10 @@ public class PdfController {
                     request.getCompareFileId(),
                     request.getOptions());
 
-            return ResponseEntity.ok().body(Map.of(
-                    "comparisonId", comparisonId
-            ));
+            Map<String, Object> response = new HashMap<>();
+            response.put("comparisonId", comparisonId);
+
+            return ResponseEntity.ok().body(response);
         } catch (Exception e) {
             log.error("Failed to compare PDFs", e);
             return ResponseEntity.internalServerError().body("{\"error\": \"Failed to compare PDFs: " + e.getMessage() + "\"}");
@@ -137,25 +141,5 @@ public class PdfController {
 
         public Map<String, Object> getOptions() { return options; }
         public void setOptions(Map<String, Object> options) { this.options = options; }
-    }
-
-    /**
-     * Java Map import for Upload response.
-     */
-    private static class Map<K, V> extends java.util.HashMap<K, V> {
-        public static <K, V> Map<K, V> of(K k1, V v1, K k2, V v2, K k3, V v3, K k4, V v4) {
-            Map<K, V> map = new Map<>();
-            map.put(k1, v1);
-            map.put(k2, v2);
-            map.put(k3, v3);
-            map.put(k4, v4);
-            return map;
-        }
-
-        public static <K, V> Map<K, V> of(K k1, V v1) {
-            Map<K, V> map = new Map<>();
-            map.put(k1, v1);
-            return map;
-        }
     }
 }

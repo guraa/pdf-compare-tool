@@ -13,6 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,10 +40,10 @@ public class ComparisonController {
             if (result == null) {
                 // Check if the comparison is still processing
                 if (comparisonService.isComparisonInProgress(comparisonId)) {
-                    return ResponseEntity.accepted().body(Map.of(
-                            "status", "PROCESSING",
-                            "message", "Comparison still processing"
-                    ));
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("status", "PROCESSING");
+                    response.put("message", "Comparison still processing");
+                    return ResponseEntity.accepted().body(response);
                 }
 
                 return ResponseEntity.notFound().build();
@@ -51,9 +52,9 @@ public class ComparisonController {
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Failed to get comparison result", e);
-            return ResponseEntity.internalServerError().body(Map.of(
-                    "error", "Failed to get comparison result: " + e.getMessage()
-            ));
+            Map<String, Object> response = new HashMap<>();
+            response.put("error", "Failed to get comparison result: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
         }
     }
 
@@ -77,7 +78,7 @@ public class ComparisonController {
 
         try {
             // Create filter map from query parameters
-            Map<String, Object> filters = new java.util.HashMap<>();
+            Map<String, Object> filters = new HashMap<>();
             if (types != null && !types.isEmpty()) {
                 filters.put("types", types.split(","));
             }
@@ -93,10 +94,10 @@ public class ComparisonController {
             if (pageDetails == null) {
                 // Check if the comparison is still processing
                 if (comparisonService.isComparisonInProgress(comparisonId)) {
-                    return ResponseEntity.accepted().body(Map.of(
-                            "status", "PROCESSING",
-                            "message", "Comparison still processing"
-                    ));
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("status", "PROCESSING");
+                    response.put("message", "Comparison still processing");
+                    return ResponseEntity.accepted().body(response);
                 }
 
                 return ResponseEntity.notFound().build();
@@ -105,9 +106,9 @@ public class ComparisonController {
             return ResponseEntity.ok(pageDetails);
         } catch (Exception e) {
             log.error("Failed to get page details", e);
-            return ResponseEntity.internalServerError().body(Map.of(
-                    "error", "Failed to get page details: " + e.getMessage()
-            ));
+            Map<String, Object> response = new HashMap<>();
+            response.put("error", "Failed to get page details: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
         }
     }
 
@@ -125,10 +126,10 @@ public class ComparisonController {
             if (documentPairs == null || documentPairs.isEmpty()) {
                 // Check if the comparison is still processing
                 if (comparisonService.isComparisonInProgress(comparisonId)) {
-                    return ResponseEntity.accepted().body(Map.of(
-                            "status", "PROCESSING",
-                            "message", "Document matching still processing"
-                    ));
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("status", "PROCESSING");
+                    response.put("message", "Document matching still processing");
+                    return ResponseEntity.accepted().body(response);
                 }
 
                 return ResponseEntity.notFound().build();
@@ -137,9 +138,9 @@ public class ComparisonController {
             return ResponseEntity.ok(documentPairs);
         } catch (Exception e) {
             log.error("Failed to get document pairs", e);
-            return ResponseEntity.internalServerError().body(Map.of(
-                    "error", "Failed to get document pairs: " + e.getMessage()
-            ));
+            Map<String, Object> response = new HashMap<>();
+            response.put("error", "Failed to get document pairs: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
         }
     }
 
@@ -161,10 +162,10 @@ public class ComparisonController {
             if (result == null) {
                 // Check if the comparison is still processing
                 if (comparisonService.isComparisonInProgress(comparisonId)) {
-                    return ResponseEntity.accepted().body(Map.of(
-                            "status", "PROCESSING",
-                            "message", "Comparison still processing"
-                    ));
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("status", "PROCESSING");
+                    response.put("message", "Comparison still processing");
+                    return ResponseEntity.accepted().body(response);
                 }
 
                 return ResponseEntity.notFound().build();
@@ -173,9 +174,9 @@ public class ComparisonController {
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Failed to get document pair result", e);
-            return ResponseEntity.internalServerError().body(Map.of(
-                    "error", "Failed to get document pair result: " + e.getMessage()
-            ));
+            Map<String, Object> response = new HashMap<>();
+            response.put("error", "Failed to get document pair result: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
         }
     }
 
@@ -201,7 +202,7 @@ public class ComparisonController {
 
         try {
             // Create filter map from query parameters
-            Map<String, Object> filters = new java.util.HashMap<>();
+            Map<String, Object> filters = new HashMap<>();
             if (types != null && !types.isEmpty()) {
                 filters.put("types", types.split(","));
             }
@@ -218,10 +219,10 @@ public class ComparisonController {
             if (pageDetails == null) {
                 // Check if the comparison is still processing
                 if (comparisonService.isComparisonInProgress(comparisonId)) {
-                    return ResponseEntity.accepted().body(Map.of(
-                            "status", "PROCESSING",
-                            "message", "Comparison still processing"
-                    ));
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("status", "PROCESSING");
+                    response.put("message", "Comparison still processing");
+                    return ResponseEntity.accepted().body(response);
                 }
 
                 return ResponseEntity.notFound().build();
@@ -230,9 +231,9 @@ public class ComparisonController {
             return ResponseEntity.ok(pageDetails);
         } catch (Exception e) {
             log.error("Failed to get document pair page details", e);
-            return ResponseEntity.internalServerError().body(Map.of(
-                    "error", "Failed to get document pair page details: " + e.getMessage()
-            ));
+            Map<String, Object> response = new HashMap<>();
+            response.put("error", "Failed to get document pair page details: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
         }
     }
 
@@ -250,7 +251,7 @@ public class ComparisonController {
 
         try {
             String format = request.getFormat() != null ? request.getFormat() : "pdf";
-            Map<String, Object> options = request.getOptions() != null ? request.getOptions() : new java.util.HashMap<>();
+            Map<String, Object> options = request.getOptions() != null ? request.getOptions() : new HashMap<>();
 
             Resource reportResource = reportService.generateReport(comparisonId, format, options);
 
@@ -284,9 +285,9 @@ public class ComparisonController {
                     .body(reportResource);
         } catch (Exception e) {
             log.error("Failed to generate report", e);
-            return ResponseEntity.internalServerError().body(Map.of(
-                    "error", "Failed to generate report: " + e.getMessage()
-            ));
+            Map<String, Object> response = new HashMap<>();
+            response.put("error", "Failed to generate report: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
         }
     }
 
@@ -303,23 +304,5 @@ public class ComparisonController {
 
         public Map<String, Object> getOptions() { return options; }
         public void setOptions(Map<String, Object> options) { this.options = options; }
-    }
-
-    /**
-     * Java Map interface for responses.
-     */
-    private static class Map<K, V> extends java.util.HashMap<K, V> {
-        public static <K, V> Map<K, V> of(K k1, V v1, K k2, V v2) {
-            Map<K, V> map = new Map<>();
-            map.put(k1, v1);
-            map.put(k2, v2);
-            return map;
-        }
-
-        public static <K, V> Map<K, V> of(K k1, V v1) {
-            Map<K, V> map = new Map<>();
-            map.put(k1, v1);
-            return map;
-        }
     }
 }

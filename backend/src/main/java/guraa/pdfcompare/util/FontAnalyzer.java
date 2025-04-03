@@ -1,6 +1,7 @@
 package guraa.pdfcompare.util;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDResources;
@@ -205,15 +206,6 @@ public class FontAnalyzer {
             return lowerName.contains("italic") || lowerName.contains("oblique");
         }
         return false;
-    }
-
-    /**
-     * Import for COSName since it's referenced in the method signature.
-     */
-    private static class COSName extends org.apache.pdfbox.cos.COSName {
-        protected COSName(String name) {
-            super(name);
-        }
     }
 
     /**

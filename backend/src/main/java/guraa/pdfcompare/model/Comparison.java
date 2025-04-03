@@ -10,6 +10,9 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Entity representing a PDF comparison.
+ */
 @Entity
 @Data
 @Builder
@@ -56,6 +59,9 @@ public class Comparison {
     private String fullResultPath;
     private String summaryResultPath;
 
+    /**
+     * Enumeration of comparison statuses.
+     */
     public enum ComparisonStatus {
         PENDING,
         PROCESSING,
@@ -64,5 +70,41 @@ public class Comparison {
         COMPARING,
         COMPLETED,
         FAILED
+    }
+
+    /**
+     * Get the base document.
+     *
+     * @return The base document
+     */
+    public PdfDocument getBaseDocument() {
+        return baseDocument;
+    }
+
+    /**
+     * Set the base document.
+     *
+     * @param baseDocument The base document to set
+     */
+    public void setBaseDocument(PdfDocument baseDocument) {
+        this.baseDocument = baseDocument;
+    }
+
+    /**
+     * Get the comparison document.
+     *
+     * @return The comparison document
+     */
+    public PdfDocument getCompareDocument() {
+        return compareDocument;
+    }
+
+    /**
+     * Set the comparison document.
+     *
+     * @param compareDocument The comparison document to set
+     */
+    public void setCompareDocument(PdfDocument compareDocument) {
+        this.compareDocument = compareDocument;
     }
 }
