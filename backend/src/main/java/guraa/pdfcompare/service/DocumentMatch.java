@@ -3,7 +3,7 @@ package guraa.pdfcompare.service;
 /**
  * Document match between base and comparison PDFs.
  */
-private static class DocumentMatch {
+public class DocumentMatch {
     private final int baseDocumentIndex;
     private final int compareDocumentIndex;
     private final double similarityScore;
@@ -18,4 +18,3 @@ private static class DocumentMatch {
     public int getCompareDocumentIndex() { return compareDocumentIndex; }
     public double getSimilarityScore() { return similarityScore; }
 }
-

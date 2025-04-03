@@ -39,4 +39,7 @@ public class PdfDocument {
 
     // Storing MD5 hash for quick duplicate detection
     private String contentHash;
+
+    // Flag to indicate if the PDF is password-protected
+    private boolean passwordProtected;
 }

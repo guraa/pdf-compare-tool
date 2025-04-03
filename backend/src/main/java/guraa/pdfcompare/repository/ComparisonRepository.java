@@ -6,6 +6,7 @@ import guraa.pdfcompare.model.PdfDocument;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,4 +20,9 @@ public interface ComparisonRepository extends JpaRepository<Comparison, Long> {
     List<Comparison> findByBaseDocumentAndCompareDocument(PdfDocument baseDocument, PdfDocument compareDocument);
 
     List<Comparison> findByStatus(Comparison.ComparisonStatus status);
+
+    // Methods for cleanup service
+    List<Comparison> findByCompletionTimeBefore(LocalDateTime cutoffDate);
+
+    List<Comparison> findByCompletionTimeAfter(LocalDateTime cutoffDate);
 }
