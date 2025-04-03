@@ -702,10 +702,9 @@ public class ComparisonService {
                             return true;
                         }
 
-                        // Type-specific checks
-                        if (diff instanceof com.pdfcompare.model.difference.TextDifference) {
-                            com.pdfcompare.model.difference.TextDifference textDiff =
-                                    (com.pdfcompare.model.difference.TextDifference) diff;
+                        if (diff instanceof guraa.pdfcompare.model.difference.TextDifference) {
+                            guraa.pdfcompare.model.difference.TextDifference textDiff =
+                                    (guraa.pdfcompare.model.difference.TextDifference) diff;
 
                             // Check text content
                             return (textDiff.getBaseText() != null &&

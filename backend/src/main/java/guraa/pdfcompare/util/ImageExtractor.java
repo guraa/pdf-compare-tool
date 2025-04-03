@@ -1,15 +1,11 @@
 package guraa.pdfcompare.util;
 
-
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
 import org.apache.pdfbox.contentstream.PDFStreamEngine;
 import org.apache.pdfbox.contentstream.operator.DrawObject;
 import org.apache.pdfbox.contentstream.operator.Operator;
-import org.apache.pdfbox.contentstream.operator.state.Concatenate;
-import org.apache.pdfbox.contentstream.operator.state.Restore;
-import org.apache.pdfbox.contentstream.operator.state.Save;
-import org.apache.pdfbox.contentstream.operator.state.SetGraphicsStateParameters;
-import org.apache.pdfbox.contentstream.operator.state.SetMatrix;
+import org.apache.pdfbox.contentstream.operator.state.*;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -21,8 +17,10 @@ import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
 import java.awt.geom.Point2D;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -112,11 +110,20 @@ public class ImageExtractor extends PDFStreamEngine {
                 // Get image position (in user space)
                 Point2D position = getCurrentPosition();
 
+                // Extract image data bytes
+                byte[] imageData;
+                try (InputStream stream = image.getCOSObject().createRawInputStream()) {
+                    // Convert stream to byte array
+                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                    IOUtils.copy(stream, buffer);
+                    imageData = buffer.toByteArray();
+                }
+
                 // Create image info object
                 ImageInfo info = new ImageInfo();
                 info.setId(UUID.randomUUID().toString());
                 info.setImage(image.getImage());
-                info.setImageData(image.getCOSObject().getFilteredStream().toByteArray());
+                info.setImageData(imageData);
                 info.setFormat(getImageFormat(image));
                 info.setWidth(image.getWidth());
                 info.setHeight(image.getHeight());

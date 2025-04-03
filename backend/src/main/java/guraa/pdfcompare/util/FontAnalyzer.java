@@ -1,6 +1,7 @@
 package guraa.pdfcompare.util;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -10,9 +11,11 @@ import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -124,27 +127,40 @@ public class FontAnalyzer {
                 // Get font data - approach depends on font type
                 if (font instanceof PDType0Font) {
                     PDType0Font type0Font = (PDType0Font) font;
-                    if (type0Font.getDescendantFont() != null) {
-                        byte[] fontData = type0Font.getDescendantFont().getFontFile2().toByteArray();
-                        fos.write(fontData);
+                    if (type0Font.getDescendantFont() != null &&
+                            type0Font.getDescendantFont().getFontDescriptor() != null &&
+                            type0Font.getDescendantFont().getFontDescriptor().getFontFile2() != null) {
+
+                        try (InputStream stream = type0Font.getDescendantFont().getFontDescriptor().getFontFile2().createInputStream()) {
+                            // Use IOUtils to copy stream to file
+                            IOUtils.copy(stream, fos);
+                        }
                     }
                 } else if (font instanceof PDType1Font) {
                     PDType1Font type1Font = (PDType1Font) font;
-                    if (type1Font.getFontFile() != null) {
-                        byte[] fontData = type1Font.getFontFile().toByteArray();
-                        fos.write(fontData);
-                    } else if (type1Font.getFontFile2() != null) {
-                        byte[] fontData = type1Font.getFontFile2().toByteArray();
-                        fos.write(fontData);
-                    } else if (type1Font.getFontFile3() != null) {
-                        byte[] fontData = type1Font.getFontFile3().toByteArray();
-                        fos.write(fontData);
+
+                    // Try to get font data from different font file attributes
+                    if (type1Font.getFontDescriptor() != null) {
+                        if (type1Font.getFontDescriptor().getFontFile() != null) {
+                            try (InputStream stream = type1Font.getFontDescriptor().getFontFile().createInputStream()) {
+                                IOUtils.copy(stream, fos);
+                            }
+                        } else if (type1Font.getFontDescriptor().getFontFile2() != null) {
+                            try (InputStream stream = type1Font.getFontDescriptor().getFontFile2().createInputStream()) {
+                                IOUtils.copy(stream, fos);
+                            }
+                        } else if (type1Font.getFontDescriptor().getFontFile3() != null) {
+                            try (InputStream stream = type1Font.getFontDescriptor().getFontFile3().createInputStream()) {
+                                IOUtils.copy(stream, fos);
+                            }
+                        }
                     }
                 } else {
                     // Try generic approach for other font types
                     if (font.getFontDescriptor() != null && font.getFontDescriptor().getFontFile2() != null) {
-                        byte[] fontData = font.getFontDescriptor().getFontFile2().toByteArray();
-                        fos.write(fontData);
+                        try (InputStream stream = font.getFontDescriptor().getFontFile2().createInputStream()) {
+                            IOUtils.copy(stream, fos);
+                        }
                     }
                 }
             }

@@ -36,4 +36,31 @@ public class TextElement {
     public Rectangle2D.Float getBoundingBox() {
         return new Rectangle2D.Float(x, y, width, height);
     }
+
+    /**
+     * Set the bold property.
+     *
+     * @param bold The bold property value
+     */
+    public void setIsBold(boolean bold) {
+        this.isBold = bold;
+    }
+
+    /**
+     * Set the italic property.
+     *
+     * @param italic The italic property value
+     */
+    public void setIsItalic(boolean italic) {
+        this.isItalic = italic;
+    }
+
+    /**
+     * Set the embedded property.
+     *
+     * @param embedded The embedded property value
+     */
+    public void setIsEmbedded(boolean embedded) {
+        this.isEmbedded = embedded;
+    }
 }

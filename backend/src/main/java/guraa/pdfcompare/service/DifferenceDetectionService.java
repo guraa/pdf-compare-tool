@@ -12,6 +12,7 @@ import guraa.pdfcompare.model.difference.TextDifference;
 import guraa.pdfcompare.util.DifferenceCalculator;
 import guraa.pdfcompare.util.FontAnalyzer;
 import guraa.pdfcompare.util.ImageExtractor;
+import guraa.pdfcompare.util.TextElement;
 import guraa.pdfcompare.util.TextExtractor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +20,6 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.springframework.stereotype.Service;
-
 
 import java.io.File;
 import java.io.IOException;
@@ -29,6 +29,9 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Service for detecting differences between PDF documents.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -117,8 +120,8 @@ public class DifferenceDetectionService {
                 }
 
                 // Compare text elements (style, fonts, positioning)
-                List<TextExtractor.TextElement> baseElements = textExtractor.extractTextElementsFromPage(basePdf, i);
-                List<TextExtractor.TextElement> compareElements = textExtractor.extractTextElementsFromPage(comparePdf, i);
+                List<TextElement> baseElements = textExtractor.extractTextElementsFromPage(basePdf, i);
+                List<TextElement> compareElements = textExtractor.extractTextElementsFromPage(comparePdf, i);
 
                 List<Difference> textElementDiffs = compareTextElements(baseElements, compareElements);
                 if (!textElementDiffs.isEmpty()) {
@@ -174,169 +177,6 @@ public class DifferenceDetectionService {
     }
 
     /**
-     * Compare pages for a specific document pair.
-     *
-     * @param comparison The comparison entity
-     * @param baseDocument The base document
-     * @param compareDocument The comparison document
-     * @param baseStartPage Start page in base document
-     * @param baseEndPage End page in base document
-     * @param compareStartPage Start page in comparison document
-     * @param compareEndPage End page in comparison document
-     * @param pairIndex Index of the document pair
-     * @throws IOException If there's an error processing the documents
-     */
-    public void comparePages(
-            Comparison comparison,
-            PdfDocument baseDocument,
-            PdfDocument compareDocument,
-            int baseStartPage,
-            int baseEndPage,
-            int compareStartPage,
-            int compareEndPage,
-            int pairIndex) throws IOException {
-
-        // Load PDF documents
-        PDDocument basePdf = PDDocument.load(new File(baseDocument.getFilePath()));
-        PDDocument comparePdf = PDDocument.load(new File(compareDocument.getFilePath()));
-
-        try {
-            // Create directory for comparison results
-            Path comparisonDir = Paths.get("uploads", "comparisons", comparison.getComparisonId());
-            Files.createDirectories(comparisonDir);
-
-            // Calculate relative page count (1-based for API)
-            int basePageCount = baseEndPage - baseStartPage + 1;
-            int comparePageCount = compareEndPage - compareStartPage + 1;
-
-            // Map relative page numbers to absolute page numbers
-            for (int relPage = 1; relPage <= Math.max(basePageCount, comparePageCount); relPage++) {
-                int basePageIdx = baseStartPage - 1 + (relPage - 1);
-                int comparePageIdx = compareStartPage - 1 + (relPage - 1);
-
-                // Check if page exists in both documents
-                boolean pageInBase = basePageIdx >= baseStartPage - 1 && basePageIdx <= baseEndPage - 1 &&
-                        basePageIdx < basePdf.getNumberOfPages();
-                boolean pageInCompare = comparePageIdx >= compareStartPage - 1 && comparePageIdx <= compareEndPage - 1 &&
-                        comparePageIdx < comparePdf.getNumberOfPages();
-
-                // Skip if page doesn't exist in either document
-                if (!pageInBase && !pageInCompare) {
-                    continue;
-                }
-
-                List<Difference> baseDifferences = new ArrayList<>();
-                List<Difference> compareDifferences = new ArrayList<>();
-
-                // Extract and compare text content
-                String baseText = pageInBase ? textExtractor.extractTextFromPage(basePdf, basePageIdx) : "";
-                String compareText = pageInCompare ? textExtractor.extractTextFromPage(comparePdf, comparePageIdx) : "";
-
-                List<TextDifference> textDiffs = differenceCalculator.compareText(
-                        baseText, compareText, comparison.getTextComparisonMethod());
-
-                // Split differences by source document
-                List<Difference> baseTextDiffs = textDiffs.stream()
-                        .filter(diff -> !"added".equals(diff.getChangeType()))
-                        .collect(Collectors.toList());
-
-                List<Difference> compareTextDiffs = textDiffs.stream()
-                        .filter(diff -> !"deleted".equals(diff.getChangeType()))
-                        .collect(Collectors.toList());
-
-                baseDifferences.addAll(baseTextDiffs);
-                compareDifferences.addAll(compareTextDiffs);
-
-                // Get page dimensions if available
-                PDRectangle baseSize = pageInBase ? basePdf.getPage(basePageIdx).getMediaBox() : null;
-                PDRectangle compareSize = pageInCompare ? comparePdf.getPage(comparePageIdx).getMediaBox() : null;
-
-                // Compare text elements (style, fonts, positioning) if both pages exist
-                if (pageInBase && pageInCompare) {
-                    List<TextExtractor.TextElement> baseElements =
-                            textExtractor.extractTextElementsFromPage(basePdf, basePageIdx);
-                    List<TextExtractor.TextElement> compareElements =
-                            textExtractor.extractTextElementsFromPage(comparePdf, comparePageIdx);
-
-                    List<Difference> textElementDiffs = compareTextElements(baseElements, compareElements);
-
-                    // Split element differences by source document
-                    List<Difference> baseElementDiffs = textElementDiffs.stream()
-                            .filter(diff -> !"added".equals(diff.getChangeType()))
-                            .collect(Collectors.toList());
-
-                    List<Difference> compareElementDiffs = textElementDiffs.stream()
-                            .filter(diff -> !"deleted".equals(diff.getChangeType()))
-                            .collect(Collectors.toList());
-
-                    baseDifferences.addAll(baseElementDiffs);
-                    compareDifferences.addAll(compareElementDiffs);
-
-                    // Compare images
-                    List<ImageExtractor.ImageInfo> baseImages = imageExtractor.extractImagesFromPage(
-                            basePdf, basePageIdx, comparisonDir.resolve("base_images"));
-                    List<ImageExtractor.ImageInfo> compareImages = imageExtractor.extractImagesFromPage(
-                            comparePdf, comparePageIdx, comparisonDir.resolve("compare_images"));
-
-                    List<Difference> imageDiffs = compareImages(baseImages, compareImages);
-
-                    // Split image differences by source document
-                    List<Difference> baseImageDiffs = imageDiffs.stream()
-                            .filter(diff -> !"added".equals(diff.getChangeType()))
-                            .collect(Collectors.toList());
-
-                    List<Difference> compareImageDiffs = imageDiffs.stream()
-                            .filter(diff -> !"deleted".equals(diff.getChangeType()))
-                            .collect(Collectors.toList());
-
-                    baseDifferences.addAll(baseImageDiffs);
-                    compareDifferences.addAll(compareImageDiffs);
-
-                    // Compare fonts
-                    List<FontAnalyzer.FontInfo> baseFonts = fontAnalyzer.analyzeFontsOnPage(
-                            basePdf, basePageIdx, comparisonDir.resolve("base_fonts"));
-                    List<FontAnalyzer.FontInfo> compareFonts = fontAnalyzer.analyzeFontsOnPage(
-                            comparePdf, comparePageIdx, comparisonDir.resolve("compare_fonts"));
-
-                    List<Difference> fontDiffs = compareFonts(baseFonts, compareFonts);
-
-                    // Split font differences by source document
-                    List<Difference> baseFontDiffs = fontDiffs.stream()
-                            .filter(diff -> !"added".equals(diff.getChangeType()))
-                            .collect(Collectors.toList());
-
-                    List<Difference> compareFontDiffs = fontDiffs.stream()
-                            .filter(diff -> !"deleted".equals(diff.getChangeType()))
-                            .collect(Collectors.toList());
-
-                    baseDifferences.addAll(baseFontDiffs);
-                    compareDifferences.addAll(compareFontDiffs);
-                }
-
-                // Create detailed page analysis for the API to serve
-                createPairPageDetails(
-                        comparison.getComparisonId(),
-                        pairIndex,
-                        relPage, // Relative 1-based page number within the pair
-                        baseDocument,
-                        compareDocument,
-                        baseText,
-                        compareText,
-                        baseDifferences,
-                        compareDifferences,
-                        baseSize,
-                        compareSize,
-                        pageInBase,
-                        pageInCompare);
-            }
-        } finally {
-            // Close PDFs
-            basePdf.close();
-            comparePdf.close();
-        }
-    }
-
-    /**
      * Compare text elements between two pages.
      *
      * @param baseElements Text elements from the base page
@@ -344,8 +184,8 @@ public class DifferenceDetectionService {
      * @return List of differences
      */
     private List<Difference> compareTextElements(
-            List<TextExtractor.TextElement> baseElements,
-            List<TextExtractor.TextElement> compareElements) {
+            List<TextElement> baseElements,
+            List<TextElement> compareElements) {
 
         List<Difference> differences = new ArrayList<>();
 
@@ -353,17 +193,17 @@ public class DifferenceDetectionService {
         // A complete implementation would use more sophisticated matching algorithms
 
         // Match elements based on similar position and text
-        Map<TextExtractor.TextElement, TextExtractor.TextElement> matches =
+        Map<TextElement, TextElement> matches =
                 matchTextElements(baseElements, compareElements);
 
         // Track elements that have been matched
-        Set<TextExtractor.TextElement> matchedBaseElements = new HashSet<>(matches.keySet());
-        Set<TextExtractor.TextElement> matchedCompareElements = new HashSet<>(matches.values());
+        Set<TextElement> matchedBaseElements = new HashSet<>(matches.keySet());
+        Set<TextElement> matchedCompareElements = new HashSet<>(matches.values());
 
         // Find style differences in matched elements
-        for (Map.Entry<TextExtractor.TextElement, TextExtractor.TextElement> match : matches.entrySet()) {
-            TextExtractor.TextElement baseElement = match.getKey();
-            TextExtractor.TextElement compareElement = match.getValue();
+        for (Map.Entry<TextElement, TextElement> match : matches.entrySet()) {
+            TextElement baseElement = match.getKey();
+            TextElement compareElement = match.getValue();
 
             // Compare font size
             boolean fontSizeDifferent = Math.abs(baseElement.getFontSize() - compareElement.getFontSize()) > 0.1;
@@ -408,8 +248,8 @@ public class DifferenceDetectionService {
                 }
 
                 // Create style difference
-                com.pdfcompare.model.difference.StyleDifference diff =
-                        com.pdfcompare.model.difference.StyleDifference.builder()
+                guraa.pdfcompare.model.difference.StyleDifference diff =
+                        guraa.pdfcompare.model.difference.StyleDifference.builder()
                                 .id(diffId)
                                 .type("style")
                                 .changeType("modified")
@@ -433,7 +273,7 @@ public class DifferenceDetectionService {
         }
 
         // Elements only in base document (deleted)
-        for (TextExtractor.TextElement element : baseElements) {
+        for (TextElement element : baseElements) {
             if (!matchedBaseElements.contains(element)) {
                 // Create text difference for deleted element
                 String diffId = UUID.randomUUID().toString();
@@ -461,7 +301,7 @@ public class DifferenceDetectionService {
         }
 
         // Elements only in compare document (added)
-        for (TextExtractor.TextElement element : compareElements) {
+        for (TextElement element : compareElements) {
             if (!matchedCompareElements.contains(element)) {
                 // Create text difference for added element
                 String diffId = UUID.randomUUID().toString();
@@ -498,11 +338,11 @@ public class DifferenceDetectionService {
      * @param compareElements Text elements from comparison page
      * @return Map of matched elements
      */
-    private Map<TextExtractor.TextElement, TextExtractor.TextElement> matchTextElements(
-            List<TextExtractor.TextElement> baseElements,
-            List<TextExtractor.TextElement> compareElements) {
+    private Map<TextElement, TextElement> matchTextElements(
+            List<TextElement> baseElements,
+            List<TextElement> compareElements) {
 
-        Map<TextExtractor.TextElement, TextExtractor.TextElement> matches = new HashMap<>();
+        Map<TextElement, TextElement> matches = new HashMap<>();
 
         // This is a simplified matching algorithm
         // A real implementation would use more sophisticated techniques
@@ -510,8 +350,8 @@ public class DifferenceDetectionService {
         // Create a list of potential matches
         List<ElementMatch> potentialMatches = new ArrayList<>();
 
-        for (TextExtractor.TextElement baseElement : baseElements) {
-            for (TextExtractor.TextElement compareElement : compareElements) {
+        for (TextElement baseElement : baseElements) {
+            for (TextElement compareElement : compareElements) {
                 // Calculate similarity based on text content and position
                 double textSimilarity = calculateTextSimilarity(
                         baseElement.getText(), compareElement.getText());
@@ -539,12 +379,12 @@ public class DifferenceDetectionService {
         potentialMatches.sort((a, b) -> Double.compare(b.getSimilarity(), a.getSimilarity()));
 
         // Assign matches greedily
-        Set<TextExtractor.TextElement> matchedBaseElements = new HashSet<>();
-        Set<TextExtractor.TextElement> matchedCompareElements = new HashSet<>();
+        Set<TextElement> matchedBaseElements = new HashSet<>();
+        Set<TextElement> matchedCompareElements = new HashSet<>();
 
         for (ElementMatch match : potentialMatches) {
-            TextExtractor.TextElement baseElement = match.getBaseElement();
-            TextExtractor.TextElement compareElement = match.getCompareElement();
+            TextElement baseElement = match.getBaseElement();
+            TextElement compareElement = match.getCompareElement();
 
             // Skip if either element is already matched
             if (matchedBaseElements.contains(baseElement) ||
@@ -1144,6 +984,220 @@ public class DifferenceDetectionService {
     }
 
     /**
+     * Calculate similarity between two text strings.
+     *
+     * @param text1 First text
+     * @param text2 Second text
+     * @return Similarity score between 0.0 and 1.0
+     */
+    private double calculateTextSimilarity(String text1, String text2) {
+        if (text1 == null || text2 == null) {
+            return 0.0;
+        }
+
+        if (text1.equals(text2)) {
+            return 1.0;
+        }
+
+        // Calculate Levenshtein distance
+        int[][] distance = new int[text1.length() + 1][text2.length() + 1];
+
+        for (int i = 0; i <= text1.length(); i++) {
+            distance[i][0] = i;
+        }
+
+        for (int j = 0; j <= text2.length(); j++) {
+            distance[0][j] = j;
+        }
+
+        for (int i = 1; i <= text1.length(); i++) {
+            for (int j = 1; j <= text2.length(); j++) {
+                if (text1.charAt(i - 1) == text2.charAt(j - 1)) {
+                    distance[i][j] = distance[i - 1][j - 1];
+                } else {
+                    distance[i][j] = Math.min(
+                            distance[i - 1][j] + 1,     // Delete
+                            Math.min(
+                                    distance[i][j - 1] + 1,     // Insert
+                                    distance[i - 1][j - 1] + 1  // Substitute
+                            )
+                    );
+                }
+            }
+        }
+
+        int maxLength = Math.max(text1.length(), text2.length());
+        if (maxLength == 0) {
+            return 1.0; // Both strings are empty
+        }
+
+        return 1.0 - (double) distance[text1.length()][text2.length()] / maxLength;
+    }
+
+    /**
+     * Compare pages for a specific document pair.
+     *
+     * @param comparison The comparison entity
+     * @param baseDocument The base document
+     * @param compareDocument The comparison document
+     * @param baseStartPage Start page in base document
+     * @param baseEndPage End page in base document
+     * @param compareStartPage Start page in comparison document
+     * @param compareEndPage End page in comparison document
+     * @param pairIndex Index of the document pair
+     * @throws IOException If there's an error processing the documents
+     */
+    public void comparePages(
+            Comparison comparison,
+            PdfDocument baseDocument,
+            PdfDocument compareDocument,
+            int baseStartPage,
+            int baseEndPage,
+            int compareStartPage,
+            int compareEndPage,
+            int pairIndex) throws IOException {
+
+        // Load PDF documents
+        PDDocument basePdf = PDDocument.load(new File(baseDocument.getFilePath()));
+        PDDocument comparePdf = PDDocument.load(new File(compareDocument.getFilePath()));
+
+        try {
+            // Create directory for comparison results
+            Path comparisonDir = Paths.get("uploads", "comparisons", comparison.getComparisonId());
+            Files.createDirectories(comparisonDir);
+
+            // Calculate relative page count (1-based for API)
+            int basePageCount = baseEndPage - baseStartPage + 1;
+            int comparePageCount = compareEndPage - compareStartPage + 1;
+
+            // Map relative page numbers to absolute page numbers
+            for (int relPage = 1; relPage <= Math.max(basePageCount, comparePageCount); relPage++) {
+                int basePageIdx = baseStartPage - 1 + (relPage - 1);
+                int comparePageIdx = compareStartPage - 1 + (relPage - 1);
+
+                // Check if page exists in both documents
+                boolean pageInBase = basePageIdx >= baseStartPage - 1 && basePageIdx <= baseEndPage - 1 &&
+                        basePageIdx < basePdf.getNumberOfPages();
+                boolean pageInCompare = comparePageIdx >= compareStartPage - 1 && comparePageIdx <= compareEndPage - 1 &&
+                        comparePageIdx < comparePdf.getNumberOfPages();
+
+                // Skip if page doesn't exist in either document
+                if (!pageInBase && !pageInCompare) {
+                    continue;
+                }
+
+                List<Difference> baseDifferences = new ArrayList<>();
+                List<Difference> compareDifferences = new ArrayList<>();
+
+                // Extract and compare text content
+                String baseText = pageInBase ? textExtractor.extractTextFromPage(basePdf, basePageIdx) : "";
+                String compareText = pageInCompare ? textExtractor.extractTextFromPage(comparePdf, comparePageIdx) : "";
+
+                List<TextDifference> textDiffs = differenceCalculator.compareText(
+                        baseText, compareText, comparison.getTextComparisonMethod());
+
+                // Split differences by source document
+                List<Difference> baseTextDiffs = textDiffs.stream()
+                        .filter(diff -> !"added".equals(diff.getChangeType()))
+                        .collect(Collectors.toList());
+
+                List<Difference> compareTextDiffs = textDiffs.stream()
+                        .filter(diff -> !"deleted".equals(diff.getChangeType()))
+                        .collect(Collectors.toList());
+
+                baseDifferences.addAll(baseTextDiffs);
+                compareDifferences.addAll(compareTextDiffs);
+
+                // Get page dimensions if available
+                PDRectangle baseSize = pageInBase ? basePdf.getPage(basePageIdx).getMediaBox() : null;
+                PDRectangle compareSize = pageInCompare ? comparePdf.getPage(comparePageIdx).getMediaBox() : null;
+
+                // Compare text elements (style, fonts, positioning) if both pages exist
+                if (pageInBase && pageInCompare) {
+                    List<TextElement> baseElements =
+                            textExtractor.extractTextElementsFromPage(basePdf, basePageIdx);
+                    List<TextElement> compareElements =
+                            textExtractor.extractTextElementsFromPage(comparePdf, comparePageIdx);
+
+                    List<Difference> textElementDiffs = compareTextElements(baseElements, compareElements);
+
+                    // Split element differences by source document
+                    List<Difference> baseElementDiffs = textElementDiffs.stream()
+                            .filter(diff -> !"added".equals(diff.getChangeType()))
+                            .collect(Collectors.toList());
+
+                    List<Difference> compareElementDiffs = textElementDiffs.stream()
+                            .filter(diff -> !"deleted".equals(diff.getChangeType()))
+                            .collect(Collectors.toList());
+
+                    baseDifferences.addAll(baseElementDiffs);
+                    compareDifferences.addAll(compareElementDiffs);
+
+                    // Compare images
+                    List<ImageExtractor.ImageInfo> baseImages = imageExtractor.extractImagesFromPage(
+                            basePdf, basePageIdx, comparisonDir.resolve("base_images"));
+                    List<ImageExtractor.ImageInfo> compareImages = imageExtractor.extractImagesFromPage(
+                            comparePdf, comparePageIdx, comparisonDir.resolve("compare_images"));
+
+                    List<Difference> imageDiffs = compareImages(baseImages, compareImages);
+
+                    // Split image differences by source document
+                    List<Difference> baseImageDiffs = imageDiffs.stream()
+                            .filter(diff -> !"added".equals(diff.getChangeType()))
+                            .collect(Collectors.toList());
+
+                    List<Difference> compareImageDiffs = imageDiffs.stream()
+                            .filter(diff -> !"deleted".equals(diff.getChangeType()))
+                            .collect(Collectors.toList());
+
+                    baseDifferences.addAll(baseImageDiffs);
+                    compareDifferences.addAll(compareImageDiffs);
+
+                    // Compare fonts
+                    List<FontAnalyzer.FontInfo> baseFonts = fontAnalyzer.analyzeFontsOnPage(
+                            basePdf, basePageIdx, comparisonDir.resolve("base_fonts"));
+                    List<FontAnalyzer.FontInfo> compareFonts = fontAnalyzer.analyzeFontsOnPage(
+                            comparePdf, comparePageIdx, comparisonDir.resolve("compare_fonts"));
+
+                    List<Difference> fontDiffs = compareFonts(baseFonts, compareFonts);
+
+                    // Split font differences by source document
+                    List<Difference> baseFontDiffs = fontDiffs.stream()
+                            .filter(diff -> !"added".equals(diff.getChangeType()))
+                            .collect(Collectors.toList());
+
+                    List<Difference> compareFontDiffs = fontDiffs.stream()
+                            .filter(diff -> !"deleted".equals(diff.getChangeType()))
+                            .collect(Collectors.toList());
+
+                    baseDifferences.addAll(baseFontDiffs);
+                    compareDifferences.addAll(compareFontDiffs);
+                }
+
+                // Create detailed page analysis for the API to serve
+                createPairPageDetails(
+                        comparison.getComparisonId(),
+                        pairIndex,
+                        relPage, // Relative 1-based page number within the pair
+                        baseDocument,
+                        compareDocument,
+                        baseText,
+                        compareText,
+                        baseDifferences,
+                        compareDifferences,
+                        baseSize,
+                        compareSize,
+                        pageInBase,
+                        pageInCompare);
+            }
+        } finally {
+            // Close PDFs
+            basePdf.close();
+            comparePdf.close();
+        }
+    }
+
+    /**
      * Create detailed page analysis for a document pair in smart comparison mode.
      *
      * @param comparisonId The comparison ID
@@ -1233,54 +1287,52 @@ public class DifferenceDetectionService {
     }
 
     /**
-     * Calculate similarity between two text strings.
+     * Parse RGB values from a CSS color string.
      *
-     * @param text1 First text
-     * @param text2 Second text
-     * @return Similarity score between 0.0 and 1.0
+     * @param color The color string (like "rgb(r,g,b)")
+     * @return Array of RGB values
      */
-    private double calculateTextSimilarity(String text1, String text2) {
-        if (text1 == null || text2 == null) {
-            return 0.0;
+    private int[] parseRgb(String color) {
+        if (color == null) {
+            return null;
         }
 
-        if (text1.equals(text2)) {
-            return 1.0;
-        }
-
-        // Calculate Levenshtein distance
-        int[][] distance = new int[text1.length() + 1][text2.length() + 1];
-
-        for (int i = 0; i <= text1.length(); i++) {
-            distance[i][0] = i;
-        }
-
-        for (int j = 0; j <= text2.length(); j++) {
-            distance[0][j] = j;
-        }
-
-        for (int i = 1; i <= text1.length(); i++) {
-            for (int j = 1; j <= text2.length(); j++) {
-                if (text1.charAt(i - 1) == text2.charAt(j - 1)) {
-                    distance[i][j] = distance[i - 1][j - 1];
-                } else {
-                    distance[i][j] = Math.min(
-                            distance[i - 1][j] + 1,     // Delete
-                            Math.min(
-                                    distance[i][j - 1] + 1,     // Insert
-                                    distance[i - 1][j - 1] + 1  // Substitute
-                            )
-                    );
+        // Handle rgb() format
+        if (color.startsWith("rgb(") && color.endsWith(")")) {
+            String[] parts = color.substring(4, color.length() - 1).split(",");
+            if (parts.length >= 3) {
+                try {
+                    int r = Integer.parseInt(parts[0].trim());
+                    int g = Integer.parseInt(parts[1].trim());
+                    int b = Integer.parseInt(parts[2].trim());
+                    return new int[]{ r, g, b };
+                } catch (NumberFormatException e) {
+                    return null;
                 }
             }
         }
 
-        int maxLength = Math.max(text1.length(), text2.length());
-        if (maxLength == 0) {
-            return 1.0; // Both strings are empty
+        // Handle hex format (#rrggbb)
+        if (color.startsWith("#") && (color.length() == 7 || color.length() == 4)) {
+            try {
+                if (color.length() == 7) {
+                    int r = Integer.parseInt(color.substring(1, 3), 16);
+                    int g = Integer.parseInt(color.substring(3, 5), 16);
+                    int b = Integer.parseInt(color.substring(5, 7), 16);
+                    return new int[]{ r, g, b };
+                } else {
+                    // Short form #rgb
+                    int r = Integer.parseInt(color.substring(1, 2) + color.substring(1, 2), 16);
+                    int g = Integer.parseInt(color.substring(2, 3) + color.substring(2, 3), 16);
+                    int b = Integer.parseInt(color.substring(3, 4) + color.substring(3, 4), 16);
+                    return new int[]{ r, g, b };
+                }
+            } catch (NumberFormatException e) {
+                return null;
+            }
         }
 
-        return 1.0 - (double) distance[text1.length()][text2.length()] / maxLength;
+        return null;
     }
 
     /**
@@ -1373,29 +1425,23 @@ public class DifferenceDetectionService {
     }
 
     /**
-     * Java HashSet implementation for element matching.
-     */
-    private static class Set<T> extends java.util.HashSet<T> {
-    }
-
-    /**
      * Text element match structure.
      */
     private static class ElementMatch {
-        private final TextExtractor.TextElement baseElement;
-        private final TextExtractor.TextElement compareElement;
+        private final TextElement baseElement;
+        private final TextElement compareElement;
         private final double similarity;
 
-        public ElementMatch(TextExtractor.TextElement baseElement,
-                            TextExtractor.TextElement compareElement,
+        public ElementMatch(TextElement baseElement,
+                            TextElement compareElement,
                             double similarity) {
             this.baseElement = baseElement;
             this.compareElement = compareElement;
             this.similarity = similarity;
         }
 
-        public TextExtractor.TextElement getBaseElement() { return baseElement; }
-        public TextExtractor.TextElement getCompareElement() { return compareElement; }
+        public TextElement getBaseElement() { return baseElement; }
+        public TextElement getCompareElement() { return compareElement; }
         public double getSimilarity() { return similarity; }
     }
 }
