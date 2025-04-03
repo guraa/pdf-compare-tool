@@ -1352,76 +1352,22 @@ public class DifferenceDetectionService {
         }
 
         // Parse RGB values
-        try {
-            // Extract RGB values from format like "rgb(r,g,b)"
-            int[] rgb1 = parseRgb(color1);
-            int[] rgb2 = parseRgb(color2);
+        int[] rgb1 = parseRgb(color1);
+        int[] rgb2 = parseRgb(color2);
 
-            if (rgb1 == null || rgb2 == null) {
-                return false;
-            }
-
-            // Calculate color distance
-            double distance = Math.sqrt(
-                    Math.pow(rgb1[0] - rgb2[0], 2) +
-                            Math.pow(rgb1[1] - rgb2[1], 2) +
-                            Math.pow(rgb1[2] - rgb2[2], 2)
-            );
-
-            // Colors are similar if distance is less than a threshold
-            return distance < 30; // Threshold of 30 (out of 441.67 max)
-        } catch (Exception e) {
+        if (rgb1 == null || rgb2 == null) {
             return false;
         }
-    }
 
-    /**
-     * Parse RGB values from a CSS color string.
-     *
-     * @param color The color string (like "rgb(r,g,b)")
-     * @return Array of RGB values
-     */
-    private int[] parseRgb(String color) {
-        if (color == null) {
-            return null;
-        }
+        // Calculate color distance
+        double distance = Math.sqrt(
+                Math.pow(rgb1[0] - rgb2[0], 2) +
+                        Math.pow(rgb1[1] - rgb2[1], 2) +
+                        Math.pow(rgb1[2] - rgb2[2], 2)
+        );
 
-        // Handle rgb() format
-        if (color.startsWith("rgb(") && color.endsWith(")")) {
-            String[] parts = color.substring(4, color.length() - 1).split(",");
-            if (parts.length >= 3) {
-                try {
-                    int r = Integer.parseInt(parts[0].trim());
-                    int g = Integer.parseInt(parts[1].trim());
-                    int b = Integer.parseInt(parts[2].trim());
-                    return new int[]{ r, g, b };
-                } catch (NumberFormatException e) {
-                    return null;
-                }
-            }
-        }
-
-        // Handle hex format (#rrggbb)
-        if (color.startsWith("#") && (color.length() == 7 || color.length() == 4)) {
-            try {
-                if (color.length() == 7) {
-                    int r = Integer.parseInt(color.substring(1, 3), 16);
-                    int g = Integer.parseInt(color.substring(3, 5), 16);
-                    int b = Integer.parseInt(color.substring(5, 7), 16);
-                    return new int[]{ r, g, b };
-                } else {
-                    // Short form #rgb
-                    int r = Integer.parseInt(color.substring(1, 2) + color.substring(1, 2), 16);
-                    int g = Integer.parseInt(color.substring(2, 3) + color.substring(2, 3), 16);
-                    int b = Integer.parseInt(color.substring(3, 4) + color.substring(3, 4), 16);
-                    return new int[]{ r, g, b };
-                }
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }
-
-        return null;
+        // Colors are similar if distance is less than a threshold
+        return distance < 30; // Threshold of 30 (out of 441.67 max)
     }
 
     /**

@@ -11,17 +11,12 @@ import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @Slf4j
 @Component
@@ -104,10 +99,23 @@ public class FontAnalyzer {
 
         // Get encoding information
         try {
-            info.setEncoding(font.getEncoding() != null ?
-                    font.getEncoding().getEncodingName() : "Unknown");
+            // PDFont doesn't have a direct getEncoding() method, we need to handle this differently
+            String encoding = "Unknown";
+
+            // Try to get encoding based on font type
+            if (font instanceof PDType1Font) {
+                PDType1Font type1Font = (PDType1Font) font;
+                if (type1Font.getEncoding() != null) {
+                    encoding = type1Font.getEncoding().toString();
+                }
+            } else if (font instanceof PDType0Font) {
+                encoding = "CID";  // Composite fonts typically use CID encoding
+            }
+
+            info.setEncoding(encoding);
         } catch (Exception e) {
             info.setEncoding("Unknown");
+            log.warn("Could not determine font encoding", e);
         }
 
         return info;

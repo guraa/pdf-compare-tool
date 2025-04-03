@@ -27,7 +27,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-import guraa.pdfcompare.util.TextElement;
 
 @Slf4j
 @Service
@@ -359,8 +358,34 @@ public class ComparisonService {
      */
     private int calculateTotalDifferences(String comparisonId, int pairIndex) {
         // Implementation would analyze cached page details for the document pair
-        // For this example, we'll return a placeholder value
-        return 10;
+        try {
+            Path pairDir = Paths.get("uploads", "comparisons", comparisonId);
+
+            // Count text, image, font, and style differences
+            int textDiffs = 0;
+            int imageDiffs = 0;
+            int fontDiffs = 0;
+            int styleDiffs = 0;
+
+            // Look for page detail files for this pair
+            File[] pairFiles = pairDir.toFile().listFiles((dir, name) ->
+                    name.startsWith("pair_" + pairIndex + "_page_") && name.endsWith("_details.json"));
+
+            if (pairFiles != null) {
+                for (File file : pairFiles) {
+                    PageDetails details = objectMapper.readValue(file, PageDetails.class);
+                    textDiffs += details.getTextDifferenceCount();
+                    imageDiffs += details.getImageDifferenceCount();
+                    fontDiffs += details.getFontDifferenceCount();
+                    styleDiffs += details.getStyleDifferenceCount();
+                }
+            }
+
+            return textDiffs + imageDiffs + fontDiffs + styleDiffs;
+        } catch (Exception e) {
+            log.warn("Error calculating total differences for pair {}: {}", pairIndex, e.getMessage());
+            return 0;
+        }
     }
 
     /**
@@ -778,9 +803,9 @@ public class ComparisonService {
                         }
 
                         // Type-specific checks
-                        if (diff instanceof com.pdfcompare.model.difference.TextDifference) {
-                            com.pdfcompare.model.difference.TextDifference textDiff =
-                                    (com.pdfcompare.model.difference.TextDifference) diff;
+                        if (diff instanceof guraa.pdfcompare.model.difference.TextDifference) {
+                            guraa.pdfcompare.model.difference.TextDifference textDiff =
+                                    (guraa.pdfcompare.model.difference.TextDifference) diff;
 
                             // Check text content
                             return (textDiff.getBaseText() != null &&

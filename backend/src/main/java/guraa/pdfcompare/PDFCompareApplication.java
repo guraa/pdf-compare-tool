@@ -15,14 +15,14 @@ import java.nio.file.Paths;
 @SpringBootApplication
 @EnableAsync
 @EnableScheduling
-public class PdfCompareApplication {
+public class PDFCompareApplication {
 
     public static void main(String[] args) {
         // Create necessary directories
         createDirectories();
 
         // Start Spring Boot application
-        SpringApplication.run(PdfCompareApplication.class, args);
+        SpringApplication.run(PDFCompareApplication.class, args);
     }
 
     /**
@@ -58,6 +58,12 @@ public class PdfCompareApplication {
             Path tempDir = Paths.get("uploads", "temp");
             if (!Files.exists(tempDir)) {
                 Files.createDirectories(tempDir);
+            }
+
+            // Create debug directory for development
+            Path debugDir = Paths.get("uploads", "debug");
+            if (!Files.exists(debugDir)) {
+                Files.createDirectories(debugDir);
             }
 
             System.out.println("Application directories created successfully.");
