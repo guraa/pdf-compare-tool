@@ -22,7 +22,7 @@ public class ServerTimeoutConfig {
         return tomcat -> {
             // Set connection timeout to 5 minutes (300000 milliseconds)
             tomcat.addConnectorCustomizers(connector -> {
-                connector.setProperty("connectionTimeout", "300000");
+                connector.setProperty("connectionTimeout", "600000");
             });
         };
     }

@@ -55,13 +55,14 @@ public class PdfService {
 
             // Check if this document already exists by content hash
             Optional<PdfDocument> existingDocument = pdfRepository.findByContentHash(document.getContentHash());
+            
             if (existingDocument.isPresent()) {
-                log.info("Document with identical content already exists: {}", existingDocument.get().getFileId());
+                log.info("Document with same content hash already exists, reusing: {}", existingDocument.get().getFileId());
                 return existingDocument.get();
+            } else {
+                // Save to repository
+                return pdfRepository.save(document);
             }
-
-            // Save to repository
-            return pdfRepository.save(document);
         } finally {
             // Clean up temporary directory
             tempFile.delete();
@@ -94,11 +95,12 @@ public class PdfService {
 
             // Check if this document already exists by content hash
             Optional<PdfDocument> existingDocument = pdfRepository.findByContentHash(document.getContentHash());
+            
             if (existingDocument.isPresent()) {
-                log.info("Document with identical content already exists: {}", existingDocument.get().getFileId());
+                log.info("Document with same content hash already exists, reusing: {}", existingDocument.get().getFileId());
                 return existingDocument.get();
             }
-
+            
             // Generate thumbnails for all pages
             thumbnailService.generateThumbnails(document);
 

@@ -10,6 +10,7 @@ import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.graphics.PDXObject;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
@@ -34,6 +35,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class ImageExtractor extends PDFStreamEngine {
 
     private final ThreadLocal<List<ImageInfo>> threadLocalImages = ThreadLocal.withInitial(CopyOnWriteArrayList::new);
+    private PDPage currentPage;
+    private PDResources currentResources;
 
     public ImageExtractor() {
         // Register operators for handling images
@@ -58,7 +61,9 @@ public class ImageExtractor extends PDFStreamEngine {
         // Clear the thread local list
         threadLocalImages.get().clear();
 
-        PDPage page = document.getPage(pageIndex);
+        // Set current page and its resources
+        currentPage = document.getPage(pageIndex);
+        currentResources = currentPage.getResources();
 
         // Create output directory if it doesn't exist
         File outDir = outputDir.toFile();
@@ -67,7 +72,11 @@ public class ImageExtractor extends PDFStreamEngine {
         }
 
         // Process the page to extract images
-        processPage(page);
+        try {
+            processPage(currentPage);
+        } catch (IOException e) {
+            log.error("Error processing page for image extraction", e);
+        }
 
         // Save extracted images to files
         List<ImageInfo> savedImages = new ArrayList<>();
@@ -95,8 +104,8 @@ public class ImageExtractor extends PDFStreamEngine {
                 imageInfo.setImageHash(sb.toString());
 
                 savedImages.add(imageInfo);
-            } catch (NoSuchAlgorithmException e) {
-                log.error("Failed to generate MD5 hash for image", e);
+            } catch (NoSuchAlgorithmException | IOException e) {
+                log.error("Failed to process image", e);
             }
         }
 
@@ -109,8 +118,26 @@ public class ImageExtractor extends PDFStreamEngine {
 
         // Handle the "Do" operation which draws objects like images
         if ("Do".equals(operation)) {
+            // Defensive null checks
+            if (operands == null || operands.isEmpty()) {
+                return;
+            }
+
             COSName objectName = (COSName) operands.get(0);
-            PDXObject xobject = getResources().getXObject(objectName);
+
+            // Defensive checks for resources and object name
+            if (currentResources == null || objectName == null) {
+                log.warn("Skipping image extraction due to null resources or object name");
+                return;
+            }
+
+            PDXObject xobject;
+            try {
+                xobject = currentResources.getXObject(objectName);
+            } catch (Exception e) {
+                log.warn("Could not retrieve XObject: {}", e.getMessage());
+                return;
+            }
 
             // Handle images
             if (xobject instanceof PDImageXObject) {
@@ -168,9 +195,13 @@ public class ImageExtractor extends PDFStreamEngine {
 
     private Point2D getCurrentPosition() {
         // Get the current transformation matrix
-        return new Point2D.Float(getGraphicsState().getCurrentTransformationMatrix().getTranslateX(),
-                getGraphicsState().getCurrentTransformationMatrix().getTranslateY());
+        return new Point2D.Float(
+                getGraphicsState().getCurrentTransformationMatrix().getTranslateX(),
+                getGraphicsState().getCurrentTransformationMatrix().getTranslateY()
+        );
     }
+
+
 
     /**
      * Contains information about an extracted image.

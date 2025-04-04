@@ -10,6 +10,8 @@ const initialState = {
   error: null,
   selectedPage: 1,
   selectedDifference: null,
+  selectedDocumentPairIndex: 0, // Add this to track the selected document pair
+  documentPairs: [], // Add this to store all document pairs
   filters: {
     differenceTypes: ['text', 'font', 'image', 'style', 'metadata'],
     minSeverity: 'all', // 'all', 'minor', 'major', 'critical'
@@ -17,9 +19,10 @@ const initialState = {
   },
   viewSettings: {
     highlightMode: 'all', // 'all', 'text', 'images', 'fonts', 'none'
-    zoom: 1.0,
+    zoom: 0.5,
     syncScroll: true,
-    showChangesOnly: false
+    showChangesOnly: false,
+    enhancedDiffView: false // Add this to toggle the enhanced diff view
   }
 };
 
@@ -33,6 +36,8 @@ const actions = {
   SET_ERROR: 'SET_ERROR',
   SET_SELECTED_PAGE: 'SET_SELECTED_PAGE',
   SET_SELECTED_DIFFERENCE: 'SET_SELECTED_DIFFERENCE',
+  SET_DOCUMENT_PAIRS: 'SET_DOCUMENT_PAIRS',
+  SET_SELECTED_DOCUMENT_PAIR_INDEX: 'SET_SELECTED_DOCUMENT_PAIR_INDEX',
   UPDATE_FILTERS: 'UPDATE_FILTERS',
   UPDATE_VIEW_SETTINGS: 'UPDATE_VIEW_SETTINGS',
   RESET_COMPARISON: 'RESET_COMPARISON'
@@ -67,6 +72,12 @@ const comparisonReducer = (state, action) => {
     
     case actions.SET_SELECTED_DIFFERENCE:
       return { ...state, selectedDifference: action.payload };
+    
+    case actions.SET_DOCUMENT_PAIRS:
+      return { ...state, documentPairs: action.payload };
+    
+    case actions.SET_SELECTED_DOCUMENT_PAIR_INDEX:
+      return { ...state, selectedDocumentPairIndex: action.payload };
     
     case actions.UPDATE_FILTERS:
       return { 
@@ -114,6 +125,8 @@ export const ComparisonProvider = ({ children }) => {
     setError: (error) => dispatch({ type: actions.SET_ERROR, payload: error }),
     setSelectedPage: (page) => dispatch({ type: actions.SET_SELECTED_PAGE, payload: page }),
     setSelectedDifference: (diff) => dispatch({ type: actions.SET_SELECTED_DIFFERENCE, payload: diff }),
+    setDocumentPairs: (pairs) => dispatch({ type: actions.SET_DOCUMENT_PAIRS, payload: pairs }),
+    setSelectedDocumentPairIndex: (index) => dispatch({ type: actions.SET_SELECTED_DOCUMENT_PAIR_INDEX, payload: index }),
     updateFilters: (filters) => dispatch({ type: actions.UPDATE_FILTERS, payload: filters }),
     updateViewSettings: (settings) => dispatch({ type: actions.UPDATE_VIEW_SETTINGS, payload: settings }),
     resetComparison: () => dispatch({ type: actions.RESET_COMPARISON })

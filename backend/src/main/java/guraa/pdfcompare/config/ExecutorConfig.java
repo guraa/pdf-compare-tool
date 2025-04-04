@@ -26,8 +26,11 @@ public class ExecutorConfig {
     @Value("${app.async.queue-capacity:100}")
     private int queueCapacity;
 
-    @Value("${app.comparison.executor.threads:2}")
+    @Value("${app.comparison.executor.threads:4}")
     private int comparisonThreads;
+    
+    @Value("${app.pdf.page-processing.threads:8}")
+    private int pdfPageProcessingThreads;
 
     /**
      * Task executor for processing PDFs asynchronously.
@@ -37,8 +40,8 @@ public class ExecutorConfig {
     @Bean(name = "pdfProcessingExecutor")
     public ThreadPoolTaskExecutor pdfProcessingExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(corePoolSize / 2);
-        executor.setMaxPoolSize(maxPoolSize / 2);
+        executor.setCorePoolSize(corePoolSize);
+        executor.setMaxPoolSize(maxPoolSize);
         executor.setQueueCapacity(queueCapacity);
         executor.setThreadNamePrefix("pdf-proc-");
 
@@ -47,6 +50,20 @@ public class ExecutorConfig {
 
         executor.initialize();
         return executor;
+    }
+    
+    /**
+     * Task executor specifically for processing PDF pages in parallel.
+     * This executor is optimized for CPU-intensive tasks like rendering and text extraction.
+     *
+     * @return The thread pool executor
+     */
+    @Bean(name = "pdfPageProcessingExecutor")
+    public ExecutorService pdfPageProcessingExecutor() {
+        // Use the number of available processors, but limit to a reasonable number
+        // to avoid excessive resource usage
+        int numThreads = Math.min(Runtime.getRuntime().availableProcessors(), pdfPageProcessingThreads);
+        return Executors.newFixedThreadPool(numThreads);
     }
 
     /**

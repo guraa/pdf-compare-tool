@@ -36,6 +36,8 @@ const PDFUploader = ({ onFileUploaded, file, label = 'Upload PDF' }) => {
     }
   };
 
+  const [reusedFile, setReusedFile] = useState(false);
+
   const handleFile = async (selectedFile) => {
     // Validate file is a PDF
     if (selectedFile.type !== 'application/pdf') {
@@ -46,16 +48,23 @@ const PDFUploader = ({ onFileUploaded, file, label = 'Upload PDF' }) => {
     try {
       setUploading(true);
       setError(null);
+      setReusedFile(false);
       
       // Upload the file to the server
       const result = await uploadPDF(selectedFile);
+      
+      // Check if this file was reused (already existed in the system)
+      if (result.reused) {
+        setReusedFile(true);
+      }
       
       // Call the callback with file info
       onFileUploaded({
         fileId: result.fileId,
         fileName: selectedFile.name,
         size: selectedFile.size,
-        uploadDate: new Date().toISOString()
+        uploadDate: new Date().toISOString(),
+        reused: result.reused
       });
       
       setUploading(false);
@@ -92,6 +101,14 @@ const PDFUploader = ({ onFileUploaded, file, label = 'Upload PDF' }) => {
           <div className="file-details">
             <div className="file-name">{file.fileName}</div>
             <div className="file-size">{Math.round(file.size / 1024)} KB</div>
+            {file.reused && (
+              <div className="file-reused">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                </svg>
+                <span>Existing file reused</span>
+              </div>
+            )}
           </div>
           <button className="remove-button" onClick={handleRemoveFile}>
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

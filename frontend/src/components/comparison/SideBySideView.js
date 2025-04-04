@@ -7,6 +7,7 @@ import SideBySidePanel from './panels/SideBySidePanel';
 import OverlayPanel from './panels/OverlayPanel';
 import DifferencePanel from './panels/DifferencePanel';
 import DifferenceViewer from './DifferenceViewer';
+import EnhancedDiffView from './EnhancedDiffView';
 import Spinner from '../common/Spinner';
 import './SideBySideView.css';
 
@@ -115,6 +116,24 @@ const SideBySideView = ({ comparisonId, result }) => {
         
         console.log('Page details received:', details);
         
+        // Check if the page is out of bounds
+        if (details && details.message && details.message.includes("Page not found")) {
+          console.warn("Page not found in document pair:", details.message);
+          
+          // If we have a maxPage value, navigate to the last valid page
+          if (details.maxPage && details.maxPage > 0) {
+            console.log(`Navigating to max page: ${details.maxPage}`);
+            setSelectedPage(details.maxPage);
+            setLoading(false);
+            return;
+          }
+          
+          // Otherwise, show an error
+          setError(`${details.message}. Please navigate to a valid page.`);
+          setLoading(false);
+          return;
+        }
+        
         // Check if we got any differences in the response
         if (details && details.baseDifferences && details.baseDifferences.length === 0 &&
             details.compareDifferences && details.compareDifferences.length === 0) {
@@ -145,7 +164,7 @@ const SideBySideView = ({ comparisonId, result }) => {
     };
     
     fetchPageDetails();
-  }, [comparisonId, state.selectedPage, state.filters, retryCount, maxRetries, selectedPairIndex]);
+  }, [comparisonId, state.selectedPage, state.filters, retryCount, maxRetries, selectedPairIndex, setSelectedPage]);
 
   // Handler for difference selection
   const handleDifferenceSelect = (difference) => {
@@ -370,19 +389,29 @@ const SideBySideView = ({ comparisonId, result }) => {
           />
         )}
         
-        <button 
-          className="toggle-panel-button"
-          onClick={toggleDifferencePanel}
-          title={showDifferencePanel ? "Hide difference panel" : "Show difference panel"}
-        >
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            {showDifferencePanel ? (
-              <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6-6-6z" />
-            ) : (
-              <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59z" />
-            )}
-          </svg>
-        </button>
+        {viewMode === 'enhanced' && (
+          <EnhancedDiffView
+            comparisonId={comparisonId}
+            result={result}
+            documentPair={isSmartComparisonMode && result.documentPairs ? result.documentPairs[selectedPairIndex] : null}
+          />
+        )}
+        
+        {viewMode !== 'enhanced' && (
+          <button 
+            className="toggle-panel-button"
+            onClick={toggleDifferencePanel}
+            title={showDifferencePanel ? "Hide difference panel" : "Show difference panel"}
+          >
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              {showDifferencePanel ? (
+                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6-6-6z" />
+              ) : (
+                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59z" />
+              )}
+            </svg>
+          </button>
+        )}
         
         {differencesCount === 0 && !loading && pageDetails && (() => {
           // Calculate if pages exist using the same logic as SideBySidePanel
@@ -411,7 +440,7 @@ const SideBySideView = ({ comparisonId, result }) => {
           ) : null;
         })()}
         
-        {showDifferencePanel && (
+        {showDifferencePanel && viewMode !== 'enhanced' && (
           <DifferenceViewer 
             pageDetails={pageDetails}
             selectedDifference={state.selectedDifference}

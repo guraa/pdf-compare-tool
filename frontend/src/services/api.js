@@ -1,5 +1,14 @@
 import axios from 'axios';
 
+// Circuit breaker state
+const circuitBreaker = {
+  failures: 0,
+  lastFailureTime: 0,
+  isOpen: false,
+  threshold: 5, // Number of failures before opening the circuit
+  resetTimeout: 30000, // 30 seconds before trying again
+};
+
 // Create an axios instance with default config
 const api = axios.create({
   baseURL: '/api', // Base URL for all API requests
@@ -7,12 +16,28 @@ const api = axios.create({
     'Content-Type': 'application/json'
   },
   // Add timeout to prevent indefinite waiting
-  timeout: 30000 // 30 seconds
+  timeout: 60000 // 30 seconds
 });
 
-// Add request interceptor for error handling
+// Add request interceptor for error handling and circuit breaker
 api.interceptors.request.use(
   config => {
+    // Check if circuit breaker is open
+    if (circuitBreaker.isOpen) {
+      const now = Date.now();
+      const timeSinceLastFailure = now - circuitBreaker.lastFailureTime;
+      
+      // If enough time has passed, allow one request through to test if the service is back
+      if (timeSinceLastFailure > circuitBreaker.resetTimeout) {
+        console.log('Circuit breaker: Testing if service is back...');
+        circuitBreaker.isOpen = false;
+      } else {
+        // Circuit is still open, reject the request
+        console.log(`Circuit breaker: Open (${Math.round(timeSinceLastFailure / 1000)}s since last failure, will retry after ${Math.round(circuitBreaker.resetTimeout / 1000)}s)`);
+        return Promise.reject(new Error('Circuit breaker is open. Too many failed requests.'));
+      }
+    }
+    
     // Log request for debugging
     console.log(`API Request: ${config.method.toUpperCase()} ${config.url}`, config);
     return config;
@@ -23,16 +48,38 @@ api.interceptors.request.use(
   }
 );
 
-// Add response interceptor for error handling
+// Add response interceptor for error handling and circuit breaker
 api.interceptors.response.use(
   response => {
     // Log successful responses for debugging
     console.log('API Response:', response.status, response.statusText);
+    
+    // Reset circuit breaker on successful response
+    if (circuitBreaker.failures > 0) {
+      console.log('Circuit breaker: Resetting after successful response');
+      circuitBreaker.failures = 0;
+      circuitBreaker.isOpen = false;
+    }
+    
     return response;
   },
   error => {
     // Handle API errors gracefully
     console.error('API Error:', error);
+    
+    // Update circuit breaker state for network errors
+    if (error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+      circuitBreaker.failures++;
+      circuitBreaker.lastFailureTime = Date.now();
+      
+      console.log(`Circuit breaker: Failure count increased to ${circuitBreaker.failures}/${circuitBreaker.threshold}`);
+      
+      // Open the circuit if we've hit the threshold
+      if (circuitBreaker.failures >= circuitBreaker.threshold) {
+        console.log('Circuit breaker: Opening circuit due to too many failures');
+        circuitBreaker.isOpen = true;
+      }
+    }
     
     if (error.response) {
       // The request was made and the server responded with a status code
@@ -248,6 +295,13 @@ export const getDocumentPairs = async (comparisonId) => {
       return response.data;
     } catch (error) {
       console.error("Error fetching document pairs:", error);
+      
+      // Handle circuit breaker errors
+      if (error.message === 'Circuit breaker is open. Too many failed requests.') {
+        // Return a special error that the UI can handle
+        throw new Error("Service temporarily unavailable due to too many failed requests. Please try again later.");
+      }
+      
       throw error;
     }
   };
@@ -271,6 +325,13 @@ export const getDocumentPairs = async (comparisonId) => {
       return response.data;
     } catch (error) {
       console.error(`Error fetching comparison result for document pair ${pairIndex}:`, error);
+      
+      // Handle circuit breaker errors
+      if (error.message === 'Circuit breaker is open. Too many failed requests.') {
+        // Return a special error that the UI can handle
+        throw new Error("Service temporarily unavailable due to too many failed requests. Please try again later.");
+      }
+      
       throw error;
     }
   };
@@ -306,7 +367,7 @@ export const getDocumentPairs = async (comparisonId) => {
           params,
           // Add validateStatus to accept 404 responses
           validateStatus: function (status) {
-            return status === 200 || status === 404;
+            return status === 200 || status === 404 || status === 202;
           }
         }
       );
@@ -314,11 +375,31 @@ export const getDocumentPairs = async (comparisonId) => {
       // If we got a 404 response, return empty data with a message
       if (response.status === 404) {
         console.log("Endpoint returned 404, returning empty data structure with page not found message");
+        
+        // Check if the response contains information about the max page
+        let message = "Page not found in document pair";
+        let maxPage = null;
+        
+        if (response.data && response.data.error) {
+          message = response.data.error;
+          
+          if (response.data.maxPage) {
+            maxPage = response.data.maxPage;
+          }
+        }
+        
         return {
           baseDifferences: [],
           compareDifferences: [],
-          message: "Page not found in document pair"
+          message: message,
+          maxPage: maxPage
         };
+      }
+      
+      // If status is 202, the comparison is still processing
+      if (response.status === 202) {
+        console.log("Comparison still processing");
+        throw new Error("Comparison still processing");
       }
       
       // Add default empty arrays if missing
@@ -334,17 +415,53 @@ export const getDocumentPairs = async (comparisonId) => {
     } catch (error) {
       console.error(`Error fetching page details for page ${pageNumber} of document pair ${pairIndex}:`, error);
       
-      // If the original request fails with 404, return empty data with a message
-      if (error.response && error.response.status === 404) {
-        console.log("Endpoint returned 404, returning empty data structure with page not found message");
+      // Handle circuit breaker errors
+      if (error.message === 'Circuit breaker is open. Too many failed requests.') {
         return {
           baseDifferences: [],
           compareDifferences: [],
-          message: "Page not found in document pair"
+          message: "Service temporarily unavailable due to high load. Please try again later.",
+          error: error,
+          circuitBreakerOpen: true
         };
       }
       
-      throw error;
+      // If the original request fails with 404, return empty data with a message
+      if (error.response && error.response.status === 404) {
+        console.log("Endpoint returned 404, returning empty data structure with page not found message");
+        
+        // Check if the response contains information about the max page
+        let message = "Page not found in document pair";
+        let maxPage = null;
+        
+        if (error.response.data && error.response.data.error) {
+          message = error.response.data.error;
+          
+          if (error.response.data.maxPage) {
+            maxPage = error.response.data.maxPage;
+          }
+        }
+        
+        return {
+          baseDifferences: [],
+          compareDifferences: [],
+          message: message,
+          maxPage: maxPage
+        };
+      }
+      
+      // If the error is "Comparison still processing", rethrow it
+      if (error.message === "Comparison still processing") {
+        throw error;
+      }
+      
+      // For other errors, return a more descriptive error message
+      return {
+        baseDifferences: [],
+        compareDifferences: [],
+        message: `Error: ${error.message}`,
+        error: error
+      };
     }
   };
 

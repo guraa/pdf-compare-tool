@@ -13,15 +13,16 @@
     width: 100%;
   }
   
-  .comparison-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-m);
-    padding: var(--spacing-s) var(--spacing-m);
-    background-color: var(--surface-color);
-    border-bottom: 1px solid var(--border-color);
-    z-index: 10;
-  }
+.comparison-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-m);
+  padding: var(--spacing-s) var(--spacing-m);
+  background-color: var(--surface-color);
+  border-bottom: 1px solid var(--border-color);
+  z-index: 10;
+}
   
   .back-button {
     display: flex;
@@ -169,6 +170,53 @@
     background-color: var(--primary-light);
   }
   
+  /* Document navigation styles */
+  .document-navigation {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-m);
+  }
+  
+  .nav-button {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-s);
+    background-color: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-s);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  
+  .nav-button:hover:not(:disabled) {
+    background-color: var(--primary-light);
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+  }
+  
+  .nav-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .nav-button svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+  }
+  
+  .document-counter {
+    font-size: var(--font-size-s);
+    color: var(--text-secondary);
+    padding: var(--spacing-xs) var(--spacing-s);
+    background-color: var(--background-color);
+    border-radius: var(--border-radius-s);
+    min-width: 60px;
+    text-align: center;
+  }
+  
   /* Media queries for responsive design */
   @media (max-width: 768px) {
     .comparison-header {
@@ -179,5 +227,11 @@
     
     .document-info {
       width: 100%;
+    }
+    
+    .document-navigation {
+      width: 100%;
+      justify-content: space-between;
+      margin-top: var(--spacing-s);
     }
   }

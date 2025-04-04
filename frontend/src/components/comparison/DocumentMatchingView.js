@@ -38,6 +38,19 @@ const DocumentMatchingView = ({ comparisonId, onSelectDocumentPair }) => {
       } catch (err) {
         console.error('Error fetching document pairs:', err);
         
+        // Check if this is a circuit breaker error
+        if (err.message.includes("Service temporarily unavailable") || err.message.includes("Circuit breaker is open")) {
+          setError('Service temporarily unavailable due to high load. Please try again later.');
+          setLoading(false);
+          
+          // Set a longer retry delay for circuit breaker errors
+          setTimeout(() => {
+            setRetryCount(prev => prev + 1);
+          }, 60000); // 30 seconds
+          
+          return;
+        }
+        
         // Check if we need to retry (could be still processing)
         if ((err.message.includes("still processing") || err.response?.status === 202) && retryCount < maxRetries) {
           setLoading(false);
@@ -45,9 +58,26 @@ const DocumentMatchingView = ({ comparisonId, onSelectDocumentPair }) => {
           // Wait longer between retries as the count increases
           const delay = Math.min(2000 * Math.pow(1.5, retryCount), 15000);
           
+          console.log(`Retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+          
           setTimeout(() => {
             setRetryCount(prev => prev + 1);
           }, delay);
+        } else if (err.code === 'ERR_NETWORK' && retryCount < maxRetries) {
+          // Handle network errors specifically
+          setLoading(false);
+          
+          // Use a longer delay for network errors to give the server time to recover
+          const delay = Math.min(5000 * Math.pow(1.5, retryCount), 30000);
+          
+          console.log(`Network error. Retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+          
+          setTimeout(() => {
+            setRetryCount(prev => prev + 1);
+          }, delay);
+        } else if (retryCount >= maxRetries) {
+          setError('Failed to load document pairs after multiple attempts. Please try refreshing the page.');
+          setLoading(false);
         } else {
           setError('Failed to load document pairs. The document matching may have failed.');
           setLoading(false);

@@ -382,6 +382,16 @@ const ViewToolbar = ({
               <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-7-2h2V7h-4v2h2z" />
             </svg>
           </button>
+          
+          <button
+            className={`view-mode-button ${viewMode === 'enhanced' ? 'active' : ''}`}
+            onClick={() => toggleViewMode('enhanced')}
+            title="Enhanced difference view"
+          >
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 5v14h18V5H3zm16 12H5V7h14v10zm-7-8H7v2h5V9zm5 0h-3v2h3V9zm-5 4H7v2h5v-2zm5 0h-3v2h3v-2z" />
+            </svg>
+          </button>
         </div>
         
         <div className="zoom-controls">

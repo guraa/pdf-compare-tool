@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -57,6 +58,9 @@ public class PdfController {
             response.put("fileName", document.getFileName());
             response.put("pageCount", document.getPageCount());
             response.put("fileSize", document.getFileSize());
+            
+            // Add a flag to indicate if this was a reused document
+            response.put("reused", document.getUploadDate().isBefore(LocalDateTime.now().minusMinutes(1)));
 
             return ResponseEntity.ok().body(response);
         } catch (IOException e) {
@@ -195,7 +199,7 @@ public class PdfController {
                     return ResponseEntity.badRequest().body("{\"error\": \"Only PDF files are allowed\"}");
                 }
 
-                // Process the PDF
+                // Process the PDF - this will now check for existing documents with the same content hash
                 PdfDocument document = pdfService.processPdfFile(tempFile, fileName);
 
                 // Create response
@@ -204,6 +208,9 @@ public class PdfController {
                 response.put("fileName", document.getFileName());
                 response.put("pageCount", document.getPageCount());
                 response.put("fileSize", document.getFileSize());
+                
+                // Add a flag to indicate if this was a reused document
+                response.put("reused", document.getUploadDate().isBefore(LocalDateTime.now().minusMinutes(1)));
 
                 return ResponseEntity.ok().body(response);
 

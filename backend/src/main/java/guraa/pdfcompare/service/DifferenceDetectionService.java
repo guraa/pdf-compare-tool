@@ -208,8 +208,13 @@ public class DifferenceDetectionService {
             // Compare font size
             boolean fontSizeDifferent = Math.abs(baseElement.getFontSize() - compareElement.getFontSize()) > 0.1;
 
-            // Compare font name
-            boolean fontNameDifferent = !baseElement.getFontName().equals(compareElement.getFontName());
+            String baseFontName = baseElement.getFontName();
+            String compareFontName = compareElement.getFontName();
+
+            baseFontName = baseFontName.contains("+") ? baseFontName.substring(baseFontName.indexOf("+") + 1) : baseFontName;
+            compareFontName = compareFontName.contains("+") ? compareFontName.substring(compareFontName.indexOf("+") + 1) : compareFontName;
+
+            boolean fontNameDifferent = !baseFontName.equals(compareFontName);
 
             // Compare color
             boolean colorDifferent = !compareColors(baseElement.getColor(), compareElement.getColor());
@@ -665,12 +670,23 @@ public class DifferenceDetectionService {
             FontAnalyzer.FontInfo baseFont = match.getKey();
             FontAnalyzer.FontInfo compareFont = match.getValue();
 
-            // Check for differences
-            boolean nameDifferent = !baseFont.getFontName().equals(compareFont.getFontName());
-            boolean familyDifferent = !baseFont.getFontFamily().equals(compareFont.getFontFamily());
+            String baseFontName = baseFont.getFontName();
+            String compareFontName = compareFont.getFontName();
+            baseFontName = baseFontName.contains("+") ? baseFontName.substring(baseFontName.indexOf("+") + 1) : baseFontName;
+            compareFontName = compareFontName.contains("+") ? compareFontName.substring(compareFontName.indexOf("+") + 1) : compareFontName;
+
+            String baseFamily = baseFont.getFontFamily();
+            String compareFamily = compareFont.getFontFamily();
+            baseFamily = baseFamily.contains("+") ? baseFamily.substring(baseFamily.indexOf("+") + 1) : baseFamily;
+            compareFamily = compareFamily.contains("+") ? compareFamily.substring(compareFamily.indexOf("+") + 1) : compareFamily;
+
+// Comparisons
+            boolean nameDifferent = !baseFontName.equals(compareFontName);
+            boolean familyDifferent = !baseFamily.equals(compareFamily);
             boolean embeddingDifferent = baseFont.isEmbedded() != compareFont.isEmbedded();
             boolean boldDifferent = baseFont.isBold() != compareFont.isBold();
             boolean italicDifferent = baseFont.isItalic() != compareFont.isItalic();
+
 
             if (nameDifferent || familyDifferent || embeddingDifferent ||
                     boldDifferent || italicDifferent) {

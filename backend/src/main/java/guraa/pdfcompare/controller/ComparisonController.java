@@ -1,6 +1,5 @@
 package guraa.pdfcompare.controller;
 
-import guraa.pdfcompare.model.Comparison;
 import guraa.pdfcompare.model.ComparisonResult;
 import guraa.pdfcompare.model.DocumentPair;
 import guraa.pdfcompare.model.PageDetails;
@@ -11,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -205,6 +203,18 @@ public class ComparisonController {
             @RequestParam(required = false) String search) {
 
         try {
+            // Log the request for debugging
+            log.info("Filtering by types: {}", types);
+            
+            // Create a map for logging that handles null values
+            Map<String, Object> logFilters = new HashMap<>();
+            logFilters.put("types", types);
+            logFilters.put("severity", severity);
+            logFilters.put("search", search);
+            
+            log.info("Received request for page {} of document pair {} in comparison {} with filters: {}", 
+                pageNumber, pairIndex, comparisonId, logFilters);
+            
             // Create filter map from query parameters
             Map<String, Object> filters = new HashMap<>();
             if (types != null && !types.isEmpty()) {
@@ -215,6 +225,28 @@ public class ComparisonController {
             }
             if (search != null && !search.isEmpty()) {
                 filters.put("search", search);
+            }
+
+            // First check if the document pair exists and if the page is within bounds
+            List<DocumentPair> documentPairs = comparisonService.getDocumentPairs(comparisonId);
+            if (documentPairs == null || documentPairs.isEmpty() || pairIndex >= documentPairs.size()) {
+                log.warn("Document pair {} not found in comparison {}", pairIndex, comparisonId);
+                Map<String, Object> response = new HashMap<>();
+                response.put("error", "Document pair not found");
+                return ResponseEntity.status(404).body(response);
+            }
+            
+            DocumentPair pair = documentPairs.get(pairIndex);
+            int basePageCount = pair.getBaseEndPage() - pair.getBaseStartPage() + 1;
+            int comparePageCount = pair.getCompareEndPage() - pair.getCompareStartPage() + 1;
+            int maxPageCount = Math.max(basePageCount, comparePageCount);
+            
+            if (pageNumber > maxPageCount) {
+                log.warn("Page {} not found in document pair {} of comparison {}", pageNumber, pairIndex, comparisonId);
+                Map<String, Object> response = new HashMap<>();
+                response.put("error", "Page not found in document pair");
+                response.put("maxPage", maxPageCount);
+                return ResponseEntity.status(404).body(response);
             }
 
             PageDetails pageDetails = comparisonService.getDocumentPairPageDetails(
@@ -229,7 +261,11 @@ public class ComparisonController {
                     return ResponseEntity.accepted().body(response);
                 }
 
-                return ResponseEntity.notFound().build();
+                log.warn("Page details not found for page {} of document pair {} in comparison {}", 
+                    pageNumber, pairIndex, comparisonId);
+                Map<String, Object> response = new HashMap<>();
+                response.put("error", "Page details not found");
+                return ResponseEntity.status(404).body(response);
             }
 
             return ResponseEntity.ok(pageDetails);
@@ -295,42 +331,7 @@ public class ComparisonController {
         }
     }
 
-    /**
-     * Check if a comparison is ready (HEAD request).
-     * This endpoint is used for polling without fetching the full result.
-     *
-     * @param comparisonId The comparison ID
-     * @return 200 if completed, 202 if processing, 404 if not found
-     */
-    @RequestMapping(value = "/{comparisonId}", method = RequestMethod.HEAD)
-    public ResponseEntity<Void> checkComparisonStatus(@PathVariable String comparisonId) {
-        try {
-            // Check if the comparison exists
-            Comparison comparison = comparisonRepository.findByComparisonId(comparisonId)
-                    .orElse(null);
 
-            if (comparison == null) {
-                return ResponseEntity.notFound().build();
-            }
-
-            // If comparison is still in progress, return 202 Accepted
-            if (comparison.getStatus() != Comparison.ComparisonStatus.COMPLETED &&
-                    comparison.getStatus() != Comparison.ComparisonStatus.FAILED) {
-                return ResponseEntity.accepted().build();
-            }
-
-            // If failed, return 500 error
-            if (comparison.getStatus() == Comparison.ComparisonStatus.FAILED) {
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-            }
-
-            // If completed, return 200 OK
-            return ResponseEntity.ok().build();
-        } catch (Exception e) {
-            log.error("Error checking comparison status", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
 
     /**
      * Request object for report generation.

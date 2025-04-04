@@ -2,6 +2,7 @@ package guraa.pdfcompare.util;
 
 import guraa.pdfcompare.model.PdfDocument;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -24,6 +25,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @Component
@@ -33,12 +38,16 @@ public class PdfProcessor {
     private final TextExtractor textExtractor;
     private final ImageExtractor imageExtractor;
     private final FontAnalyzer fontAnalyzer;
+    
+    @Qualifier("pdfPageProcessingExecutor")
+    private final ExecutorService pdfPageProcessingExecutor;
 
     private static final int DEFAULT_DPI = 150;
     private static final int THUMBNAIL_DPI = 72;
 
     /**
      * Process a PDF file and extract its metadata and structure.
+     * This implementation uses parallel processing for page operations.
      *
      * @param uploadedFile The uploaded PDF file
      * @return PdfDocument object with extracted metadata
@@ -83,39 +92,103 @@ public class PdfProcessor {
             Path fontsDir = documentsDir.resolve("fonts");
             Files.createDirectories(fontsDir);
 
-            // Render each page as an image
-            PDFRenderer renderer = new PDFRenderer(document);
+            // Get page count
             int pageCount = document.getNumberOfPages();
-
-            // Process each page
+            
+            log.info("Processing PDF with {} pages using parallel execution", pageCount);
+            
+            // Create a PDFRenderer - PDFBox renderers are thread-safe as long as they're used with the same PDDocument instance
+            PDFRenderer renderer = new PDFRenderer(document);
+            
+            // Create a list to hold all the futures
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+            
+            // Process each page in parallel
             for (int i = 0; i < pageCount; i++) {
-                // Render the page to an image (full resolution)
-                BufferedImage image = renderer.renderImageWithDPI(i, DEFAULT_DPI, ImageType.RGB);
-
-                // Save the rendered page
-                File pageImageFile = pagesDir.resolve(String.format("page_%d.png", i + 1)).toFile();
-                ImageIOUtil.writeImage(image, pageImageFile.getAbsolutePath(), DEFAULT_DPI);
-
-                // Generate a thumbnail for quick preview
-                BufferedImage thumbnail = renderer.renderImageWithDPI(i, THUMBNAIL_DPI, ImageType.RGB);
-                File thumbnailFile = thumbnailsDir.resolve(String.format("page_%d_thumbnail.png", i + 1)).toFile();
-                ImageIOUtil.writeImage(thumbnail, thumbnailFile.getAbsolutePath(), THUMBNAIL_DPI);
-
-                // Extract text from the page
-                String pageText = textExtractor.extractTextFromPage(document, i);
-                File pageTextFile = textDir.resolve(String.format("page_%d.txt", i + 1)).toFile();
-                FileUtils.writeStringToFile(pageTextFile, pageText, "UTF-8");
-
-                // Extract detailed text elements with position information
-                List<TextElement> textElements = textExtractor.extractTextElementsFromPage(document, i);
-                File textElementsFile = textDir.resolve(String.format("page_%d_elements.json", i + 1)).toFile();
-                FileUtils.writeStringToFile(textElementsFile, convertElementsToJson(textElements), "UTF-8");
-
-                // Extract images from the page
-                imageExtractor.extractImagesFromPage(document, i, imagesDir);
-
-                // Extract fonts from the page
-                fontAnalyzer.analyzeFontsOnPage(document, i, fontsDir);
+                final int pageIndex = i;
+                
+                // Create a CompletableFuture for processing this page
+                CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                    try {
+                        processPage(
+                            document, 
+                            renderer, 
+                            pageIndex, 
+                            pagesDir, 
+                            thumbnailsDir, 
+                            textDir, 
+                            imagesDir, 
+                            fontsDir
+                        );
+                    } catch (IOException e) {
+                        log.error("Error processing page {}: {}", pageIndex + 1, e.getMessage());
+                        throw new RuntimeException(e);
+                    } catch (Exception e) {
+                        // Catch any other exceptions that might occur during page processing
+                        log.error("Unexpected error processing page {}: {}", pageIndex + 1, e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                }, pdfPageProcessingExecutor);
+                
+                futures.add(future);
+            }
+            
+            // Wait for all page processing to complete
+            try {
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            } catch (Exception e) {
+                log.error("Error during parallel PDF processing", e);
+                
+                // Check for known PDFBox errors
+                boolean isKnownPdfBoxError = false;
+                
+                // Check for recursion error
+                if (e.getCause() != null && 
+                    (e.getCause().getMessage() != null && e.getCause().getMessage().contains("Possible recursion found") ||
+                     e.getCause().getCause() != null && e.getCause().getCause().getMessage() != null && 
+                     e.getCause().getCause().getMessage().contains("Possible recursion found"))) {
+                    
+                    log.warn("Detected PDF with recursive structure. Using fallback processing method.");
+                    isKnownPdfBoxError = true;
+                }
+                
+                // Check for ArrayIndexOutOfBoundsException
+                if (!isKnownPdfBoxError && isArrayIndexOutOfBoundsException(e)) {
+                    log.warn("Detected PDF with problematic image data. Using fallback processing method.");
+                    isKnownPdfBoxError = true;
+                }
+                
+                // Handle any other PDFBox rendering errors
+                if (!isKnownPdfBoxError && isPdfBoxRenderingError(e)) {
+                    log.warn("Detected PDF with rendering issues. Using fallback processing method.");
+                    isKnownPdfBoxError = true;
+                }
+                
+                if (isKnownPdfBoxError) {
+                    
+                    // For problematic PDFs, we'll skip the detailed processing and just extract basic metadata
+                    // This allows the file to be stored and compared without trying to render problematic pages
+                    
+                    // Clean up any partially processed files
+                    try {
+                        FileUtils.deleteDirectory(pagesDir.toFile());
+                        FileUtils.deleteDirectory(thumbnailsDir.toFile());
+                        FileUtils.deleteDirectory(textDir.toFile());
+                        FileUtils.deleteDirectory(imagesDir.toFile());
+                        FileUtils.deleteDirectory(fontsDir.toFile());
+                        
+                        // Recreate empty directories
+                        Files.createDirectories(pagesDir);
+                        Files.createDirectories(thumbnailsDir);
+                        Files.createDirectories(textDir);
+                        Files.createDirectories(imagesDir);
+                        Files.createDirectories(fontsDir);
+                    } catch (IOException cleanupError) {
+                        log.error("Error cleaning up after processing failure", cleanupError);
+                    }
+                } else {
+                    throw new IOException("Failed to process PDF: " + e.getMessage(), e);
+                }
             }
 
             // Build and return the PdfDocument object
@@ -132,6 +205,62 @@ public class PdfProcessor {
                     .contentHash(contentHash)
                     .build();
         }
+    }
+    
+    /**
+     * Process a single page of a PDF document.
+     * This method is designed to be called in parallel for different pages.
+     *
+     * @param document The PDF document
+     * @param renderer The PDF renderer
+     * @param pageIndex The page index (0-based)
+     * @param pagesDir Directory for rendered pages
+     * @param thumbnailsDir Directory for thumbnails
+     * @param textDir Directory for extracted text
+     * @param imagesDir Directory for extracted images
+     * @param fontsDir Directory for font information
+     * @throws IOException If there's an error processing the page
+     */
+    private void processPage(
+            PDDocument document,
+            PDFRenderer renderer,
+            int pageIndex,
+            Path pagesDir,
+            Path thumbnailsDir,
+            Path textDir,
+            Path imagesDir,
+            Path fontsDir) throws IOException {
+        
+        int pageNumber = pageIndex + 1;
+        log.debug("Processing page {} in thread {}", pageNumber, Thread.currentThread().getName());
+        
+        // Render the page to an image (full resolution)
+        BufferedImage image = renderer.renderImageWithDPI(pageIndex, DEFAULT_DPI, ImageType.RGB);
+
+        // Save the rendered page
+        File pageImageFile = pagesDir.resolve(String.format("page_%d.png", pageNumber)).toFile();
+        ImageIOUtil.writeImage(image, pageImageFile.getAbsolutePath(), DEFAULT_DPI);
+
+        // Generate a thumbnail for quick preview
+        BufferedImage thumbnail = renderer.renderImageWithDPI(pageIndex, THUMBNAIL_DPI, ImageType.RGB);
+        File thumbnailFile = thumbnailsDir.resolve(String.format("page_%d_thumbnail.png", pageNumber)).toFile();
+        ImageIOUtil.writeImage(thumbnail, thumbnailFile.getAbsolutePath(), THUMBNAIL_DPI);
+
+        // Extract text from the page
+        String pageText = textExtractor.extractTextFromPage(document, pageIndex);
+        File pageTextFile = textDir.resolve(String.format("page_%d.txt", pageNumber)).toFile();
+        FileUtils.writeStringToFile(pageTextFile, pageText, "UTF-8");
+
+        // Extract detailed text elements with position information
+        List<TextElement> textElements = textExtractor.extractTextElementsFromPage(document, pageIndex);
+        File textElementsFile = textDir.resolve(String.format("page_%d_elements.json", pageNumber)).toFile();
+        FileUtils.writeStringToFile(textElementsFile, convertElementsToJson(textElements), "UTF-8");
+
+        // Extract images from the page
+        imageExtractor.extractImagesFromPage(document, pageIndex, imagesDir);
+
+        // Extract fonts from the page
+        fontAnalyzer.analyzeFontsOnPage(document, pageIndex, fontsDir);
     }
 
     /**
@@ -298,5 +427,62 @@ public class PdfProcessor {
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")
                 .replace("\t", "\\t");
+    }
+    
+    /**
+     * Check if the exception is or contains an ArrayIndexOutOfBoundsException
+     * 
+     * @param e The exception to check
+     * @return true if the exception is or contains an ArrayIndexOutOfBoundsException
+     */
+    private boolean isArrayIndexOutOfBoundsException(Exception e) {
+        if (e instanceof ArrayIndexOutOfBoundsException) {
+            return true;
+        }
+        
+        // Check if the cause is an ArrayIndexOutOfBoundsException
+        Throwable cause = e.getCause();
+        while (cause != null) {
+            if (cause instanceof ArrayIndexOutOfBoundsException) {
+                return true;
+            }
+            
+            // Check if the message contains "ArrayIndexOutOfBoundsException"
+            if (cause.getMessage() != null && cause.getMessage().contains("ArrayIndexOutOfBoundsException")) {
+                return true;
+            }
+            
+            cause = cause.getCause();
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check if the exception is related to PDFBox rendering
+     * 
+     * @param e The exception to check
+     * @return true if the exception is related to PDFBox rendering
+     */
+    private boolean isPdfBoxRenderingError(Exception e) {
+        // Check if the exception or any of its causes is from PDFBox rendering
+        Throwable cause = e;
+        while (cause != null) {
+            // Check if the stack trace contains PDFBox rendering classes
+            StackTraceElement[] stackTrace = cause.getStackTrace();
+            for (StackTraceElement element : stackTrace) {
+                String className = element.getClassName();
+                if (className.startsWith("org.apache.pdfbox.rendering") || 
+                    className.startsWith("org.apache.pdfbox.pdmodel") ||
+                    className.startsWith("org.apache.pdfbox.contentstream") ||
+                    className.startsWith("org.apache.pdfbox.filter")) {
+                    return true;
+                }
+            }
+            
+            cause = cause.getCause();
+        }
+        
+        return false;
     }
 }

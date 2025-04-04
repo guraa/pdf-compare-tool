@@ -4,7 +4,7 @@ import { useComparison } from '../../context/ComparisonContext';
 import DocumentMatchingView from './DocumentMatchingView';
 import SideBySideView from './SideBySideView';
 import Spinner from '../common/Spinner';
-import { getDocumentPairResult } from '../../services/api';
+import { getDocumentPairResult, getDocumentPairs } from '../../services/api';
 import './SmartComparisonContainer.css';
 
 const SmartComparisonContainer = ({ comparisonId }) => {
@@ -13,7 +13,9 @@ const SmartComparisonContainer = ({ comparisonId }) => {
     setComparisonResult,
     setError,
     setLoading,
-    setSelectedPage
+    setSelectedPage,
+    setDocumentPairs,
+    setSelectedDocumentPairIndex
   } = useComparison();
   
   const [activeView, setActiveView] = useState('matching'); // 'matching' or 'comparison'
@@ -24,6 +26,82 @@ const SmartComparisonContainer = ({ comparisonId }) => {
   const [pairError, setPairError] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const [maxRetries] = useState(5);
+  const [documentPairs, setLocalDocumentPairs] = useState([]);
+  
+  // Fetch document pairs when component mounts
+  useEffect(() => {
+    const fetchDocumentPairs = async () => {
+      if (!comparisonId) return;
+      
+      try {
+        setLoading(true);
+        const pairs = await getDocumentPairs(comparisonId);
+        
+        if (pairs && pairs.length > 0) {
+          setLocalDocumentPairs(pairs);
+          setDocumentPairs(pairs); // Store in global state
+          setLoading(false);
+          
+          // Auto-select the first matched pair if available
+          const matchedPairIndex = pairs.findIndex(pair => pair.matched);
+          if (matchedPairIndex >= 0) {
+            setSelectedPairIndex(matchedPairIndex);
+            setSelectedDocumentPairIndex(matchedPairIndex);
+          } else {
+            setSelectedPairIndex(0);
+            setSelectedDocumentPairIndex(0);
+          }
+        } else {
+          throw new Error("No document pairs returned");
+        }
+      } catch (err) {
+        console.error('Error fetching document pairs:', err);
+        
+        // Check if this is a circuit breaker error
+        if (err.message.includes("Service temporarily unavailable") || err.message.includes("Circuit breaker is open")) {
+          setError('Service temporarily unavailable due to high load. Please try again later.');
+          setLoading(false);
+          
+          // Set a longer retry delay for circuit breaker errors
+          setTimeout(() => {
+            setRetryCount(prev => prev + 1);
+          }, 30000); // 30 seconds
+          
+          return;
+        }
+        
+        // Check if we need to retry (could be still processing)
+        if ((err.message.includes("still processing") || err.response?.status === 202) && retryCount < maxRetries) {
+          // Wait longer between retries as the count increases
+          const delay = Math.min(2000 * Math.pow(1.5, retryCount), 15000);
+          
+          console.log(`Retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+          
+          setTimeout(() => {
+            setRetryCount(prev => prev + 1);
+          }, delay);
+        } else if (err.code === 'ERR_NETWORK' && retryCount < maxRetries) {
+          // Handle network errors specifically
+          // Use a longer delay for network errors to give the server time to recover
+          const delay = Math.min(5000 * Math.pow(1.5, retryCount), 30000);
+          
+          console.log(`Network error. Retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+          
+          setTimeout(() => {
+            setRetryCount(prev => prev + 1);
+          }, delay);
+        } else if (retryCount >= maxRetries) {
+          setError('Failed to load document pairs after multiple attempts. Please try refreshing the page.');
+          setLoading(false);
+        } else {
+          setError('Failed to load document pairs. The document matching may have failed.');
+          setLoading(false);
+        }
+      }
+    };
+    
+    fetchDocumentPairs();
+  }, [comparisonId, setDocumentPairs, setLoading, setError, setSelectedDocumentPairIndex, retryCount, maxRetries]);
   
   // Handle selecting a document pair for comparison
   const handleSelectDocumentPair = async (pairIndex, pair) => {
@@ -106,6 +184,44 @@ const SmartComparisonContainer = ({ comparisonId }) => {
                   </div>
                 </>
               )}
+            </div>
+            
+            <div className="document-navigation">
+              <button 
+                className="nav-button prev"
+                onClick={() => {
+                  if (selectedPairIndex > 0) {
+                    const newIndex = selectedPairIndex - 1;
+                    handleSelectDocumentPair(newIndex, documentPairs[newIndex]);
+                  }
+                }}
+                disabled={selectedPairIndex <= 0}
+              >
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+                </svg>
+                Previous Document
+              </button>
+              
+              <div className="document-counter">
+                {selectedPairIndex + 1} / {documentPairs.length}
+              </div>
+              
+              <button 
+                className="nav-button next"
+                onClick={() => {
+                  if (selectedPairIndex < documentPairs.length - 1) {
+                    const newIndex = selectedPairIndex + 1;
+                    handleSelectDocumentPair(newIndex, documentPairs[newIndex]);
+                  }
+                }}
+                disabled={selectedPairIndex >= documentPairs.length - 1}
+              >
+                Next Document
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                </svg>
+              </button>
             </div>
           </div>
           

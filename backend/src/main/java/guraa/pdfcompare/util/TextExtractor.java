@@ -3,35 +3,24 @@ package guraa.pdfcompare.util;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.contentstream.PDFStreamEngine;
 import org.apache.pdfbox.contentstream.operator.DrawObject;
-import org.apache.pdfbox.contentstream.operator.Operator;
-import org.apache.pdfbox.contentstream.operator.state.*;
+import org.apache.pdfbox.contentstream.operator.state.Restore;
+import org.apache.pdfbox.contentstream.operator.state.Save;
+import org.apache.pdfbox.contentstream.operator.state.SetGraphicsStateParameters;
+import org.apache.pdfbox.contentstream.operator.state.SetMatrix;
 import org.apache.pdfbox.contentstream.operator.text.*;
-import org.apache.pdfbox.cos.COSBase;
-import org.apache.pdfbox.cos.COSString;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.PDResources;
-import org.apache.pdfbox.pdmodel.common.PDRectangle;
-import org.apache.pdfbox.pdmodel.font.PDFont;
-import org.apache.pdfbox.pdmodel.graphics.state.PDGraphicsState;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.text.PDFTextStripperByArea;
 import org.apache.pdfbox.text.TextPosition;
 import org.springframework.stereotype.Component;
 
-import java.awt.Rectangle;
-import java.awt.geom.AffineTransform;
+import java.awt.*;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
-/**
- * Utility for extracting text from PDF documents with detailed formatting and position information.
- */
 @Slf4j
 @Component
 public class TextExtractor extends PDFStreamEngine {
@@ -39,11 +28,7 @@ public class TextExtractor extends PDFStreamEngine {
     private final List<TextElement> textElements = new ArrayList<>();
     private int currentPageIndex;
 
-    /**
-     * Constructor to initialize text extraction operators.
-     */
     public TextExtractor() {
-        // Register operators for handling images
         addOperator(new BeginText());
         addOperator(new EndText());
         addOperator(new SetGraphicsStateParameters());
@@ -65,35 +50,18 @@ public class TextExtractor extends PDFStreamEngine {
         addOperator(new DrawObject());
     }
 
-    /**
-     * Extract text from a specific page in a PDF document.
-     *
-     * @param document The PDF document
-     * @param pageIndex The zero-based page index
-     * @return Extracted text content
-     * @throws IOException If there's an error extracting text
-     */
     public String extractTextFromPage(PDDocument document, int pageIndex) throws IOException {
         PDFTextStripper stripper = new PDFTextStripper();
         stripper.setSortByPosition(true);
-        stripper.setStartPage(pageIndex + 1); // PDFTextStripper uses 1-based page numbers
+        stripper.setStartPage(pageIndex + 1);
         stripper.setEndPage(pageIndex + 1);
         return stripper.getText(document);
     }
 
-    /**
-     * Extract text with detailed positioning information from a PDF page.
-     *
-     * @param document The PDF document
-     * @param pageIndex The zero-based page index
-     * @return List of text elements with position information
-     * @throws IOException If there's an error extracting text
-     */
     public List<TextElement> extractTextElementsFromPage(PDDocument document, int pageIndex) throws IOException {
         textElements.clear();
         currentPageIndex = pageIndex;
 
-        // Custom text stripper to extract detailed text position and font information
         PDFTextStripper stripper = new PDFTextStripper() {
             @Override
             protected void processTextPosition(TextPosition text) {
@@ -108,10 +76,8 @@ public class TextExtractor extends PDFStreamEngine {
                 element.setFontName(text.getFont().getName());
                 element.setPageIndex(currentPageIndex);
 
-                // Store rotation and transform
                 element.setRotation(text.getRotation());
 
-                // Store color information if available
                 if (getGraphicsState() != null && getGraphicsState().getNonStrokingColor() != null) {
                     float[] color = getGraphicsState().getNonStrokingColor().getComponents();
                     if (color != null && color.length >= 3) {
@@ -122,7 +88,6 @@ public class TextExtractor extends PDFStreamEngine {
                     }
                 }
 
-                // Store font properties
                 try {
                     if (text.getFont() != null) {
                         element.setIsBold(text.getFont().getName().toLowerCase().contains("bold"));
@@ -150,57 +115,72 @@ public class TextExtractor extends PDFStreamEngine {
         return new ArrayList<>(textElements);
     }
 
-    /**
-     * Group text elements into words and lines based on proximity.
-     */
     private void groupTextElements() {
         if (textElements.isEmpty()) {
             return;
         }
 
-        // Sort by Y position (line), then X position
-        textElements.sort((a, b) -> {
-            float yDiff = a.getY() - b.getY();
+        // Create a copy of the list to avoid concurrent modification
+        List<TextElement> elementsCopy = new ArrayList<>(textElements);
+
+        // Clear the original list
+        textElements.clear();
+
+        // Sort the copy
+        elementsCopy.sort((a, b) -> {
+            // Explicit null handling using Optional
+            Float yA = Optional.ofNullable(a.getY()).orElse(Float.MAX_VALUE);
+            Float yB = Optional.ofNullable(b.getY()).orElse(Float.MAX_VALUE);
+            Float xA = Optional.ofNullable(a.getX()).orElse(Float.MAX_VALUE);
+            Float xB = Optional.ofNullable(b.getX()).orElse(Float.MAX_VALUE);
+
+            float yDiff = yA - yB;
             if (Math.abs(yDiff) < 3.0f) { // Within same line tolerance
-                return Float.compare(a.getX(), b.getX());
+                // If Y is similar, sort by X
+                return Float.compare(xA, xB);
             }
-            return Float.compare(a.getY(), b.getY());
+            return Float.compare(yA, yB);
         });
 
-        // Assign line and word IDs
-        String currentLineId = UUID.randomUUID().toString();
-        String currentWordId = UUID.randomUUID().toString();
-        float lastY = textElements.get(0).getY();
-        float lastEndX = textElements.get(0).getX() + textElements.get(0).getWidth();
+        // Add sorted elements back to the original list
+        textElements.addAll(elementsCopy);
 
-        textElements.get(0).setLineId(currentLineId);
-        textElements.get(0).setWordId(currentWordId);
+        // Group elements that survived sorting
+        if (!textElements.isEmpty()) {
+            String currentLineId = UUID.randomUUID().toString();
+            String currentWordId = UUID.randomUUID().toString();
+            float lastY = textElements.get(0).getY();
+            float lastEndX = textElements.get(0).getX() + textElements.get(0).getWidth();
 
-        for (int i = 1; i < textElements.size(); i++) {
-            TextElement current = textElements.get(i);
-            float yDiff = Math.abs(current.getY() - lastY);
+            textElements.get(0).setLineId(currentLineId);
+            textElements.get(0).setWordId(currentWordId);
 
-            // Check if this is a new line
-            if (yDiff > 3.0f) {
-                currentLineId = UUID.randomUUID().toString();
-                currentWordId = UUID.randomUUID().toString();
-                lastEndX = current.getX() + current.getWidth();
+            for (int i = 1; i < textElements.size(); i++) {
+                TextElement current = textElements.get(i);
+
+                float yDiff = Math.abs(current.getY() - lastY);
+
+                // Check if this is a new line
+                if (yDiff > 3.0f) {
+                    currentLineId = UUID.randomUUID().toString();
+                    currentWordId = UUID.randomUUID().toString();
+                    lastEndX = current.getX() + current.getWidth();
+                }
+                // Check if this is a new word on the same line
+                else if (current.getX() - lastEndX > current.getWidth() * 0.3) {
+                    currentWordId = UUID.randomUUID().toString();
+                    lastEndX = current.getX() + current.getWidth();
+                } else {
+                    // Continue the current word
+                    lastEndX = Math.max(lastEndX, current.getX() + current.getWidth());
+                }
+
+                current.setLineId(currentLineId);
+                current.setWordId(currentWordId);
+                lastY = current.getY();
             }
-            // Check if this is a new word on the same line
-            else if (current.getX() - lastEndX > current.getWidth() * 0.3) {
-                currentWordId = UUID.randomUUID().toString();
-                lastEndX = current.getX() + current.getWidth();
-            } else {
-                // Continue the current word
-                lastEndX = Math.max(lastEndX, current.getX() + current.getWidth());
-            }
-
-            current.setLineId(currentLineId);
-            current.setWordId(currentWordId);
-            lastY = current.getY();
         }
     }
-
     /**
      * Extract text from specific regions on a PDF page.
      *

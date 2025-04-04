@@ -130,16 +130,31 @@
     flex: 1;
   }
   
-  .file-name {
-    font-weight: 500;
-    margin-bottom: var(--spacing-xs);
-    word-break: break-word;
-  }
-  
-  .file-size {
-    font-size: var(--font-size-s);
-    color: var(--text-secondary);
-  }
+.file-name {
+  font-weight: 500;
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.file-size {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.file-reused {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: #4caf50;
+}
+
+.file-reused svg {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  fill: #4caf50;
+}
   
   .remove-button {
     background: none;
