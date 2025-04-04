@@ -4,3 +4,15 @@ create table pdf_metadata (pdf_id bigint not null, value varchar(255), key varch
 2025-04-03 19:26:41 jdbc[3]: exception
 org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PDF_METADATA" not found; SQL statement:
 alter table pdf_metadata add constraint FK6fqoa9o81v9tfn2ut55kjog55 foreign key (pdf_id) references pdf_document [42102-214]
+2025-04-03 19:30:20 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "create table pdf_metadata (pdf_id bigint not null, [*]value varchar(255), key varchar(255) not null, primary key (pdf_id, key))"; expected "identifier"; SQL statement:
+create table pdf_metadata (pdf_id bigint not null, value varchar(255), key varchar(255) not null, primary key (pdf_id, key)) [42001-214]
+2025-04-03 19:30:20 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PDF_METADATA" not found; SQL statement:
+alter table pdf_metadata add constraint FK6fqoa9o81v9tfn2ut55kjog55 foreign key (pdf_id) references pdf_document [42102-214]
+2025-04-03 19:31:44 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "create table pdf_metadata (pdf_id bigint not null, [*]value varchar(255), key varchar(255) not null, primary key (pdf_id, key))"; expected "identifier"; SQL statement:
+create table pdf_metadata (pdf_id bigint not null, value varchar(255), key varchar(255) not null, primary key (pdf_id, key)) [42001-214]
+2025-04-03 19:31:44 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PDF_METADATA" not found; SQL statement:
+alter table pdf_metadata add constraint FK6fqoa9o81v9tfn2ut55kjog55 foreign key (pdf_id) references pdf_document [42102-214]

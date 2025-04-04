@@ -27,12 +27,13 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @Slf4j
 @Component
 public class ImageExtractor extends PDFStreamEngine {
 
-    private final List<ImageInfo> extractedImages = new ArrayList<>();
+    private final ThreadLocal<List<ImageInfo>> threadLocalImages = ThreadLocal.withInitial(CopyOnWriteArrayList::new);
 
     public ImageExtractor() {
         // Register operators for handling images
@@ -54,15 +55,23 @@ public class ImageExtractor extends PDFStreamEngine {
      * @throws IOException If there's an error extracting images
      */
     public List<ImageInfo> extractImagesFromPage(PDDocument document, int pageIndex, Path outputDir) throws IOException {
-        extractedImages.clear();
+        // Clear the thread local list
+        threadLocalImages.get().clear();
+
         PDPage page = document.getPage(pageIndex);
+
+        // Create output directory if it doesn't exist
+        File outDir = outputDir.toFile();
+        if (!outDir.exists()) {
+            outDir.mkdirs();
+        }
 
         // Process the page to extract images
         processPage(page);
 
         // Save extracted images to files
         List<ImageInfo> savedImages = new ArrayList<>();
-        for (ImageInfo imageInfo : extractedImages) {
+        for (ImageInfo imageInfo : threadLocalImages.get()) {
             try {
                 // Generate a unique name for the image file
                 String imageName = String.format("page_%d_image_%s.%s",
@@ -129,8 +138,8 @@ public class ImageExtractor extends PDFStreamEngine {
                 info.setHeight(image.getHeight());
                 info.setPosition(position);
 
-                // Add to our list of images
-                extractedImages.add(info);
+                // Add to our thread-local list of images
+                threadLocalImages.get().add(info);
             }
             // Handle forms which might contain images
             else if (xobject instanceof PDFormXObject) {

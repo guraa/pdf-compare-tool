@@ -114,8 +114,8 @@ public class SSIMCalculator {
     /**
      * Resize an image to specified dimensions.
      *
-     * @param image Original image
-     * @param width Target width
+     * @param image  Original image
+     * @param width  Target width
      * @param height Target height
      * @return Resized image
      */
@@ -132,10 +132,10 @@ public class SSIMCalculator {
      *
      * @param pixels1 Pixels from first image
      * @param pixels2 Pixels from second image
-     * @param startX X coordinate of window start
-     * @param startY Y coordinate of window start
-     * @param width Image width
-     * @param height Image height
+     * @param startX  X coordinate of window start
+     * @param startY  Y coordinate of window start
+     * @param width   Image width
+     * @param height  Image height
      * @return Array with [mean1, mean2, variance1, variance2, covariance]
      */
     private double[] calculateWindowStats(byte[] pixels1, byte[] pixels2,
@@ -177,7 +177,7 @@ public class SSIMCalculator {
         variance2 /= (WINDOW_SIZE * WINDOW_SIZE - 1);
         covariance /= (WINDOW_SIZE * WINDOW_SIZE - 1);
 
-        return new double[] { mean1, mean2, variance1, variance2, covariance };
+        return new double[]{mean1, mean2, variance1, variance2, covariance};
     }
 
     /**

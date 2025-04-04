@@ -14,6 +14,7 @@ import java.util.Map;
  * Entity representing a PDF comparison.
  */
 @Entity
+@Table(name = "comparison")
 @Data
 @Builder
 @NoArgsConstructor
@@ -24,6 +25,7 @@ public class Comparison {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(unique = true)
     private String comparisonId;
 
     @ManyToOne
@@ -40,23 +42,32 @@ public class Comparison {
     @Enumerated(EnumType.STRING)
     private ComparisonStatus status;
 
+    @Column(length = 2000)
     private String resultFilePath;
 
     @ElementCollection
     @MapKeyColumn(name = "option_key")
-    @Column(name = "option_value")
+    @Column(name = "option_value", length = 2000) // Increased column length
     @CollectionTable(name = "comparison_options", joinColumns = @JoinColumn(name = "comparison_id"))
     private Map<String, String> options = new HashMap<>();
 
     private boolean smartMatching;
+
+    @Column(length = 50)
     private String textComparisonMethod;
+
+    @Column(length = 50)
     private String differenceThreshold;
 
     // Errors or processing messages
+    @Column(length = 2000)
     private String statusMessage;
 
     // JSON result paths
+    @Column(length = 2000)
     private String fullResultPath;
+
+    @Column(length = 2000)
     private String summaryResultPath;
 
     /**
@@ -70,41 +81,5 @@ public class Comparison {
         COMPARING,
         COMPLETED,
         FAILED
-    }
-
-    /**
-     * Get the base document.
-     *
-     * @return The base document
-     */
-    public PdfDocument getBaseDocument() {
-        return baseDocument;
-    }
-
-    /**
-     * Set the base document.
-     *
-     * @param baseDocument The base document to set
-     */
-    public void setBaseDocument(PdfDocument baseDocument) {
-        this.baseDocument = baseDocument;
-    }
-
-    /**
-     * Get the comparison document.
-     *
-     * @return The comparison document
-     */
-    public PdfDocument getCompareDocument() {
-        return compareDocument;
-    }
-
-    /**
-     * Set the comparison document.
-     *
-     * @param compareDocument The comparison document to set
-     */
-    public void setCompareDocument(PdfDocument compareDocument) {
-        this.compareDocument = compareDocument;
     }
 }

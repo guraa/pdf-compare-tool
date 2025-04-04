@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -93,17 +94,146 @@ public class PageMatcher {
             int baseIndex = baseBoundary.getStartPage() + i;
             int compareIndex = compareBoundary.getStartPage() + i;
 
+            double similarity = calculatePageSimilarity(
+                    baseIndex, compareIndex, baseTexts, compareTexts,
+                    basePdf, comparePdf, baseRenderer, compareRenderer);
+
             DocumentPair.PageMapping mapping = DocumentPair.PageMapping.builder()
                     .basePageNumber(baseIndex + 1) // Convert to 1-based
                     .comparePageNumber(compareIndex + 1) // Convert to 1-based
-                    // Calculate page similarity
-                    .similarityScore(calculatePageSimilarity(
-                            baseIndex, compareIndex, baseTexts, compareTexts,
-                            basePdf, comparePdf, baseRenderer, compareRenderer))
+                    .similarityScore(similarity)
+                    .differenceCount(0) // Will be updated later during comparison
                     .build();
 
             pair.getPageMappings().add(mapping);
         }
+    }
+
+    /**
+     * Create optimal page mappings for documents with different page counts.
+     * Uses a similarity matrix and the Hungarian algorithm to find optimal matches.
+     */
+    private void createOptimalPageMappings(
+            DocumentPair pair,
+            DocumentBoundary baseBoundary,
+            DocumentBoundary compareBoundary,
+            List<String> baseTexts,
+            List<String> compareTexts,
+            PDDocument basePdf,
+            PDDocument comparePdf,
+            PDFRenderer baseRenderer,
+            PDFRenderer compareRenderer) throws IOException {
+
+        int basePageCount = baseBoundary.getEndPage() - baseBoundary.getStartPage() + 1;
+        int comparePageCount = compareBoundary.getEndPage() - compareBoundary.getStartPage() + 1;
+
+        // Calculate similarity matrix
+        double[][] similarityMatrix = new double[basePageCount][comparePageCount];
+
+        for (int i = 0; i < basePageCount; i++) {
+            int baseIndex = baseBoundary.getStartPage() + i;
+
+            for (int j = 0; j < comparePageCount; j++) {
+                int compareIndex = compareBoundary.getStartPage() + j;
+
+                similarityMatrix[i][j] = calculatePageSimilarity(
+                        baseIndex, compareIndex, baseTexts, compareTexts,
+                        basePdf, comparePdf, baseRenderer, compareRenderer);
+            }
+        }
+
+        // Apply the Hungarian algorithm to find optimal matches
+        // We'll use a greedy approach for simplicity; in a full implementation
+        // you would use a proper Hungarian algorithm implementation
+
+        // Create a copy of the similarity matrix to work with
+        double[][] workMatrix = new double[basePageCount][comparePageCount];
+        for (int i = 0; i < basePageCount; i++) {
+            System.arraycopy(similarityMatrix[i], 0, workMatrix[i], 0, comparePageCount);
+        }
+
+        // Initialize mappings list
+        List<DocumentPair.PageMapping> mappings = new ArrayList<>();
+
+        // Find the best matches, until all base pages are mapped or no more good matches exist
+        boolean[] mappedBasePages = new boolean[basePageCount];
+        boolean[] mappedComparePages = new boolean[comparePageCount];
+
+        int mappedPages = 0;
+        while (mappedPages < Math.min(basePageCount, comparePageCount)) {
+            // Find maximum similarity value in the matrix
+            double maxSim = -1;
+            int maxBaseIdx = -1;
+            int maxCompareIdx = -1;
+
+            for (int i = 0; i < basePageCount; i++) {
+                if (mappedBasePages[i]) continue;
+
+                for (int j = 0; j < comparePageCount; j++) {
+                    if (mappedComparePages[j]) continue;
+
+                    if (workMatrix[i][j] > maxSim) {
+                        maxSim = workMatrix[i][j];
+                        maxBaseIdx = i;
+                        maxCompareIdx = j;
+                    }
+                }
+            }
+
+            // No more good matches or all matches below threshold
+            if (maxSim < textSimilarityThreshold || maxBaseIdx == -1) {
+                break;
+            }
+
+            // Create a page mapping for the match
+            DocumentPair.PageMapping mapping = DocumentPair.PageMapping.builder()
+                    .basePageNumber(baseBoundary.getStartPage() + maxBaseIdx + 1) // Convert to 1-based
+                    .comparePageNumber(compareBoundary.getStartPage() + maxCompareIdx + 1) // Convert to 1-based
+                    .similarityScore(maxSim)
+                    .differenceCount(0) // Will be updated later during comparison
+                    .build();
+
+            mappings.add(mapping);
+
+            // Mark these pages as mapped
+            mappedBasePages[maxBaseIdx] = true;
+            mappedComparePages[maxCompareIdx] = true;
+            mappedPages++;
+
+            // Set the similarity to -1 to exclude this cell
+            workMatrix[maxBaseIdx][maxCompareIdx] = -1;
+        }
+
+        // Add unmapped base pages
+        for (int i = 0; i < basePageCount; i++) {
+            if (!mappedBasePages[i]) {
+                DocumentPair.PageMapping mapping = DocumentPair.PageMapping.builder()
+                        .basePageNumber(baseBoundary.getStartPage() + i + 1) // Convert to 1-based
+                        .comparePageNumber(-1) // No match in compare document
+                        .similarityScore(0.0)
+                        .differenceCount(0)
+                        .build();
+
+                mappings.add(mapping);
+            }
+        }
+
+        // Add unmapped compare pages
+        for (int j = 0; j < comparePageCount; j++) {
+            if (!mappedComparePages[j]) {
+                DocumentPair.PageMapping mapping = DocumentPair.PageMapping.builder()
+                        .basePageNumber(-1) // No match in base document
+                        .comparePageNumber(compareBoundary.getStartPage() + j + 1) // Convert to 1-based
+                        .similarityScore(0.0)
+                        .differenceCount(0)
+                        .build();
+
+                mappings.add(mapping);
+            }
+        }
+
+        // Set the mappings on the document pair
+        pair.setPageMappings(mappings);
     }
 
     /**
@@ -161,104 +291,5 @@ public class PageMatcher {
 
         // Combined similarity score (60% text, 40% visual)
         return 0.6 * textSimilarity + 0.4 * visualSimilarity;
-    }
-
-    /**
-     * Create optimal page mappings between documents with different page counts.
-     *
-     * @param pair            Document pair to update with mappings
-     * @param baseBoundary    Document boundary in base PDF
-     * @param compareBoundary Document boundary in comparison PDF
-     * @param baseTexts       List of page texts in base PDF
-     * @param compareTexts    List of page texts in comparison PDF
-     * @param basePdf         Base PDF document
-     * @param comparePdf      Comparison PDF document
-     * @param baseRenderer    Renderer for base PDF
-     * @param compareRenderer Renderer for comparison PDF
-     * @throws IOException If there's an error processing the documents
-     */
-    private void createOptimalPageMappings(
-            DocumentPair pair,
-            DocumentBoundary baseBoundary,
-            DocumentBoundary compareBoundary,
-            List<String> baseTexts,
-            List<String> compareTexts,
-            PDDocument basePdf,
-            PDDocument comparePdf,
-            PDFRenderer baseRenderer,
-            PDFRenderer compareRenderer) throws IOException {
-
-        int basePageCount = baseBoundary.getEndPage() - baseBoundary.getStartPage() + 1;
-        int comparePageCount = compareBoundary.getEndPage() - compareBoundary.getStartPage() + 1;
-
-        // Calculate similarity matrix
-        double[][] similarityMatrix = new double[basePageCount][comparePageCount];
-
-        for (int i = 0; i < basePageCount; i++) {
-            int baseIndex = baseBoundary.getStartPage() + i;
-
-            for (int j = 0; j < comparePageCount; j++) {
-                int compareIndex = compareBoundary.getStartPage() + j;
-
-                similarityMatrix[i][j] = calculatePageSimilarity(
-                        baseIndex, compareIndex, baseTexts, compareTexts,
-                        basePdf, comparePdf, baseRenderer, compareRenderer);
-            }
-        }
-
-        // Find optimal page mappings using greedy approach
-        // For each base page, find the best matching compare page that hasn't been matched yet
-        boolean[] matchedComparePages = new boolean[comparePageCount];
-
-        for (int i = 0; i < basePageCount; i++) {
-            double maxSimilarity = 0.0;
-            int bestMatch = -1;
-
-            // Find best unmatched compare page for this base page
-            for (int j = 0; j < comparePageCount; j++) {
-                if (!matchedComparePages[j] && similarityMatrix[i][j] > maxSimilarity) {
-                    maxSimilarity = similarityMatrix[i][j];
-                    bestMatch = j;
-                }
-            }
-
-            // If we found a good match
-            if (bestMatch >= 0 && maxSimilarity > textSimilarityThreshold) {
-                // Create mapping
-                DocumentPair.PageMapping mapping = DocumentPair.PageMapping.builder()
-                        .basePageNumber(baseBoundary.getStartPage() + i + 1) // Convert to 1-based
-                        .comparePageNumber(compareBoundary.getStartPage() + bestMatch + 1) // Convert to 1-based
-                        .similarityScore(maxSimilarity)
-                        .build();
-
-                pair.getPageMappings().add(mapping);
-
-                // Mark this compare page as matched
-                matchedComparePages[bestMatch] = true;
-            } else {
-                // No good match found for this base page
-                DocumentPair.PageMapping mapping = DocumentPair.PageMapping.builder()
-                        .basePageNumber(baseBoundary.getStartPage() + i + 1) // Convert to 1-based
-                        .comparePageNumber(-1) // No match
-                        .similarityScore(0.0)
-                        .build();
-
-                pair.getPageMappings().add(mapping);
-            }
-        }
-
-        // Find any unmatched compare pages
-        for (int j = 0; j < comparePageCount; j++) {
-            if (!matchedComparePages[j]) {
-                // Create mapping for unmatched compare page
-                DocumentPair.PageMapping mapping = DocumentPair.PageMapping.builder()
-                        .basePageNumber(-1) // No match
-                        .comparePageNumber(compareBoundary.getStartPage() + j + 1) // Convert to 1-based
-                        .similarityScore(0.0)
-                        .build();
-
-                pair.getPageMappings().add(mapping);
-            }
-        }
     }
 }

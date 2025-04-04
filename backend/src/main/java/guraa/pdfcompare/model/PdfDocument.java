@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Entity
+@Table(name = "pdf_document")
 @Data
 @Builder
 @NoArgsConstructor
@@ -28,9 +29,9 @@ public class PdfDocument {
     private Integer pageCount;
 
     @ElementCollection(fetch = FetchType.EAGER)
-    @MapKeyColumn(name = "key")
-    @Column(name = "value")
-    @CollectionTable(name = "pdf_metadata", joinColumns = @JoinColumn(name = "pdf_id"))
+    @MapKeyColumn(name = "metadata_key")
+    @Column(name = "metadata_value", length = 2000) // Increase column length to support longer values
+    @CollectionTable(name = "document_metadata", joinColumns = @JoinColumn(name = "document_id"))
     private Map<String, String> metadata = new HashMap<>();
 
     private LocalDateTime uploadDate;

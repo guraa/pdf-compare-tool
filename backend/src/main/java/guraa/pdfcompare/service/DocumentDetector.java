@@ -1,13 +1,11 @@
 package guraa.pdfcompare.service;
 
-import guraa.pdfcompare.util.TextExtractor;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -16,10 +14,18 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class DocumentDetector {
 
     private final int minPagesPerDocument;
+
+    /**
+     * Constructor for document detector.
+     *
+     * @param minPagesPerDocument Minimum pages required for a document section
+     */
+    public DocumentDetector(@Value("${app.comparison.min-pages-per-document:1}") int minPagesPerDocument) {
+        this.minPagesPerDocument = minPagesPerDocument;
+    }
 
     /**
      * Identify document boundaries within a PDF based on page texts.
@@ -83,13 +89,19 @@ public class DocumentDetector {
         // First page is always a start page
         startPages.add(0);
 
+        // Define patterns for document start detection
+        Pattern titlePattern = Pattern.compile("(?i)\\b(report|document|presentation|analysis|proposal|plan|agreement|contract)\\b");
+        Pattern tocPattern = Pattern.compile("(?i)\\b(table\\s+of\\s+contents|contents|index)\\b");
+        Pattern headerPattern = Pattern.compile("(?m)^\\s*\\d+(\\.\\d+)*\\s+[A-Z]");
+        Pattern pageNumberPattern = Pattern.compile("(?m)^\\s*Page\\s+\\d+\\s+of\\s+\\d+\\s*$");
+
         // Analyze each page for document start characteristics
         for (int i = 1; i < pageTexts.size(); i++) {
             String currentText = pageTexts.get(i);
             String prevText = pageTexts.get(i - 1);
 
             // Check if this page likely starts a new document
-            if (isNewDocumentStart(currentText, prevText, pageTexts, i)) {
+            if (isNewDocumentStart(currentText, prevText, pageTexts, i, titlePattern, tocPattern, headerPattern, pageNumberPattern)) {
                 startPages.add(i);
             }
         }
@@ -101,26 +113,51 @@ public class DocumentDetector {
      * Check if a page is likely the start of a new document.
      *
      * @param currentText Current page text
-     * @param prevText    Previous page text
-     * @param allTexts    All page texts
-     * @param pageIndex   Current page index
+     * @param prevText Previous page text
+     * @param allTexts All page texts
+     * @param pageIndex Current page index
+     * @param titlePattern Pattern for titles
+     * @param tocPattern Pattern for table of contents
+     * @param headerPattern Pattern for headers
+     * @param pageNumberPattern Pattern for page numbers
      * @return True if the page is likely the start of a new document
      */
-    private boolean isNewDocumentStart(String currentText, String prevText,
-                                       List<String> allTexts, int pageIndex) {
-        // Check for common document starting patterns
-        if (hasDocumentTitlePattern(currentText) ||
-                hasTableOfContentsPattern(currentText) ||
-                isTitlePage(currentText)) {
+    private boolean isNewDocumentStart(
+            String currentText,
+            String prevText,
+            List<String> allTexts,
+            int pageIndex,
+            Pattern titlePattern,
+            Pattern tocPattern,
+            Pattern headerPattern,
+            Pattern pageNumberPattern) {
+
+        // Check for explicit indicators of a new document
+        boolean hasTitleIndicator = titlePattern.matcher(currentText).find() &&
+                currentText.length() < 3000 && // Title pages tend to be short
+                (pageIndex < 2 || !titlePattern.matcher(prevText).find());
+
+        boolean hasTocIndicator = tocPattern.matcher(currentText).find() &&
+                !tocPattern.matcher(prevText).find();
+
+        boolean hasResetHeadings = headerPattern.matcher(currentText).find() &&
+                currentText.contains("1. ") &&
+                !prevText.contains("1. ");
+
+        boolean hasResetPageNumbers = pageNumberPattern.matcher(currentText).find() &&
+                currentText.contains("Page 1 of");
+
+        // If any explicit indicator is found
+        if (hasTitleIndicator || hasTocIndicator || hasResetHeadings || hasResetPageNumbers) {
             return true;
         }
 
-        // Calculate similarity between current and previous page
+        // Calculate text similarity
         double textSimilarity = TextSimilarityUtils.calculateTextSimilarity(currentText, prevText);
 
-        // If similarity is very low, it might be a new document
+        // If very low similarity to previous page
         if (textSimilarity < 0.2) {
-            // Cross-check with a few pages ahead to confirm this isn't just an anomaly
+            // Cross-check with next few pages to confirm this isn't just an anomaly
             int pagesAhead = Math.min(3, allTexts.size() - pageIndex - 1);
             if (pagesAhead > 0) {
                 double avgSimilarityAhead = 0;
@@ -130,87 +167,11 @@ public class DocumentDetector {
                 }
                 avgSimilarityAhead /= pagesAhead;
 
-                // If current page is more similar to upcoming pages than previous page,
+                // If current page is more similar to upcoming pages than to previous page,
                 // it's likely a new document
                 return avgSimilarityAhead > textSimilarity * 1.5;
             }
             return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if text contains patterns typical of a document title page.
-     */
-    private boolean hasDocumentTitlePattern(String text) {
-        // Look for patterns that indicate a title page, like centered text,
-        // followed by author, date, etc.
-        Pattern titlePattern = Pattern.compile(
-                "(?i)\\b(report|document|presentation|analysis|proposal|plan|agreement|contract)\\b");
-        Matcher matcher = titlePattern.matcher(text);
-
-        // Count the number of matches
-        int matchCount = 0;
-        while (matcher.find()) {
-            matchCount++;
-        }
-
-        // If multiple matches and text is relatively short, likely a title page
-        return matchCount >= 2 && text.length() < 2000;
-    }
-
-    /**
-     * Check if text resembles a table of contents.
-     */
-    private boolean hasTableOfContentsPattern(String text) {
-        // Look for "Contents", "Table of Contents", or similar headers
-        if (text.toLowerCase().contains("table of contents") ||
-                text.toLowerCase().contains("contents") ||
-                text.toLowerCase().contains("index")) {
-
-            // Also check for patterns of numbers and dots (e.g., "1. Introduction...... 5")
-            Pattern tocEntryPattern = Pattern.compile("\\d+\\..*?\\d+");
-            Matcher matcher = tocEntryPattern.matcher(text);
-
-            // If we find at least 3 TOC-like entries, it's probably a TOC
-            int matchCount = 0;
-            while (matcher.find() && matchCount < 3) {
-                matchCount++;
-            }
-
-            return matchCount >= 3;
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if a page appears to be a title page.
-     */
-    private boolean isTitlePage(String text) {
-        // Title pages typically have short text
-        if (text.length() < 1000) {
-            // Check for common title page elements
-            boolean hasTitle = false;
-            boolean hasAuthor = false;
-            boolean hasDate = false;
-
-            // Check for title-like pattern (all caps or followed by author)
-            Pattern titlePattern = Pattern.compile("([A-Z][A-Z\\s]{10,})|([A-Z][a-zA-Z\\s]{10,})\\s*(?:by|[Aa]uthor)");
-            hasTitle = titlePattern.matcher(text).find();
-
-            // Check for author-like pattern
-            Pattern authorPattern = Pattern.compile("(?i)\\b(?:by|author|prepared by)\\s+[A-Z][a-zA-Z\\s\\.]+\\b");
-            hasAuthor = authorPattern.matcher(text).find();
-
-            // Check for date-like pattern
-            Pattern datePattern = Pattern.compile("\\b\\d{1,2}[\\/\\-]\\d{1,2}[\\/\\-]\\d{2,4}\\b|" +
-                    "\\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2},?\\s+\\d{4}\\b");
-            hasDate = datePattern.matcher(text).find();
-
-            // If we have at least two of these elements, likely a title page
-            return (hasTitle && hasAuthor) || (hasTitle && hasDate) || (hasAuthor && hasDate);
         }
 
         return false;

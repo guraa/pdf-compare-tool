@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>PDF Comparison Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+        }
+        .summary {
+            background-color: #f4f4f4;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .differences {
+            margin-top: 20px;
+        }
+        .difference-item {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+<h1>PDF Comparison Report</h1>
+
+<div class="summary">
+    <h2>Comparison Summary</h2>
+    <p>Generated on: <span th:text="${now}"></span></p>
+    <p>Base Document: <span th:text="${result.baseFileName}"></span></p>
+    <p>Comparison Document: <span th:text="${result.compareFileName}"></span></p>
+    <p>Total Differences: <span th:text="${result.totalDifferences}"></span></p>
+</div>
+
+<div class="differences">
+    <h2>Detailed Differences</h2>
+
+    <!-- Metadata Differences -->
+    <div th:if="${not #maps.isEmpty(result.metadataDifferences)}">
+        <h3>Metadata Differences</h3>
+        <div th:each="diff : ${result.metadataDifferences.values()}" class="difference-item">
+            <p><strong>Key:</strong> <span th:text="${diff.key}"></span></p>
+            <p><strong>Base Value:</strong> <span th:text="${diff.baseValue}"></span></p>
+            <p><strong>Comparison Value:</strong> <span th:text="${diff.compareValue}"></span></p>
+        </div>
+    </div>
+
+    <!-- Page Differences (for standard mode) -->
+    <div th:if="${result.mode == 'standard' and result.pageDifferences != null}">
+        <h3>Page Differences</h3>
+        <div th:each="pageDiff : ${result.pageDifferences}" class="difference-item">
+            <h4>Page <span th:text="${pageDiff.pageNumber}"></span></h4>
+            <div th:if="${pageDiff.onlyInBase}">Page exists only in base document</div>
+            <div th:if="${pageDiff.onlyInCompare}">Page exists only in comparison document</div>
+
+            <!-- Text Differences -->
+            <div th:if="${pageDiff.textDifferences != null}">
+                <h5>Text Differences</h5>
+                <div th:each="textDiff : ${pageDiff.textDifferences.differences}">
+                    <p th:text="${textDiff.description}"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
