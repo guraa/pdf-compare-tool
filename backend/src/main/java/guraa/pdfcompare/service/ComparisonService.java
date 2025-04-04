@@ -900,6 +900,57 @@ public class ComparisonService {
     }
 
     /**
+     * Check if a comparison is completed.
+     *
+     * @param comparisonId The comparison ID
+     * @return True if the comparison is completed
+     */
+    public boolean isComparisonCompleted(String comparisonId) {
+        Comparison comparison = comparisonRepository.findByComparisonId(comparisonId)
+                .orElse(null);
+
+        if (comparison == null) {
+            return false;
+        }
+
+        return comparison.getStatus() == Comparison.ComparisonStatus.COMPLETED;
+    }
+
+    /**
+     * Check if a comparison has failed.
+     *
+     * @param comparisonId The comparison ID
+     * @return True if the comparison has failed
+     */
+    public boolean isComparisonFailed(String comparisonId) {
+        Comparison comparison = comparisonRepository.findByComparisonId(comparisonId)
+                .orElse(null);
+
+        if (comparison == null) {
+            return false;
+        }
+
+        return comparison.getStatus() == Comparison.ComparisonStatus.FAILED;
+    }
+
+    /**
+     * Get the status message for a comparison.
+     *
+     * @param comparisonId The comparison ID
+     * @return The status message, or null if not found
+     */
+    public String getComparisonStatusMessage(String comparisonId) {
+        Comparison comparison = comparisonRepository.findByComparisonId(comparisonId)
+                .orElse(null);
+
+        if (comparison == null) {
+            return null;
+        }
+
+        return comparison.getStatusMessage();
+    }
+
+    /**
      * Check if a comparison is still in progress.
      *
      * @param comparisonId The comparison ID

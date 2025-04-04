@@ -30,7 +30,7 @@ public class PdfDocument {
 
     @ElementCollection(fetch = FetchType.EAGER)
     @MapKeyColumn(name = "metadata_key")
-    @Column(name = "metadata_value", length = 2000) // Increase column length to support longer values
+    @Column(name = "metadata_value", length = 4000) // Increased column length to accommodate longer values
     @CollectionTable(name = "document_metadata", joinColumns = @JoinColumn(name = "document_id"))
     private Map<String, String> metadata = new HashMap<>();
 

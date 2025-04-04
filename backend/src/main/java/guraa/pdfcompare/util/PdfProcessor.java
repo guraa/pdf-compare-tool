@@ -21,6 +21,7 @@ import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -34,6 +35,7 @@ public class PdfProcessor {
     private final FontAnalyzer fontAnalyzer;
 
     private static final int DEFAULT_DPI = 150;
+    private static final int THUMBNAIL_DPI = 72;
 
     /**
      * Process a PDF file and extract its metadata and structure.
@@ -65,6 +67,10 @@ public class PdfProcessor {
             Path pagesDir = documentsDir.resolve("pages");
             Files.createDirectories(pagesDir);
 
+            // Create directory for rendered page thumbnails
+            Path thumbnailsDir = documentsDir.resolve("thumbnails");
+            Files.createDirectories(thumbnailsDir);
+
             // Create directory for extracted text
             Path textDir = documentsDir.resolve("text");
             Files.createDirectories(textDir);
@@ -83,17 +89,27 @@ public class PdfProcessor {
 
             // Process each page
             for (int i = 0; i < pageCount; i++) {
-                // Render the page to an image
+                // Render the page to an image (full resolution)
                 BufferedImage image = renderer.renderImageWithDPI(i, DEFAULT_DPI, ImageType.RGB);
 
                 // Save the rendered page
                 File pageImageFile = pagesDir.resolve(String.format("page_%d.png", i + 1)).toFile();
                 ImageIOUtil.writeImage(image, pageImageFile.getAbsolutePath(), DEFAULT_DPI);
 
+                // Generate a thumbnail for quick preview
+                BufferedImage thumbnail = renderer.renderImageWithDPI(i, THUMBNAIL_DPI, ImageType.RGB);
+                File thumbnailFile = thumbnailsDir.resolve(String.format("page_%d_thumbnail.png", i + 1)).toFile();
+                ImageIOUtil.writeImage(thumbnail, thumbnailFile.getAbsolutePath(), THUMBNAIL_DPI);
+
                 // Extract text from the page
                 String pageText = textExtractor.extractTextFromPage(document, i);
                 File pageTextFile = textDir.resolve(String.format("page_%d.txt", i + 1)).toFile();
                 FileUtils.writeStringToFile(pageTextFile, pageText, "UTF-8");
+
+                // Extract detailed text elements with position information
+                List<TextElement> textElements = textExtractor.extractTextElementsFromPage(document, i);
+                File textElementsFile = textDir.resolve(String.format("page_%d_elements.json", i + 1)).toFile();
+                FileUtils.writeStringToFile(textElementsFile, convertElementsToJson(textElements), "UTF-8");
 
                 // Extract images from the page
                 imageExtractor.extractImagesFromPage(document, i, imagesDir);
@@ -124,6 +140,8 @@ public class PdfProcessor {
      * @param document The PDF document
      * @return Map of metadata key-value pairs
      */
+    // Within the PdfProcessor class, update the extractMetadata method to handle dates properly:
+
     private Map<String, String> extractMetadata(PDDocument document) {
         Map<String, String> metadata = new HashMap<>();
         PDDocumentInformation info = document.getDocumentInformation();
@@ -134,10 +152,49 @@ public class PdfProcessor {
         if (info.getKeywords() != null) metadata.put("keywords", info.getKeywords());
         if (info.getCreator() != null) metadata.put("creator", info.getCreator());
         if (info.getProducer() != null) metadata.put("producer", info.getProducer());
-        if (info.getCreationDate() != null) metadata.put("creationDate", info.getCreationDate().toString());
-        if (info.getModificationDate() != null) metadata.put("modificationDate", info.getModificationDate().toString());
+
+        // Format dates as ISO strings to prevent Calendar object serialization issues
+        if (info.getCreationDate() != null) {
+            try {
+                metadata.put("creationDate", info.getCreationDate().getTime().toString());
+            } catch (Exception e) {
+                log.warn("Could not format creation date", e);
+            }
+        }
+
+        if (info.getModificationDate() != null) {
+            try {
+                metadata.put("modificationDate", info.getModificationDate().getTime().toString());
+            } catch (Exception e) {
+                log.warn("Could not format modification date", e);
+            }
+        }
+
+        // Extract custom metadata with length validation
+        for (String key : info.getMetadataKeys()) {
+            if (!metadata.containsKey(key) && info.getCustomMetadataValue(key) != null) {
+                String value = info.getCustomMetadataValue(key);
+                // Truncate if too long for the database
+                if (value.length() > 3900) {
+                    value = value.substring(0, 3900) + "...";
+                }
+                metadata.put(key, value);
+            }
+        }
 
         return metadata;
+    }
+
+    /**
+     * Truncate metadata value to prevent database column overflow.
+     *
+     * @param value The metadata value
+     * @return Truncated value
+     */
+    private String truncateMetadata(String value) {
+        if (value == null) return null;
+        // Limit to 3900 characters to be safe (column is 4000)
+        return value.length() > 3900 ? value.substring(0, 3900) + "..." : value;
     }
 
     /**
@@ -179,5 +236,67 @@ public class PdfProcessor {
         Path pageImagePath = Paths.get("uploads", "documents", pdfDocument.getFileId(),
                 "pages", String.format("page_%d.png", pageNumber));
         return pageImagePath.toFile();
+    }
+
+    /**
+     * Get a rendered page thumbnail for a PDF document.
+     *
+     * @param pdfDocument The PDF document
+     * @param pageNumber The page number (1-based index)
+     * @return File reference to the rendered page thumbnail
+     */
+    public File getPageThumbnail(PdfDocument pdfDocument, int pageNumber) {
+        Path thumbnailPath = Paths.get("uploads", "documents", pdfDocument.getFileId(),
+                "thumbnails", String.format("page_%d_thumbnail.png", pageNumber));
+        return thumbnailPath.toFile();
+    }
+
+    /**
+     * Convert TextElement list to JSON string.
+     *
+     * @param elements List of text elements
+     * @return JSON string representation
+     */
+    private String convertElementsToJson(List<TextElement> elements) {
+        StringBuilder json = new StringBuilder("[\n");
+        for (int i = 0; i < elements.size(); i++) {
+            TextElement element = elements.get(i);
+            json.append("  {\n");
+            json.append("    \"id\": \"").append(element.getId()).append("\",\n");
+            json.append("    \"text\": \"").append(escapeJson(element.getText())).append("\",\n");
+            json.append("    \"x\": ").append(element.getX()).append(",\n");
+            json.append("    \"y\": ").append(element.getY()).append(",\n");
+            json.append("    \"width\": ").append(element.getWidth()).append(",\n");
+            json.append("    \"height\": ").append(element.getHeight()).append(",\n");
+            json.append("    \"fontSize\": ").append(element.getFontSize()).append(",\n");
+            json.append("    \"fontName\": \"").append(escapeJson(element.getFontName())).append("\",\n");
+            if (element.getColor() != null) {
+                json.append("    \"color\": \"").append(escapeJson(element.getColor())).append("\",\n");
+            }
+            json.append("    \"rotation\": ").append(element.getRotation()).append(",\n");
+            json.append("    \"isBold\": ").append(element.isBold()).append(",\n");
+            json.append("    \"isItalic\": ").append(element.isItalic()).append(",\n");
+            json.append("    \"isEmbedded\": ").append(element.isEmbedded()).append(",\n");
+            json.append("    \"lineId\": \"").append(element.getLineId()).append("\",\n");
+            json.append("    \"wordId\": \"").append(element.getWordId()).append("\"\n");
+            json.append("  }").append(i < elements.size() - 1 ? ",\n" : "\n");
+        }
+        json.append("]");
+        return json.toString();
+    }
+
+    /**
+     * Escape special characters in JSON strings.
+     *
+     * @param str The string to escape
+     * @return Escaped string
+     */
+    private String escapeJson(String str) {
+        if (str == null) return "";
+        return str.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 }

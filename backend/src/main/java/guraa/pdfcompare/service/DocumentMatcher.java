@@ -295,4 +295,4 @@ public class DocumentMatcher {
         // Return average similarity
         return totalSimilarity / samplePageCount;
     }
-}
+    }

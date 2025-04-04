@@ -2,15 +2,25 @@ package guraa.pdfcompare.controller;
 
 import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.service.PdfService;
+import guraa.pdfcompare.service.ThumbnailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.tomcat.util.http.fileupload.FileItemIterator;
+import org.apache.tomcat.util.http.fileupload.FileItemStream;
+import org.apache.tomcat.util.http.fileupload.servlet.ServletFileUpload;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.servlet.http.HttpServletRequest;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -21,6 +31,8 @@ import java.util.Map;
 public class PdfController {
 
     private final PdfService pdfService;
+    private final ThumbnailService thumbnailService;
+
 
     /**
      * Upload a PDF file.
@@ -121,6 +133,117 @@ public class PdfController {
         } catch (Exception e) {
             log.error("Failed to compare PDFs", e);
             return ResponseEntity.internalServerError().body("{\"error\": \"Failed to compare PDFs: " + e.getMessage() + "\"}");
+        }
+    }
+
+
+
+    /**
+     * Upload a PDF file with streaming support for large files.
+     * This is particularly helpful for very large PDFs.
+     *
+     * @param request The HTTP request
+     * @return Information about the uploaded file
+     */
+    @PostMapping("/upload/stream")
+    public ResponseEntity<?> uploadPdfStreaming(HttpServletRequest request) {
+        try {
+            // Check if content type is multipart
+            if (!request.getContentType().startsWith("multipart/")) {
+                return ResponseEntity.badRequest().body("{\"error\": \"Expected multipart request\"}");
+            }
+
+            // Create a temporary file to store the uploaded content
+            Path tempDir = Files.createTempDirectory("pdf-upload");
+            File tempFile = Files.createTempFile(tempDir, "upload-", ".pdf").toFile();
+
+            try {
+                // Process the multipart request to find the file part
+                ServletFileUpload upload = new ServletFileUpload();
+                FileItemIterator iterator = upload.getItemIterator(request);
+
+                String fileName = "document.pdf"; // Default name if none provided
+
+                while (iterator.hasNext()) {
+                    FileItemStream item = iterator.next();
+
+                    if (!item.isFormField()) {
+                        // Found a file upload
+                        String name = item.getName();
+                        if (name != null && !name.isEmpty()) {
+                            fileName = name;
+                        }
+
+                        // Stream the file to disk
+                        try (InputStream inputStream = item.openStream();
+                             FileOutputStream outputStream = new FileOutputStream(tempFile)) {
+
+                            byte[] buffer = new byte[8192];
+                            int bytesRead;
+                            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                                outputStream.write(buffer, 0, bytesRead);
+                            }
+                        }
+
+                        // Break after processing the file part
+                        break;
+                    }
+                }
+
+                // Check if it's a PDF file
+                if (!fileName.toLowerCase().endsWith(".pdf")) {
+                    return ResponseEntity.badRequest().body("{\"error\": \"Only PDF files are allowed\"}");
+                }
+
+                // Process the PDF
+                PdfDocument document = pdfService.processPdfFile(tempFile, fileName);
+
+                // Create response
+                Map<String, Object> response = new HashMap<>();
+                response.put("fileId", document.getFileId());
+                response.put("fileName", document.getFileName());
+                response.put("pageCount", document.getPageCount());
+                response.put("fileSize", document.getFileSize());
+
+                return ResponseEntity.ok().body(response);
+
+            } finally {
+                // Clean up temporary files
+                tempFile.delete();
+                Files.deleteIfExists(tempDir);
+            }
+        } catch (Exception e) {
+            log.error("Failed to upload PDF via streaming", e);
+            return ResponseEntity.internalServerError().body("{\"error\": \"Failed to upload PDF: " + e.getMessage() + "\"}");
+        }
+    }
+    /**
+     * Get a thumbnail for a specific page from a PDF document.
+     *
+     * @param fileId The file ID
+     * @param pageNumber The page number (1-based)
+     * @return The thumbnail as an image
+     */
+    @GetMapping("/document/{fileId}/thumbnail/{pageNumber}")
+    public ResponseEntity<?> getDocumentThumbnail(@PathVariable String fileId,
+                                                  @PathVariable int pageNumber) {
+        try {
+            // Get the document
+            PdfDocument document = pdfService.getDocumentById(fileId);
+
+            // Get the thumbnail
+            FileSystemResource thumbnailImage = thumbnailService.getThumbnail(document, pageNumber);
+
+            if (thumbnailImage == null || !thumbnailImage.exists()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.IMAGE_PNG)
+                    .body(thumbnailImage);
+        } catch (Exception e) {
+            log.error("Failed to get document thumbnail", e);
+            return ResponseEntity.notFound().build();
         }
     }
 

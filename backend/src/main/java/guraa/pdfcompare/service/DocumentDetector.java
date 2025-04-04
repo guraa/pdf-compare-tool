@@ -18,6 +18,15 @@ public class DocumentDetector {
 
     private final int minPagesPerDocument;
 
+    // Regular expressions for document structure detection
+    private static final Pattern TITLE_PATTERN = Pattern.compile("(?i)\\b(report|document|presentation|analysis|proposal|plan|agreement|contract)\\b");
+    private static final Pattern TOC_PATTERN = Pattern.compile("(?i)\\b(table\\s+of\\s+contents|contents|index)\\b");
+    private static final Pattern HEADER_PATTERN = Pattern.compile("(?m)^\\s*\\d+(\\.\\d+)*\\s+[A-Z]");
+    private static final Pattern PAGE_NUMBER_PATTERN = Pattern.compile("(?m)^\\s*Page\\s+\\d+\\s+of\\s+\\d+\\s*$");
+    private static final Pattern NEW_SECTION_PATTERN = Pattern.compile("(?m)^\\s*(\\d+(\\.\\d+)*\\s+)?[A-Z][A-Za-z0-9 \\-:]{5,}\\s*$");
+    private static final Pattern COPYRIGHT_PATTERN = Pattern.compile("(?i)\\bcopyright\\b.{0,20}\\d{4}");
+    private static final Pattern DATE_PATTERN = Pattern.compile("(?i)(january|february|march|april|may|june|july|august|september|october|november|december)\\s+\\d{1,2},\\s+\\d{4}");
+
     /**
      * Constructor for document detector.
      *
@@ -74,6 +83,16 @@ public class DocumentDetector {
             boundaries.add(new DocumentBoundary(0, pageTexts.size() - 1));
         }
 
+        log.debug("Identified {} document boundaries within PDF with {} pages",
+                boundaries.size(), pageTexts.size());
+
+        // Log details of each boundary
+        for (int i = 0; i < boundaries.size(); i++) {
+            DocumentBoundary boundary = boundaries.get(i);
+            log.debug("Document {}: pages {}-{} ({} pages)",
+                    i+1, boundary.getStartPage()+1, boundary.getEndPage()+1, boundary.getPageCount());
+        }
+
         return boundaries;
     }
 
@@ -89,19 +108,13 @@ public class DocumentDetector {
         // First page is always a start page
         startPages.add(0);
 
-        // Define patterns for document start detection
-        Pattern titlePattern = Pattern.compile("(?i)\\b(report|document|presentation|analysis|proposal|plan|agreement|contract)\\b");
-        Pattern tocPattern = Pattern.compile("(?i)\\b(table\\s+of\\s+contents|contents|index)\\b");
-        Pattern headerPattern = Pattern.compile("(?m)^\\s*\\d+(\\.\\d+)*\\s+[A-Z]");
-        Pattern pageNumberPattern = Pattern.compile("(?m)^\\s*Page\\s+\\d+\\s+of\\s+\\d+\\s*$");
-
         // Analyze each page for document start characteristics
         for (int i = 1; i < pageTexts.size(); i++) {
             String currentText = pageTexts.get(i);
             String prevText = pageTexts.get(i - 1);
 
             // Check if this page likely starts a new document
-            if (isNewDocumentStart(currentText, prevText, pageTexts, i, titlePattern, tocPattern, headerPattern, pageNumberPattern)) {
+            if (isNewDocumentStart(currentText, prevText, pageTexts, i)) {
                 startPages.add(i);
             }
         }
@@ -116,48 +129,32 @@ public class DocumentDetector {
      * @param prevText Previous page text
      * @param allTexts All page texts
      * @param pageIndex Current page index
-     * @param titlePattern Pattern for titles
-     * @param tocPattern Pattern for table of contents
-     * @param headerPattern Pattern for headers
-     * @param pageNumberPattern Pattern for page numbers
      * @return True if the page is likely the start of a new document
      */
     private boolean isNewDocumentStart(
             String currentText,
             String prevText,
             List<String> allTexts,
-            int pageIndex,
-            Pattern titlePattern,
-            Pattern tocPattern,
-            Pattern headerPattern,
-            Pattern pageNumberPattern) {
+            int pageIndex) {
 
-        // Check for explicit indicators of a new document
-        boolean hasTitleIndicator = titlePattern.matcher(currentText).find() &&
-                currentText.length() < 3000 && // Title pages tend to be short
-                (pageIndex < 2 || !titlePattern.matcher(prevText).find());
+        // Strong indicators of a new document
+        if (hasTitlePageIndicators(currentText, prevText) ||
+                hasTableOfContents(currentText, prevText) ||
+                hasResetPageNumbering(currentText, prevText) ||
+                hasFirstChapterOrSection(currentText, prevText)) {
 
-        boolean hasTocIndicator = tocPattern.matcher(currentText).find() &&
-                !tocPattern.matcher(prevText).find();
-
-        boolean hasResetHeadings = headerPattern.matcher(currentText).find() &&
-                currentText.contains("1. ") &&
-                !prevText.contains("1. ");
-
-        boolean hasResetPageNumbers = pageNumberPattern.matcher(currentText).find() &&
-                currentText.contains("Page 1 of");
-
-        // If any explicit indicator is found
-        if (hasTitleIndicator || hasTocIndicator || hasResetHeadings || hasResetPageNumbers) {
             return true;
         }
 
-        // Calculate text similarity
+        // Calculate text similarity to check for content discontinuity
         double textSimilarity = TextSimilarityUtils.calculateTextSimilarity(currentText, prevText);
 
-        // If very low similarity to previous page
-        if (textSimilarity < 0.2) {
-            // Cross-check with next few pages to confirm this isn't just an anomaly
+        // If very low similarity to previous page, this might be a new document
+        if (textSimilarity < 0.20) {
+            // Cross-check with surrounding pages to confirm this isn't just an anomaly
+            boolean isContinuationWithNextPages = false;
+
+            // Look ahead at surrounding pages
             int pagesAhead = Math.min(3, allTexts.size() - pageIndex - 1);
             if (pagesAhead > 0) {
                 double avgSimilarityAhead = 0;
@@ -168,12 +165,169 @@ public class DocumentDetector {
                 avgSimilarityAhead /= pagesAhead;
 
                 // If current page is more similar to upcoming pages than to previous page,
-                // it's likely a new document
-                return avgSimilarityAhead > textSimilarity * 1.5;
+                // and previous page looks like it could be an ending
+                if (avgSimilarityAhead > textSimilarity * 1.2 &&
+                        (hasEndOfDocumentMarkers(prevText) || isNearEmptyPage(prevText))) {
+                    return true;
+                }
+
+                // If there's a radical shift in content style or structure
+                if (hasStyleBreak(currentText, prevText)) {
+                    return true;
+                }
             }
-            return true;
         }
 
         return false;
+    }
+
+    /**
+     * Check if a page has title page indicators.
+     */
+    private boolean hasTitlePageIndicators(String currentText, String prevText) {
+        String normalizedText = currentText.toLowerCase().trim();
+
+        // Title page is typically short
+        boolean isShortPage = currentText.length() < 1000;
+
+        // Check for typical title page content
+        boolean hasTitleKeywords = TITLE_PATTERN.matcher(normalizedText).find();
+        boolean hasCopyright = COPYRIGHT_PATTERN.matcher(normalizedText).find();
+        boolean hasDate = DATE_PATTERN.matcher(normalizedText).find();
+
+        // Examine the layout - title pages often have centered text
+        boolean hasCenteredText = hasCenteredLayout(currentText);
+
+        return isShortPage && (hasTitleKeywords || hasCopyright || hasDate || hasCenteredText);
+    }
+
+    /**
+     * Check if text appears to have centered layout.
+     */
+    private boolean hasCenteredLayout(String text) {
+        String[] lines = text.split("\n");
+        int centeredLines = 0;
+        int totalNonEmptyLines = 0;
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty()) {
+                totalNonEmptyLines++;
+
+                // Check if line has equal whitespace on both sides
+                int leftSpace = line.indexOf(trimmed.charAt(0));
+                int rightSpace = line.length() - (leftSpace + trimmed.length());
+
+                // Allow for some variation
+                if (Math.abs(leftSpace - rightSpace) <= 5) {
+                    centeredLines++;
+                }
+            }
+        }
+
+        // Consider centered if at least 40% of non-empty lines appear centered
+        return totalNonEmptyLines > 0 &&
+                (double)centeredLines / totalNonEmptyLines >= 0.4;
+    }
+
+    /**
+     * Check if a page contains a table of contents.
+     */
+    private boolean hasTableOfContents(String currentText, String prevText) {
+        return TOC_PATTERN.matcher(currentText).find() &&
+                !TOC_PATTERN.matcher(prevText).find();
+    }
+
+    /**
+     * Check for reset page numbering.
+     */
+    private boolean hasResetPageNumbering(String currentText, String prevText) {
+        // Look for "Page 1 of..." pattern
+        return currentText.contains("Page 1 of") ||
+                Pattern.compile("(?m)^\\s*1\\s*$").matcher(currentText).find();
+    }
+
+    /**
+     * Check if the page contains Chapter 1 or Section 1.
+     */
+    private boolean hasFirstChapterOrSection(String currentText, String prevText) {
+        return (currentText.contains("Chapter 1") ||
+                Pattern.compile("(?i)^\\s*1\\.\\s+\\w+").matcher(currentText).find()) &&
+                !(prevText.contains("Chapter 1") ||
+                        Pattern.compile("(?i)^\\s*1\\.\\s+\\w+").matcher(prevText).find());
+    }
+
+    /**
+     * Check for markers that indicate the end of a document.
+     */
+    private boolean hasEndOfDocumentMarkers(String text) {
+        String normalized = text.toLowerCase();
+        return normalized.contains("appendix") ||
+                normalized.contains("references") ||
+                normalized.contains("bibliography") ||
+                normalized.contains("glossary") ||
+                normalized.contains("index") ||
+                Pattern.compile("(?i)\\bend\\b").matcher(normalized).find();
+    }
+
+    /**
+     * Check if a page is nearly empty (could be a divider).
+     */
+    private boolean isNearEmptyPage(String text) {
+        // Count non-whitespace characters
+        long nonWhitespace = text.chars().filter(c -> !Character.isWhitespace(c)).count();
+        return nonWhitespace < 100; // Fewer than 100 non-whitespace characters
+    }
+
+    /**
+     * Detect significant breaks in style or formatting.
+     */
+    private boolean hasStyleBreak(String currentText, String prevText) {
+        // Check for structural differences
+
+        // Average line length
+        double currentAvgLineLength = getAverageLineLength(currentText);
+        double prevAvgLineLength = getAverageLineLength(prevText);
+
+        // Density of numbers
+        double currentNumberDensity = getNumberDensity(currentText);
+        double prevNumberDensity = getNumberDensity(prevText);
+
+        // If there's a significant difference in text structure
+        boolean lineBreak = Math.abs(currentAvgLineLength - prevAvgLineLength) > 20;
+        boolean numberBreak = Math.abs(currentNumberDensity - prevNumberDensity) > 0.2;
+
+        return lineBreak || numberBreak;
+    }
+
+    /**
+     * Calculate average line length.
+     */
+    private double getAverageLineLength(String text) {
+        String[] lines = text.split("\n");
+        if (lines.length == 0) return 0;
+
+        int totalLength = 0;
+        int nonEmptyLines = 0;
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty()) {
+                totalLength += trimmed.length();
+                nonEmptyLines++;
+            }
+        }
+
+        return nonEmptyLines > 0 ? (double)totalLength / nonEmptyLines : 0;
+    }
+
+    /**
+     * Calculate density of numbers in text.
+     */
+    private double getNumberDensity(String text) {
+        long digitCount = text.chars().filter(Character::isDigit).count();
+        long totalChars = text.length();
+
+        return totalChars > 0 ? (double)digitCount / totalChars : 0;
     }
 }

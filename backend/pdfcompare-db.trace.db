@@ -19,3 +19,15 @@ alter table pdf_metadata add constraint FK6fqoa9o81v9tfn2ut55kjog55 foreign key 
 2025-04-03 19:40:33 jdbc[4]: exception
 org.h2.jdbc.JdbcSQLDataException: Value too long for column "METADATA_VALUE CHARACTER VARYING(255)": "'java.util.GregorianCalendar[time=1743427222000,areFieldsSet=true,areAllFieldsSe... (603)"; SQL statement:
 insert into document_metadata (document_id, metadata_key, metadata_value) values (?, ?, ?) [22001-214]
+2025-04-04 13:31:06 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Value too long for column "METADATA_VALUE CHARACTER VARYING(255)": "'java.util.GregorianCalendar[time=1743428502000,areFieldsSet=true,areAllFieldsSe... (603)"; SQL statement:
+insert into document_metadata (document_id, metadata_key, metadata_value) values (?, ?, ?) [22001-214]
+2025-04-04 13:31:28 jdbc[5]: exception
+org.h2.jdbc.JdbcSQLDataException: Value too long for column "METADATA_VALUE CHARACTER VARYING(255)": "'java.util.GregorianCalendar[time=1743428502000,areFieldsSet=true,areAllFieldsSe... (603)"; SQL statement:
+insert into document_metadata (document_id, metadata_key, metadata_value) values (?, ?, ?) [22001-214]
+2025-04-04 13:31:49 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Value too long for column "METADATA_VALUE CHARACTER VARYING(255)": "'java.util.GregorianCalendar[time=1743428502000,areFieldsSet=true,areAllFieldsSe... (603)"; SQL statement:
+insert into document_metadata (document_id, metadata_key, metadata_value) values (?, ?, ?) [22001-214]
+2025-04-04 13:32:05 jdbc[4]: exception
+org.h2.jdbc.JdbcSQLDataException: Value too long for column "METADATA_VALUE CHARACTER VARYING(255)": "'java.util.GregorianCalendar[time=1743427222000,areFieldsSet=true,areAllFieldsSe... (603)"; SQL statement:
+insert into document_metadata (document_id, metadata_key, metadata_value) values (?, ?, ?) [22001-214]

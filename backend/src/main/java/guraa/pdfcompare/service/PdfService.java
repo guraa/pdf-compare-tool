@@ -32,7 +32,7 @@ public class PdfService {
     private final ComparisonRepository comparisonRepository;
     private final PdfProcessor pdfProcessor;
     private final ComparisonService comparisonService;
-
+    private final ThumbnailService thumbnailService;
     /**
      * Store a PDF file and process it.
      *
@@ -66,6 +66,47 @@ public class PdfService {
             // Clean up temporary directory
             tempFile.delete();
             tempDir.toFile().delete();
+        }
+    }
+
+    // Add this method to the PdfService class
+
+    /**
+     * Process a PDF file and store it.
+     * This is a variant of the storePdf method that works with an already saved file.
+     *
+     * @param file The PDF file
+     * @param originalFileName The original file name
+     * @return The processed PDF document
+     * @throws IOException If there's an error processing the file
+     */
+    @Transactional
+    public PdfDocument processPdfFile(File file, String originalFileName) throws IOException {
+        try {
+            // Check if the file is a PDF
+            if (!originalFileName.toLowerCase().endsWith(".pdf")) {
+                throw new IllegalArgumentException("Only PDF files are allowed");
+            }
+
+            // Process the PDF
+            PdfDocument document = pdfProcessor.processPdf(file);
+            document.setFileName(originalFileName);
+
+            // Check if this document already exists by content hash
+            Optional<PdfDocument> existingDocument = pdfRepository.findByContentHash(document.getContentHash());
+            if (existingDocument.isPresent()) {
+                log.info("Document with identical content already exists: {}", existingDocument.get().getFileId());
+                return existingDocument.get();
+            }
+
+            // Generate thumbnails for all pages
+            thumbnailService.generateThumbnails(document);
+
+            // Save to repository
+            return pdfRepository.save(document);
+        } catch (IOException e) {
+            log.error("Failed to process PDF file", e);
+            throw e;
         }
     }
 

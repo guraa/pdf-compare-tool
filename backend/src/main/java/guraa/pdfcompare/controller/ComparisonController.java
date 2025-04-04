@@ -1,14 +1,17 @@
 package guraa.pdfcompare.controller;
 
+import guraa.pdfcompare.model.Comparison;
 import guraa.pdfcompare.model.ComparisonResult;
 import guraa.pdfcompare.model.DocumentPair;
 import guraa.pdfcompare.model.PageDetails;
+import guraa.pdfcompare.repository.ComparisonRepository;
 import guraa.pdfcompare.service.ComparisonService;
 import guraa.pdfcompare.service.ReportGenerationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +27,7 @@ import java.util.Map;
 public class ComparisonController {
 
     private final ComparisonService comparisonService;
+    private final ComparisonRepository comparisonRepository;
     private final ReportGenerationService reportService;
 
     /**
@@ -288,6 +292,43 @@ public class ComparisonController {
             Map<String, Object> response = new HashMap<>();
             response.put("error", "Failed to generate report: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    /**
+     * Check if a comparison is ready (HEAD request).
+     * This endpoint is used for polling without fetching the full result.
+     *
+     * @param comparisonId The comparison ID
+     * @return 200 if completed, 202 if processing, 404 if not found
+     */
+    @RequestMapping(value = "/{comparisonId}", method = RequestMethod.HEAD)
+    public ResponseEntity<Void> checkComparisonStatus(@PathVariable String comparisonId) {
+        try {
+            // Check if the comparison exists
+            Comparison comparison = comparisonRepository.findByComparisonId(comparisonId)
+                    .orElse(null);
+
+            if (comparison == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // If comparison is still in progress, return 202 Accepted
+            if (comparison.getStatus() != Comparison.ComparisonStatus.COMPLETED &&
+                    comparison.getStatus() != Comparison.ComparisonStatus.FAILED) {
+                return ResponseEntity.accepted().build();
+            }
+
+            // If failed, return 500 error
+            if (comparison.getStatus() == Comparison.ComparisonStatus.FAILED) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            }
+
+            // If completed, return 200 OK
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            log.error("Error checking comparison status", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 

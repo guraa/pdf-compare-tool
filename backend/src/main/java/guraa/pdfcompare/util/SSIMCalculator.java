@@ -3,6 +3,7 @@ package guraa.pdfcompare.util;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.awt.*;
 import java.awt.color.ColorSpace;
 import java.awt.image.BufferedImage;
 import java.awt.image.ColorConvertOp;
@@ -21,6 +22,7 @@ public class SSIMCalculator {
     private static final double K1 = 0.01;
     private static final double K2 = 0.03;
     private static final int WINDOW_SIZE = 8;
+    private static final int HASH_RESIZE_SIZE = 32; // For improved perceptual hash accuracy
 
     /**
      * Calculate the SSIM between two images.
@@ -121,7 +123,13 @@ public class SSIMCalculator {
      */
     private BufferedImage resizeImage(BufferedImage image, int width, int height) {
         BufferedImage resized = new BufferedImage(width, height, image.getType());
-        java.awt.Graphics2D g = resized.createGraphics();
+        Graphics2D g = resized.createGraphics();
+
+        // Use better quality settings for resizing
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
         g.drawImage(image, 0, 0, width, height, null);
         g.dispose();
         return resized;
@@ -189,9 +197,19 @@ public class SSIMCalculator {
      * @return Normalized similarity score (0-1)
      */
     public double getSimilarityScore(BufferedImage image1, BufferedImage image2) {
+        if (image1 == null || image2 == null) {
+            return 0.0;
+        }
+
+        // For improved detection, combine SSIM with perceptual hash similarity
         double ssim = calculateSSIM(image1, image2);
-        // Map [-1,1] to [0,1]
-        return (ssim + 1) / 2.0;
+        double hashSim = getHashSimilarity(image1, image2);
+
+        // Map [-1,1] to [0,1] for SSIM
+        double ssimScore = (ssim + 1) / 2.0;
+
+        // Weight SSIM more heavily but include hash similarity
+        return 0.7 * ssimScore + 0.3 * hashSim;
     }
 
     /**
@@ -203,14 +221,20 @@ public class SSIMCalculator {
      */
     public long calculatePerceptualHash(BufferedImage image) {
         try {
-            // Resize to 8x8 pixels
-            BufferedImage resized = resizeImage(image, 8, 8);
+            // Resize to HASH_RESIZE_SIZE x HASH_RESIZE_SIZE pixels for better accuracy
+            BufferedImage resized = resizeImage(image, HASH_RESIZE_SIZE, HASH_RESIZE_SIZE);
 
             // Convert to grayscale
             BufferedImage grayscale = convertToGrayscale(resized);
 
+            // Apply median blur to reduce noise
+            BufferedImage blurred = applyMedianBlur(grayscale);
+
+            // Reduce to 8x8 pixels - DCT approach
+            BufferedImage dctImage = resizeImage(blurred, 8, 8);
+
             // Get pixel data
-            Raster raster = grayscale.getRaster();
+            Raster raster = dctImage.getRaster();
 
             // Calculate average value
             double sum = 0;
@@ -240,6 +264,46 @@ public class SSIMCalculator {
     }
 
     /**
+     * Apply a simple median blur to reduce noise.
+     *
+     * @param image The input image
+     * @return Blurred image
+     */
+    private BufferedImage applyMedianBlur(BufferedImage image) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        BufferedImage result = new BufferedImage(width, height, image.getType());
+
+        // Apply median filter with radius 1
+        int radius = 1;
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int[] values = new int[(2 * radius + 1) * (2 * radius + 1)];
+                int count = 0;
+
+                // Gather values in the window
+                for (int dy = -radius; dy <= radius; dy++) {
+                    for (int dx = -radius; dx <= radius; dx++) {
+                        int nx = Math.min(Math.max(x + dx, 0), width - 1);
+                        int ny = Math.min(Math.max(y + dy, 0), height - 1);
+                        values[count++] = image.getRaster().getSample(nx, ny, 0);
+                    }
+                }
+
+                // Sort values
+                java.util.Arrays.sort(values);
+
+                // Take median
+                int median = values[count / 2];
+                result.getRaster().setSample(x, y, 0, median);
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * Calculate the Hamming distance between two hashes.
      *
      * @param hash1 First hash
@@ -266,12 +330,96 @@ public class SSIMCalculator {
      * @return Similarity score (0-1)
      */
     public double getHashSimilarity(BufferedImage image1, BufferedImage image2) {
-        long hash1 = calculatePerceptualHash(image1);
-        long hash2 = calculatePerceptualHash(image2);
+        if (image1 == null || image2 == null) {
+            return 0.0;
+        }
 
-        int distance = hammingDistance(hash1, hash2);
+        try {
+            long hash1 = calculatePerceptualHash(image1);
+            long hash2 = calculatePerceptualHash(image2);
 
-        // Convert distance to similarity (0-1)
-        return 1.0 - (distance / 64.0);
+            int distance = hammingDistance(hash1, hash2);
+
+            // Convert distance to similarity (0-1)
+            return 1.0 - (distance / 64.0);
+        } catch (Exception e) {
+            log.error("Error calculating hash similarity", e);
+            return 0.0;
+        }
+    }
+
+    /**
+     * Calculate the visual similarity using a combined approach.
+     * This method uses both SSIM and perceptual hashing with rotational invariance.
+     *
+     * @param image1 First image
+     * @param image2 Second image
+     * @return Similarity score (0-1)
+     */
+    public double getVisualSimilarity(BufferedImage image1, BufferedImage image2) {
+        if (image1 == null || image2 == null) {
+            return 0.0;
+        }
+
+        // Try direct comparison
+        double directSimilarity = getSimilarityScore(image1, image2);
+
+        // If already very similar, return early
+        if (directSimilarity > 0.9) {
+            return directSimilarity;
+        }
+
+        // Try rotated versions (90, 180, 270 degrees)
+        double[] rotatedSimilarities = new double[3];
+
+        BufferedImage rotated90 = rotateImage(image2, 90);
+        rotatedSimilarities[0] = getSimilarityScore(image1, rotated90);
+
+        BufferedImage rotated180 = rotateImage(image2, 180);
+        rotatedSimilarities[1] = getSimilarityScore(image1, rotated180);
+
+        BufferedImage rotated270 = rotateImage(image2, 270);
+        rotatedSimilarities[2] = getSimilarityScore(image1, rotated270);
+
+        // Get the best similarity
+        double bestRotatedSimilarity = Math.max(
+                Math.max(rotatedSimilarities[0], rotatedSimilarities[1]),
+                rotatedSimilarities[2]
+        );
+
+        // Return the best similarity (original or rotated)
+        return Math.max(directSimilarity, bestRotatedSimilarity);
+    }
+
+    /**
+     * Rotate an image by the specified angle.
+     *
+     * @param image   The image to rotate
+     * @param degrees The rotation angle in degrees
+     * @return Rotated image
+     */
+    private BufferedImage rotateImage(BufferedImage image, int degrees) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+
+        // For 90 and 270 degrees, width and height are swapped
+        BufferedImage rotatedImage;
+        if (degrees == 90 || degrees == 270) {
+            rotatedImage = new BufferedImage(height, width, image.getType());
+        } else {
+            rotatedImage = new BufferedImage(width, height, image.getType());
+        }
+
+        Graphics2D g = rotatedImage.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+
+        // Rotate around the center
+        g.translate((rotatedImage.getWidth() - width) / 2, (rotatedImage.getHeight() - height) / 2);
+        g.rotate(Math.toRadians(degrees), width / 2.0, height / 2.0);
+        g.drawImage(image, 0, 0, null);
+        g.dispose();
+
+        return rotatedImage;
     }
 }
