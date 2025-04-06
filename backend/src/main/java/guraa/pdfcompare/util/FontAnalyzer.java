@@ -1,26 +1,21 @@
 package guraa.pdfcompare.util;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
-import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.PDResources;
-import org.apache.pdfbox.pdmodel.font.PDFont;
-import org.apache.pdfbox.pdmodel.font.PDType0Font;
-import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class FontAnalyzer {
+
+    private final FontHandler fontHandler;
 
     /**
      * Analyze fonts used on a specific page in a PDF document.
@@ -32,45 +27,25 @@ public class FontAnalyzer {
      */
     public List<FontInfo> analyzeFontsOnPage(PDDocument document, int pageIndex, Path outputDir) {
         List<FontInfo> fontInfoList = new ArrayList<>();
-        Map<String, PDFont> fontMap = new HashMap<>();
 
         try {
-            PDPage page = document.getPage(pageIndex);
-            PDResources resources = page.getResources();
+            // Use the robust font handler to extract font information
+            List<FontHandler.FontInfo> handlerFonts = fontHandler.extractFontsFromPage(document, pageIndex);
 
-            // Extract fonts from the page resources
-            for (COSName fontName : resources.getFontNames()) {
-                try {
-                    PDFont font = resources.getFont(fontName);
+            // Convert from handler FontInfo to our FontInfo
+            fontInfoList = handlerFonts.stream()
+                    .map(this::convertToFontInfo)
+                    .collect(Collectors.toList());
 
-                    if (font != null) {
-                        // Check if we already processed this font
-                        if (!fontMap.containsValue(font)) {
-                            FontInfo fontInfo = extractFontInfo(font, fontName.getName());
+            log.debug("Extracted {} fonts from page {}", fontInfoList.size(), pageIndex + 1);
 
-                            // Try to save font data for embedded fonts
-                            if (font.isEmbedded()) {
-                                try {
-                                    String fontFileName = String.format("page_%d_font_%s.ttf",
-                                            pageIndex + 1, UUID.randomUUID().toString());
-
-                                    File fontFile = outputDir.resolve(fontFileName).toFile();
-                                    saveFontData(font, fontFile);
-
-                                    fontInfo.setFontFilePath(fontFile.getAbsolutePath());
-                                } catch (IOException e) {
-                                    log.warn("Could not save embedded font data", e);
-                                }
-                            }
-
-                            fontInfoList.add(fontInfo);
-                            fontMap.put(fontName.getName(), font);
-                        }
-                    }
-                } catch (Exception e) {
-                    log.warn("Error processing font: " + fontName.getName(), e);
-                }
+            // Log any damaged fonts that were detected
+            int damagedFonts = (int) handlerFonts.stream().filter(FontHandler.FontInfo::isDamaged).count();
+            if (damagedFonts > 0) {
+                log.warn("Detected {} damaged fonts on page {} that were safely handled",
+                        damagedFonts, pageIndex + 1);
             }
+
         } catch (Exception e) {
             log.error("Error analyzing fonts on page " + pageIndex, e);
         }
@@ -79,157 +54,26 @@ public class FontAnalyzer {
     }
 
     /**
-     * Extract information about a font.
-     *
-     * @param font The PDF font
-     * @param name The font name in the PDF
-     * @return FontInfo object with extracted information
+     * Convert from FontHandler.FontInfo to FontInfo.
      */
-    private FontInfo extractFontInfo(PDFont font, String name) {
+    private FontInfo convertToFontInfo(FontHandler.FontInfo handlerInfo) {
         FontInfo info = new FontInfo();
-        info.setId(UUID.randomUUID().toString());
-        info.setFontName(font.getName());
-        info.setPdfName(name);
-        info.setEmbedded(font.isEmbedded());
+        info.setId(handlerInfo.getId());
+        info.setFontName(handlerInfo.getFontName());
+        info.setPdfName(handlerInfo.getPdfName());
+        info.setFontFamily(handlerInfo.getFontFamily());
+        info.setEmbedded(handlerInfo.isEmbedded());
+        info.setIsBold(handlerInfo.isBold());
+        info.setIsItalic(handlerInfo.isItalic());
+        info.setEncoding(handlerInfo.getEncoding());
+        info.setFontFilePath(handlerInfo.getFontFilePath());
 
-        // Determine font family and other attributes
-        info.setFontFamily(getFontFamily(font));
-        info.setIsBold(isBold(font));
-        info.setIsItalic(isItalic(font));
-
-        // Get encoding information
-        try {
-            // PDFont doesn't have a direct getEncoding() method, we need to handle this differently
-            String encoding = "Unknown";
-
-            // Try to get encoding based on font type
-            if (font instanceof PDType1Font) {
-                PDType1Font type1Font = (PDType1Font) font;
-                if (type1Font.getEncoding() != null) {
-                    encoding = type1Font.getEncoding().toString();
-                }
-            } else if (font instanceof PDType0Font) {
-                encoding = "CID";  // Composite fonts typically use CID encoding
-            }
-
-            info.setEncoding(encoding);
-        } catch (Exception e) {
-            info.setEncoding("Unknown");
-            log.warn("Could not determine font encoding", e);
+        // Set the damaged flag if applicable
+        if (handlerInfo.isDamaged()) {
+            info.setDamaged(true);
         }
 
         return info;
-    }
-
-    /**
-     * Save font data to a file.
-     *
-     * @param font The PDF font
-     * @param outputFile The output file
-     * @throws IOException If there's an error saving the font data
-     */
-    private void saveFontData(PDFont font, File outputFile) throws IOException {
-        // Extract font data if possible
-        if (font.isEmbedded()) {
-            try (FileOutputStream fos = new FileOutputStream(outputFile)) {
-                // Get font data - approach depends on font type
-                if (font instanceof PDType0Font) {
-                    PDType0Font type0Font = (PDType0Font) font;
-                    if (type0Font.getDescendantFont() != null &&
-                            type0Font.getDescendantFont().getFontDescriptor() != null &&
-                            type0Font.getDescendantFont().getFontDescriptor().getFontFile2() != null) {
-
-                        try (InputStream stream = type0Font.getDescendantFont().getFontDescriptor().getFontFile2().createInputStream()) {
-                            // Use IOUtils to copy stream to file
-                            IOUtils.copy(stream, fos);
-                        }
-                    }
-                } else if (font instanceof PDType1Font) {
-                    PDType1Font type1Font = (PDType1Font) font;
-
-                    // Try to get font data from different font file attributes
-                    if (type1Font.getFontDescriptor() != null) {
-                        if (type1Font.getFontDescriptor().getFontFile() != null) {
-                            try (InputStream stream = type1Font.getFontDescriptor().getFontFile().createInputStream()) {
-                                IOUtils.copy(stream, fos);
-                            }
-                        } else if (type1Font.getFontDescriptor().getFontFile2() != null) {
-                            try (InputStream stream = type1Font.getFontDescriptor().getFontFile2().createInputStream()) {
-                                IOUtils.copy(stream, fos);
-                            }
-                        } else if (type1Font.getFontDescriptor().getFontFile3() != null) {
-                            try (InputStream stream = type1Font.getFontDescriptor().getFontFile3().createInputStream()) {
-                                IOUtils.copy(stream, fos);
-                            }
-                        }
-                    }
-                } else {
-                    // Try generic approach for other font types
-                    if (font.getFontDescriptor() != null && font.getFontDescriptor().getFontFile2() != null) {
-                        try (InputStream stream = font.getFontDescriptor().getFontFile2().createInputStream()) {
-                            IOUtils.copy(stream, fos);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Determine the font family from a PDF font.
-     *
-     * @param font The PDF font
-     * @return Font family name
-     */
-    private String getFontFamily(PDFont font) {
-        String fontName = font.getName();
-
-        // Extract family name from font name
-        if (fontName != null) {
-            // Remove style indicators
-            String family = fontName.replaceAll("(?i)[-\\+]?(bold|italic|oblique|light|medium|black|regular|condensed|extended)", "");
-
-            // Remove common prefixes
-            family = family.replaceAll("^[A-Z]{6}\\+", "");
-
-            // Remove any remaining special characters
-            family = family.replaceAll("[^a-zA-Z0-9 ]", "").trim();
-
-            if (!family.isEmpty()) {
-                return family;
-            }
-        }
-
-        return "Unknown";
-    }
-
-    /**
-     * Determine if a font is bold.
-     *
-     * @param font The PDF font
-     * @return True if the font is bold
-     */
-    private boolean isBold(PDFont font) {
-        String fontName = font.getName();
-        if (fontName != null) {
-            return fontName.toLowerCase().contains("bold");
-        }
-        return false;
-    }
-
-    /**
-     * Determine if a font is italic.
-     *
-     * @param font The PDF font
-     * @return True if the font is italic
-     */
-    private boolean isItalic(PDFont font) {
-        String fontName = font.getName();
-        if (fontName != null) {
-            String lowerName = fontName.toLowerCase();
-            return lowerName.contains("italic") || lowerName.contains("oblique");
-        }
-        return false;
     }
 
     /**
@@ -245,6 +89,7 @@ public class FontAnalyzer {
         private boolean isItalic;
         private String encoding;
         private String fontFilePath;
+        private boolean isDamaged = false;
 
         // Getters and setters
         public String getId() { return id; }
@@ -273,5 +118,8 @@ public class FontAnalyzer {
 
         public String getFontFilePath() { return fontFilePath; }
         public void setFontFilePath(String fontFilePath) { this.fontFilePath = fontFilePath; }
+
+        public boolean isDamaged() { return isDamaged; }
+        public void setDamaged(boolean damaged) { isDamaged = damaged; }
     }
 }

@@ -7,16 +7,21 @@ import guraa.pdfcompare.repository.PdfRepository;
 import guraa.pdfcompare.util.PdfProcessor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.ImageType;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.transaction.Transactional;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,11 +33,13 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PdfService {
 
+    // Required service dependencies - add these fields
     private final PdfRepository pdfRepository;
     private final ComparisonRepository comparisonRepository;
     private final PdfProcessor pdfProcessor;
     private final ComparisonService comparisonService;
     private final ThumbnailService thumbnailService;
+
     /**
      * Store a PDF file and process it.
      *
@@ -55,7 +62,7 @@ public class PdfService {
 
             // Check if this document already exists by content hash
             Optional<PdfDocument> existingDocument = pdfRepository.findByContentHash(document.getContentHash());
-            
+
             if (existingDocument.isPresent()) {
                 log.info("Document with same content hash already exists, reusing: {}", existingDocument.get().getFileId());
                 return existingDocument.get();
@@ -69,8 +76,6 @@ public class PdfService {
             tempDir.toFile().delete();
         }
     }
-
-    // Add this method to the PdfService class
 
     /**
      * Process a PDF file and store it.
@@ -95,14 +100,19 @@ public class PdfService {
 
             // Check if this document already exists by content hash
             Optional<PdfDocument> existingDocument = pdfRepository.findByContentHash(document.getContentHash());
-            
+
             if (existingDocument.isPresent()) {
                 log.info("Document with same content hash already exists, reusing: {}", existingDocument.get().getFileId());
                 return existingDocument.get();
             }
-            
+
             // Generate thumbnails for all pages
-            thumbnailService.generateThumbnails(document);
+            try {
+                thumbnailService.generateThumbnails(document);
+            } catch (Exception e) {
+                log.warn("Error generating thumbnails: {}", e.getMessage());
+                // Continue without thumbnails - they'll be generated on demand
+            }
 
             // Save to repository
             return pdfRepository.save(document);
@@ -133,20 +143,68 @@ public class PdfService {
      */
     public FileSystemResource getRenderedPage(String fileId, int pageNumber) {
         PdfDocument document = getDocumentById(fileId);
-        File pageImage = pdfProcessor.getRenderedPage(document, pageNumber);
 
-        if (!pageImage.exists()) {
-            throw new IllegalArgumentException("Page not found: " + pageNumber);
+        // Get the path to the rendered page
+        Path pagePath = Paths.get("uploads", "documents", fileId, "pages", "page_" + pageNumber + ".png");
+        File pageFile = pagePath.toFile();
+
+        // Check if the file exists
+        if (!pageFile.exists()) {
+            // Try to generate the page if it doesn't exist
+            try {
+                generatePageImage(document, pageNumber);
+                if (pageFile.exists()) {
+                    return new FileSystemResource(pageFile);
+                }
+            } catch (Exception e) {
+                log.error("Error generating page image: {}", e.getMessage());
+            }
+
+            throw new IllegalArgumentException("Page not found or could not be rendered: " + pageNumber);
         }
 
-        return new FileSystemResource(pageImage);
+        return new FileSystemResource(pageFile);
+    }
+
+    /**
+     * Generate a page image for a PDF document.
+     *
+     * @param document The PDF document
+     * @param pageNumber The page number (1-based)
+     * @throws IOException If there's an error generating the image
+     */
+    private void generatePageImage(PdfDocument document, int pageNumber) throws IOException {
+        // Implementation depends on your PDF processing logic
+        // Should create the page image file at the expected location
+
+        // Example implementation:
+        try (PDDocument pdfDocument = PDDocument.load(new File(document.getFilePath()))) {
+            // Check page bounds
+            if (pageNumber < 1 || pageNumber > pdfDocument.getNumberOfPages()) {
+                throw new IllegalArgumentException("Invalid page number: " + pageNumber);
+            }
+
+            // Create renderer
+            PDFRenderer renderer = new PDFRenderer(pdfDocument);
+
+            // Render page (0-based page index)
+            BufferedImage image = renderer.renderImageWithDPI(pageNumber - 1, 150, ImageType.RGB);
+
+            // Ensure directories exist
+            Path pagesDir = Paths.get("uploads", "documents", document.getFileId(), "pages");
+            Files.createDirectories(pagesDir);
+
+            // Save image
+            File outputFile = pagesDir.resolve("page_" + pageNumber + ".png").toFile();
+            javax.imageio.ImageIO.write(image, "PNG", outputFile);
+        }
     }
 
     /**
      * Compare two PDF documents.
      *
-     * @param baseFileId The base document file ID
-     * @param compareFileId The comparison document file ID
+     * @param baseFileId The base file ID
+     * @param compareFileId The comparison file ID
      * @param options Comparison options
      * @return The comparison ID
      */
@@ -156,21 +214,30 @@ public class PdfService {
         PdfDocument baseDocument = getDocumentById(baseFileId);
         PdfDocument compareDocument = getDocumentById(compareFileId);
 
-        // Extract comparison options
-        boolean smartMatching = options != null &&
-                options.containsKey("smartMatching") &&
-                Boolean.TRUE.equals(options.get("smartMatching"));
+        // Set up default options if not provided
+        boolean smartMatching = true;  // Default to true
+        String textComparisonMethod = "smart";
+        String differenceThreshold = "normal";
 
-        String textComparisonMethod = options != null && options.containsKey("textComparisonMethod") ?
-                (String) options.get("textComparisonMethod") : "smart";
+        // Override with provided options if available
+        if (options != null) {
+            if (options.containsKey("smartMatching")) {
+                smartMatching = Boolean.TRUE.equals(options.get("smartMatching"));
+            }
 
-        String differenceThreshold = options != null && options.containsKey("differenceThreshold") ?
-                (String) options.get("differenceThreshold") : "normal";
+            if (options.containsKey("textComparisonMethod")) {
+                textComparisonMethod = (String) options.get("textComparisonMethod");
+            }
 
-        // Generate comparison ID
+            if (options.containsKey("differenceThreshold")) {
+                differenceThreshold = (String) options.get("differenceThreshold");
+            }
+        }
+
+        // Generate a new comparison ID
         String comparisonId = UUID.randomUUID().toString();
 
-        // Create comparison record
+        // Create a comparison record
         Comparison comparison = Comparison.builder()
                 .comparisonId(comparisonId)
                 .baseDocument(baseDocument)
@@ -182,15 +249,16 @@ public class PdfService {
                 .differenceThreshold(differenceThreshold)
                 .build();
 
-        // Store options if provided
+        // Save options to the comparison if provided
         if (options != null) {
-            Map<String, String> optionsMap = new HashMap<>();
-            for (Map.Entry<String, Object> entry : options.entrySet()) {
-                if (entry.getValue() != null) {
-                    optionsMap.put(entry.getKey(), entry.getValue().toString());
+            // Convert Map<String, Object> to Map<String, String>
+            Map<String, String> stringOptions = new HashMap<>();
+            options.forEach((key, value) -> {
+                if (value != null) {
+                    stringOptions.put(key, value.toString());
                 }
-            }
-            comparison.setOptions(optionsMap);
+            });
+            comparison.setOptions(stringOptions);
         }
 
         // Save the comparison

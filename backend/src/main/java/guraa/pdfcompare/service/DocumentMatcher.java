@@ -72,6 +72,9 @@ public class DocumentMatcher {
                 DocumentBoundary compareBoundary = compareDocuments.get(j);
 
                 // Calculate similarity using both text and visual features
+
+                log.debug("similarity: Base doc {} and Compare doc {}",
+                        basePdf.getDocumentId(), comparePdf.getDocumentId());
                 double similarity = calculateDocumentSimilarity(
                         baseBoundary, compareBoundary,
                         baseTexts, compareTexts,
@@ -148,6 +151,7 @@ public class DocumentMatcher {
 
         // If text similarity is very low, no need to check visual similarity
         if (textSimilarity < textSimilarityThreshold / 2) {
+            log.debug("textSimilarity < textSimilarityThreshold: {}", String.format("%.4f", textSimilarity));
             return textSimilarity;
         }
 

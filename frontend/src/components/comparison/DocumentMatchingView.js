@@ -46,7 +46,7 @@ const DocumentMatchingView = ({ comparisonId, onSelectDocumentPair }) => {
           // Set a longer retry delay for circuit breaker errors
           setTimeout(() => {
             setRetryCount(prev => prev + 1);
-          }, 60000); // 30 seconds
+          }, 120000); // 30 seconds
           
           return;
         }
