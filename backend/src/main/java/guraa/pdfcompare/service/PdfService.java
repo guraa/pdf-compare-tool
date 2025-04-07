@@ -5,11 +5,12 @@ import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.repository.ComparisonRepository;
 import guraa.pdfcompare.repository.PdfRepository;
 import guraa.pdfcompare.util.PdfProcessor;
+import guraa.pdfcompare.util.PdfLoader;
+import guraa.pdfcompare.util.PdfRenderer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
-import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -33,7 +34,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PdfService {
 
-    // Required service dependencies - add these fields
     private final PdfRepository pdfRepository;
     private final ComparisonRepository comparisonRepository;
     private final PdfProcessor pdfProcessor;
@@ -41,7 +41,7 @@ public class PdfService {
     private final ThumbnailService thumbnailService;
 
     /**
-     * Store a PDF file and process it.
+     * Store a PDF file and process it with enhanced error handling.
      *
      * @param file The uploaded file
      * @return The processed PDF document
@@ -57,7 +57,7 @@ public class PdfService {
             // Write the uploaded file to the temporary file
             file.transferTo(tempFile);
 
-            // Process the PDF
+            // Process the PDF with enhanced error handling
             PdfDocument document = pdfProcessor.processPdf(tempFile);
 
             // Check if this document already exists by content hash
@@ -71,14 +71,18 @@ public class PdfService {
                 return pdfRepository.save(document);
             }
         } finally {
-            // Clean up temporary directory
-            tempFile.delete();
-            tempDir.toFile().delete();
+            try {
+                // Clean up temporary directory
+                tempFile.delete();
+                tempDir.toFile().delete();
+            } catch (Exception e) {
+                log.warn("Failed to clean up temporary files: {}", e.getMessage());
+            }
         }
     }
 
     /**
-     * Process a PDF file and store it.
+     * Process a PDF file and store it with enhanced error handling.
      * This is a variant of the storePdf method that works with an already saved file.
      *
      * @param file The PDF file
@@ -94,7 +98,7 @@ public class PdfService {
                 throw new IllegalArgumentException("Only PDF files are allowed");
             }
 
-            // Process the PDF
+            // Process the PDF with enhanced error handling
             PdfDocument document = pdfProcessor.processPdf(file);
             document.setFileName(originalFileName);
 
@@ -135,7 +139,7 @@ public class PdfService {
     }
 
     /**
-     * Get a rendered page image for a PDF document.
+     * Get a rendered page image for a PDF document with enhanced error handling.
      *
      * @param fileId The file ID
      * @param pageNumber The page number (1-based)
@@ -158,6 +162,16 @@ public class PdfService {
                 }
             } catch (Exception e) {
                 log.error("Error generating page image: {}", e.getMessage());
+
+                // Try one more time with a more robust approach
+                try {
+                    generatePageWithRobustRenderer(document, pageNumber);
+                    if (pageFile.exists()) {
+                        return new FileSystemResource(pageFile);
+                    }
+                } catch (Exception e2) {
+                    log.error("Final attempt to generate page image failed: {}", e2.getMessage());
+                }
             }
 
             throw new IllegalArgumentException("Page not found or could not be rendered: " + pageNumber);
@@ -167,17 +181,13 @@ public class PdfService {
     }
 
     /**
-     * Generate a page image for a PDF document.
+     * Generate a page image for a PDF document with standard rendering.
      *
      * @param document The PDF document
      * @param pageNumber The page number (1-based)
      * @throws IOException If there's an error generating the image
      */
     private void generatePageImage(PdfDocument document, int pageNumber) throws IOException {
-        // Implementation depends on your PDF processing logic
-        // Should create the page image file at the expected location
-
-        // Example implementation:
         try (PDDocument pdfDocument = PDDocument.load(new File(document.getFilePath()))) {
             // Check page bounds
             if (pageNumber < 1 || pageNumber > pdfDocument.getNumberOfPages()) {
@@ -185,10 +195,43 @@ public class PdfService {
             }
 
             // Create renderer
-            PDFRenderer renderer = new PDFRenderer(pdfDocument);
+            PdfRenderer robustRenderer = new PdfRenderer(pdfDocument)
+                    .setDefaultDPI(150)
+                    .setImageType(ImageType.RGB);
 
             // Render page (0-based page index)
-            BufferedImage image = renderer.renderImageWithDPI(pageNumber - 1, 150, ImageType.RGB);
+            BufferedImage image = robustRenderer.renderPage(pageNumber - 1);
+
+            // Ensure directories exist
+            Path pagesDir = Paths.get("uploads", "documents", document.getFileId(), "pages");
+            Files.createDirectories(pagesDir);
+
+            // Save image
+            File outputFile = pagesDir.resolve("page_" + pageNumber + ".png").toFile();
+            javax.imageio.ImageIO.write(image, "PNG", outputFile);
+        }
+    }
+
+    /**
+     * Generate a page image with maximum resilience against errors.
+     * Used as a last resort when standard rendering fails.
+     */
+    private void generatePageWithRobustRenderer(PdfDocument document, int pageNumber) throws IOException {
+        // Try with even more robust approach
+        try (PDDocument pdfDocument = PdfLoader.loadDocumentWithFallbackOptions(new File(document.getFilePath()))) {
+            // Check page bounds
+            if (pageNumber < 1 || pageNumber > pdfDocument.getNumberOfPages()) {
+                throw new IllegalArgumentException("Invalid page number: " + pageNumber);
+            }
+
+            // Create an extremely robust renderer with minimal settings
+            PdfRenderer renderer = new PdfRenderer(pdfDocument)
+                    .setDefaultDPI(72) // Use a lower DPI for better reliability
+                    .setFallbackDPI(36) // Very low DPI for extreme fallback
+                    .setImageType(ImageType.RGB);
+
+            // Try to render with all fallbacks enabled
+            BufferedImage image = renderer.renderPage(pageNumber - 1);
 
             // Ensure directories exist
             Path pagesDir = Paths.get("uploads", "documents", document.getFileId(), "pages");
@@ -232,6 +275,19 @@ public class PdfService {
             if (options.containsKey("differenceThreshold")) {
                 differenceThreshold = (String) options.get("differenceThreshold");
             }
+
+            // Add a robustMode option with special parsing for problematic PDFs
+            if (!options.containsKey("robustMode")) {
+                options = new HashMap<>(options);
+                options.put("robustMode", true);
+            }
+        } else {
+            // Create options map with defaults and robustMode
+            options = new HashMap<>();
+            options.put("smartMatching", smartMatching);
+            options.put("textComparisonMethod", textComparisonMethod);
+            options.put("differenceThreshold", differenceThreshold);
+            options.put("robustMode", true);
         }
 
         // Generate a new comparison ID
@@ -249,17 +305,15 @@ public class PdfService {
                 .differenceThreshold(differenceThreshold)
                 .build();
 
-        // Save options to the comparison if provided
-        if (options != null) {
-            // Convert Map<String, Object> to Map<String, String>
-            Map<String, String> stringOptions = new HashMap<>();
-            options.forEach((key, value) -> {
-                if (value != null) {
-                    stringOptions.put(key, value.toString());
-                }
-            });
-            comparison.setOptions(stringOptions);
-        }
+        // Save options to the comparison
+        // Convert Map<String, Object> to Map<String, String>
+        Map<String, String> stringOptions = new HashMap<>();
+        options.forEach((key, value) -> {
+            if (value != null) {
+                stringOptions.put(key, value.toString());
+            }
+        });
+        comparison.setOptions(stringOptions);
 
         // Save the comparison
         comparisonRepository.save(comparison);
@@ -271,7 +325,7 @@ public class PdfService {
     }
 
     /**
-     * Start the comparison process asynchronously.
+     * Start the comparison process asynchronously with improved error handling.
      *
      * @param comparisonId The comparison ID
      */
@@ -288,10 +342,57 @@ public class PdfService {
 
             if (comparison != null) {
                 comparison.setStatus(Comparison.ComparisonStatus.FAILED);
-                comparison.setStatusMessage("Comparison failed: " + e.getMessage());
+
+                // Create a more descriptive error message
+                String errorMessage = "Comparison failed: " + e.getMessage();
+                if (isPdfStreamError(e)) {
+                    errorMessage = "PDF stream errors detected during comparison. The documents may contain damaged or problematic content.";
+                } else if (isRenderingError(e)) {
+                    errorMessage = "PDF rendering errors detected during comparison. Some pages may not be fully compared.";
+                } else if (isOutOfMemoryError(e)) {
+                    errorMessage = "Out of memory error during comparison. The PDF files may be too large or complex.";
+                }
+
+                comparison.setStatusMessage(errorMessage);
                 comparison.setCompletionTime(LocalDateTime.now());
                 comparisonRepository.save(comparison);
             }
         }
+    }
+
+    /**
+     * Check if the error is related to PDF stream issues
+     */
+    private boolean isPdfStreamError(Exception e) {
+        String message = e.getMessage();
+        if (message == null) return false;
+
+        return message.contains("Ascii85") ||
+                message.contains("FlateFilter") ||
+                message.contains("stream") ||
+                message.contains("DataFormatException");
+    }
+
+    /**
+     * Check if the error is related to rendering issues
+     */
+    private boolean isRenderingError(Exception e) {
+        String message = e.getMessage();
+        if (message == null) return false;
+
+        return message.contains("rendering") ||
+                message.contains("bounds") ||
+                message.contains("ArrayIndexOutOfBoundsException") ||
+                message.contains("graphics");
+    }
+
+    /**
+     * Check if the error is related to memory issues
+     */
+
+    private boolean isOutOfMemoryError(Throwable e) {
+        return e instanceof OutOfMemoryError ||
+                (e.getCause() instanceof OutOfMemoryError) ||
+                (e.getMessage() != null && e.getMessage().contains("OutOfMemory"));
     }
 }

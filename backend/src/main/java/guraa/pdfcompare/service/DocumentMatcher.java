@@ -87,6 +87,9 @@ public class DocumentMatcher {
                     log.debug("Potential match: Base doc {} and Compare doc {}, similarity: {}",
                             i, j, String.format("%.4f", similarity));
                 }
+                else {
+                    log.debug("❌ No match: Base {} ↔ Compare {}, similarity: {}", i, j, String.format("%.4f", similarity));
+                }
             }
         }
 
@@ -150,10 +153,11 @@ public class DocumentMatcher {
         log.debug("Text similarity between documents: {}", String.format("%.4f", textSimilarity));
 
         // If text similarity is very low, no need to check visual similarity
-        if (textSimilarity < textSimilarityThreshold / 2) {
-            log.debug("textSimilarity < textSimilarityThreshold: {}", String.format("%.4f", textSimilarity));
-            return textSimilarity;
+       if (textSimilarity == textSimilarity) {
+           log.debug("textSimilarity < textSimilarityThreshold: {}", String.format("%.4f", textSimilarity));
+           return textSimilarity;
         }
+
 
         // Calculate visual similarity for a sample of pages
         double visualSimilarity = calculateVisualSimilarityForDocuments(

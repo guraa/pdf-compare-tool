@@ -139,11 +139,24 @@ public class DifferenceDetectionService {
                     pageDiff.setImageDifferences(imageDiffs);
                 }
 
-                // Compare fonts
-                List<FontAnalyzer.FontInfo> baseFonts = fontAnalyzer.analyzeFontsOnPage(
-                        basePdf, i, comparisonDir.resolve("base_fonts"));
-                List<FontAnalyzer.FontInfo> compareFonts = fontAnalyzer.analyzeFontsOnPage(
-                        comparePdf, i, comparisonDir.resolve("compare_fonts"));
+                // Compare fonts - try to use pre-extracted font information first
+                List<FontAnalyzer.FontInfo> baseFonts = loadPreExtractedFonts(
+                        baseDocument.getFileId(), i + 1);
+                
+                // If pre-extracted fonts not available, extract them now
+                if (baseFonts == null || baseFonts.isEmpty()) {
+                    baseFonts = fontAnalyzer.analyzeFontsOnPage(
+                            basePdf, i, comparisonDir.resolve("base_fonts"));
+                }
+                
+                List<FontAnalyzer.FontInfo> compareFonts = loadPreExtractedFonts(
+                        compareDocument.getFileId(), i + 1);
+                
+                // If pre-extracted fonts not available, extract them now
+                if (compareFonts == null || compareFonts.isEmpty()) {
+                    compareFonts = fontAnalyzer.analyzeFontsOnPage(
+                            comparePdf, i, comparisonDir.resolve("compare_fonts"));
+                }
 
                 List<Difference> fontDiffs = compareFonts(baseFonts, compareFonts);
                 if (!fontDiffs.isEmpty()) {
@@ -850,8 +863,9 @@ public class DifferenceDetectionService {
                     continue;
                 }
 
-                // Check if families match
-                if (baseFont.getFontFamily().equals(compareFont.getFontFamily())) {
+                // Check if families match (with null safety)
+                if (baseFont.getFontFamily() != null && compareFont.getFontFamily() != null && 
+                    baseFont.getFontFamily().equals(compareFont.getFontFamily())) {
                     // Check if other properties match
                     boolean boldMatches = baseFont.isBold() == compareFont.isBold();
                     boolean italicMatches = baseFont.isItalic() == compareFont.isItalic();
@@ -1169,11 +1183,24 @@ public class DifferenceDetectionService {
                     baseDifferences.addAll(baseImageDiffs);
                     compareDifferences.addAll(compareImageDiffs);
 
-                    // Compare fonts
-                    List<FontAnalyzer.FontInfo> baseFonts = fontAnalyzer.analyzeFontsOnPage(
-                            basePdf, basePageIdx, comparisonDir.resolve("base_fonts"));
-                    List<FontAnalyzer.FontInfo> compareFonts = fontAnalyzer.analyzeFontsOnPage(
-                            comparePdf, comparePageIdx, comparisonDir.resolve("compare_fonts"));
+                    // Compare fonts - try to use pre-extracted font information first
+                    List<FontAnalyzer.FontInfo> baseFonts = loadPreExtractedFonts(
+                            baseDocument.getFileId(), basePageIdx + 1);
+                    
+                    // If pre-extracted fonts not available, extract them now
+                    if (baseFonts == null || baseFonts.isEmpty()) {
+                        baseFonts = fontAnalyzer.analyzeFontsOnPage(
+                                basePdf, basePageIdx, comparisonDir.resolve("base_fonts"));
+                    }
+                    
+                    List<FontAnalyzer.FontInfo> compareFonts = loadPreExtractedFonts(
+                            compareDocument.getFileId(), comparePageIdx + 1);
+                    
+                    // If pre-extracted fonts not available, extract them now
+                    if (compareFonts == null || compareFonts.isEmpty()) {
+                        compareFonts = fontAnalyzer.analyzeFontsOnPage(
+                                comparePdf, comparePageIdx, comparisonDir.resolve("compare_fonts"));
+                    }
 
                     List<Difference> fontDiffs = compareFonts(baseFonts, compareFonts);
 
@@ -1300,6 +1327,56 @@ public class DifferenceDetectionService {
         Path detailsPath = Paths.get("uploads", "comparisons", comparisonId,
                 "pair_" + pairIndex + "_page_" + relPageNumber + "_details.json");
         objectMapper.writeValue(detailsPath.toFile(), pageDetails);
+    }
+
+    /**
+     * Load pre-extracted font information from the document's fonts directory.
+     *
+     * @param documentId The document ID
+     * @param pageNumber The page number (1-based)
+     * @return List of font information, or null if not available
+     */
+    private List<FontAnalyzer.FontInfo> loadPreExtractedFonts(String documentId, int pageNumber) {
+        try {
+            // Check if the fonts directory exists for this document
+            Path fontsDir = Paths.get("uploads", "documents", documentId, "fonts");
+            if (!Files.exists(fontsDir)) {
+                return null;
+            }
+            
+            // Look for font information files for this page
+            Path fontInfoPath = fontsDir.resolve("page_" + pageNumber + "_fonts.json");
+            if (!Files.exists(fontInfoPath)) {
+                return null;
+            }
+            
+            // Read and parse the font information
+            try {
+                String fontInfoJson = new String(Files.readAllBytes(fontInfoPath));
+                // If the file exists but is empty or invalid, return null
+                if (fontInfoJson == null || fontInfoJson.trim().isEmpty()) {
+                    return null;
+                }
+                
+                // Parse the JSON into a list of FontInfo objects
+                try {
+                    return objectMapper.readValue(fontInfoPath.toFile(), 
+                            objectMapper.getTypeFactory().constructCollectionType(List.class, FontAnalyzer.FontInfo.class));
+                } catch (Exception e) {
+                    log.warn("Error parsing font information for document {} page {}: {}", 
+                            documentId, pageNumber, e.getMessage());
+                    return null;
+                }
+            } catch (Exception e) {
+                log.warn("Error reading font information for document {} page {}: {}", 
+                        documentId, pageNumber, e.getMessage());
+                return null;
+            }
+        } catch (Exception e) {
+            log.warn("Error accessing font information for document {} page {}: {}", 
+                    documentId, pageNumber, e.getMessage());
+            return null;
+        }
     }
 
     /**

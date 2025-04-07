@@ -96,50 +96,79 @@ public class DocumentMatchingService {
 
             // First, handle matched documents
             for (DocumentMatch match : matches) {
-                DocumentBoundary baseBoundary = baseDocuments.get(match.getBaseDocumentIndex());
-                DocumentBoundary compareBoundary = compareDocuments.get(match.getCompareDocumentIndex());
+                try {
+                    // Get document boundaries
+                    DocumentBoundary baseBoundary = baseDocuments.get(match.getBaseDocumentIndex());
+                    DocumentBoundary compareBoundary = compareDocuments.get(match.getCompareDocumentIndex());
 
-                // Create document pair for matched documents
-                DocumentPair pair = createDocumentPair(
-                        pairIndex++, true, baseBoundary, compareBoundary, match.getSimilarityScore());
+                    // Create document pair for matched documents
+                    DocumentPair pair = createDocumentPair(
+                            pairIndex++, true, baseBoundary, compareBoundary, match.getSimilarityScore());
 
-                // Create page mappings between the two documents
-                pageMatcher.createPageMappings(pair, baseBoundary, compareBoundary, baseTexts, compareTexts,
-                        basePdf, comparePdf, baseRenderer, compareRenderer);
+                    // Create page mappings between the two documents with robust error handling
+                    try {
+                        pageMatcher.createPageMappings(pair, baseBoundary, compareBoundary, baseTexts, compareTexts,
+                                basePdf, comparePdf, baseRenderer, compareRenderer);
+                    } catch (Exception e) {
+                        // If page mapping fails, log error but continue with other documents
+                        log.error("Error creating page mappings for document pair {}: {}", pairIndex - 1, e.getMessage());
+                        // Add empty page mappings list to avoid null pointer exceptions
+                        pair.setPageMappings(new ArrayList<>());
+                    }
+                    
+                    documentPairs.add(pair);
 
-                documentPairs.add(pair);
+                    // Mark these documents as matched
+                    baseBoundary.setMatched(true);
+                    compareBoundary.setMatched(true);
 
-                // Mark these documents as matched
-                baseBoundary.setMatched(true);
-                compareBoundary.setMatched(true);
-
-                log.debug("Created document pair {}: Base pages {}-{}, Compare pages {}-{}, Similarity {}",
-                        pairIndex - 1, pair.getBaseStartPage(), pair.getBaseEndPage(),
-                        pair.getCompareStartPage(), pair.getCompareEndPage(),
-                        String.format("%.2f", pair.getSimilarityScore()));
+                    if (log.isDebugEnabled()) {
+                        log.debug("Created document pair {}: Base pages {}-{}, Compare pages {}-{}, Similarity {}",
+                                pairIndex - 1, pair.getBaseStartPage(), pair.getBaseEndPage(),
+                                pair.getCompareStartPage(), pair.getCompareEndPage(),
+                                String.format("%.4f", pair.getSimilarityScore()));
+                    }
+                } catch (Exception e) {
+                    // If processing a match fails, log error but continue with other matches
+                    log.error("Error processing document match: {}", e.getMessage());
+                }
             }
 
             // Handle unmatched base documents
             for (int i = 0; i < baseDocuments.size(); i++) {
-                DocumentBoundary boundary = baseDocuments.get(i);
-                if (!boundary.isMatched()) {
-                    DocumentPair pair = createBaseOnlyDocumentPair(pairIndex++, boundary);
-                    documentPairs.add(pair);
+                try {
+                    DocumentBoundary boundary = baseDocuments.get(i);
+                    if (!boundary.isMatched()) {
+                        DocumentPair pair = createBaseOnlyDocumentPair(pairIndex++, boundary);
+                        documentPairs.add(pair);
 
-                    log.debug("Created unmatched base document pair {}: Base pages {}-{}",
-                            pairIndex - 1, pair.getBaseStartPage(), pair.getBaseEndPage());
+                        if (log.isDebugEnabled()) {
+                            log.debug("Created unmatched base document pair {}: Base pages {}-{}",
+                                    pairIndex - 1, pair.getBaseStartPage(), pair.getBaseEndPage());
+                        }
+                    }
+                } catch (Exception e) {
+                    // If processing an unmatched document fails, log error but continue
+                    log.error("Error processing unmatched base document: {}", e.getMessage());
                 }
             }
 
             // Handle unmatched compare documents
             for (int i = 0; i < compareDocuments.size(); i++) {
-                DocumentBoundary boundary = compareDocuments.get(i);
-                if (!boundary.isMatched()) {
-                    DocumentPair pair = createCompareOnlyDocumentPair(pairIndex++, boundary);
-                    documentPairs.add(pair);
+                try {
+                    DocumentBoundary boundary = compareDocuments.get(i);
+                    if (!boundary.isMatched()) {
+                        DocumentPair pair = createCompareOnlyDocumentPair(pairIndex++, boundary);
+                        documentPairs.add(pair);
 
-                    log.debug("Created unmatched compare document pair {}: Compare pages {}-{}",
-                            pairIndex - 1, pair.getCompareStartPage(), pair.getCompareEndPage());
+                        if (log.isDebugEnabled()) {
+                            log.debug("Created unmatched compare document pair {}: Compare pages {}-{}",
+                                    pairIndex - 1, pair.getCompareStartPage(), pair.getCompareEndPage());
+                        }
+                    }
+                } catch (Exception e) {
+                    // If processing an unmatched document fails, log error but continue
+                    log.error("Error processing unmatched compare document: {}", e.getMessage());
                 }
             }
 

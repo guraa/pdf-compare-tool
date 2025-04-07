@@ -1,14 +1,16 @@
 package guraa.pdfcompare.util;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -16,9 +18,12 @@ import java.util.stream.Collectors;
 public class FontAnalyzer {
 
     private final FontHandler fontHandler;
+    private final ObjectMapper objectMapper;
 
     /**
      * Analyze fonts used on a specific page in a PDF document.
+     * This method first checks if pre-extracted font information exists in the output directory.
+     * If it does, it loads that information instead of re-extracting the fonts.
      *
      * @param document The PDF document
      * @param pageIndex The zero-based page index
@@ -27,23 +32,37 @@ public class FontAnalyzer {
      */
     public List<FontInfo> analyzeFontsOnPage(PDDocument document, int pageIndex, Path outputDir) {
         List<FontInfo> fontInfoList = new ArrayList<>();
+        int pageNumber = pageIndex + 1;
 
         try {
-            // Use the robust font handler to extract font information
-            List<FontHandler.FontInfo> handlerFonts = fontHandler.extractFontsFromPage(document, pageIndex);
-
-            // Convert from handler FontInfo to our FontInfo
-            fontInfoList = handlerFonts.stream()
-                    .map(this::convertToFontInfo)
-                    .collect(Collectors.toList());
-
-            log.debug("Extracted {} fonts from page {}", fontInfoList.size(), pageIndex + 1);
-
-            // Log any damaged fonts that were detected
-            int damagedFonts = (int) handlerFonts.stream().filter(FontHandler.FontInfo::isDamaged).count();
-            if (damagedFonts > 0) {
-                log.warn("Detected {} damaged fonts on page {} that were safely handled",
-                        damagedFonts, pageIndex + 1);
+            // First check if we already have font information saved
+            Path fontInfoPath = outputDir.resolve(String.format("page_%d_fonts.json", pageNumber));
+            if (Files.exists(fontInfoPath)) {
+                try {
+                    // Try to load the pre-extracted font information
+                    fontInfoList = objectMapper.readValue(fontInfoPath.toFile(),
+                            objectMapper.getTypeFactory().constructCollectionType(List.class, FontInfo.class));
+                    
+                    if (fontInfoList != null && !fontInfoList.isEmpty()) {
+                        log.debug("Loaded {} pre-extracted fonts for page {} from {}", 
+                                fontInfoList.size(), pageNumber, fontInfoPath);
+                        return fontInfoList;
+                    }
+                } catch (Exception e) {
+                    log.warn("Error loading pre-extracted font information for page {}: {}", 
+                            pageNumber, e.getMessage());
+                }
+            }
+            try {
+                // Ensure the output directory exists
+                Files.createDirectories(outputDir);
+                
+                // Save the font information as JSON
+                File fontInfoFile = fontInfoPath.toFile();
+                objectMapper.writeValue(fontInfoFile, fontInfoList);
+                log.debug("Saved font information for page {} to {}", pageNumber, fontInfoFile.getPath());
+            } catch (Exception e) {
+                log.warn("Error saving font information as JSON for page {}: {}", pageNumber, e.getMessage());
             }
 
         } catch (Exception e) {

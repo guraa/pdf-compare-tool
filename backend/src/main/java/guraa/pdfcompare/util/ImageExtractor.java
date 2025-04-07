@@ -18,10 +18,7 @@ import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
 import java.awt.geom.Point2D;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -71,11 +68,16 @@ public class ImageExtractor extends PDFStreamEngine {
             outDir.mkdirs();
         }
 
-        // Process the page to extract images
         try {
+            // Extract images using PDFBox
             processPage(currentPage);
+        } catch (EOFException e) {
+            log.warn("EOF error encountered while extracting images from page {}: {}", pageIndex + 1, e.getMessage());
+            // Return any partially extracted images
+            return new ArrayList<>(threadLocalImages.get());
         } catch (IOException e) {
             log.error("Error processing page for image extraction", e);
+            throw e;
         }
 
         // Save extracted images to files

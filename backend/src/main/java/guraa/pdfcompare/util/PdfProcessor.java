@@ -4,14 +4,10 @@ import guraa.pdfcompare.model.PdfDocument;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
-import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.rendering.ImageType;
-import org.apache.pdfbox.rendering.PDFRenderer;
-import org.apache.pdfbox.rendering.RenderDestination;
 import org.apache.pdfbox.tools.imageio.ImageIOUtil;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -46,12 +42,13 @@ public class PdfProcessor {
     private static final int THUMBNAIL_DPI = 72;
     private static final int MAX_RETRIES = 3;
 
-    // Track problematic fonts to avoid repeated errors
-    private final Map<String, Boolean> problematicFonts = new HashMap<>();
+    // Global flags for problem detection
+    private final ThreadLocal<Boolean> hasRenderingProblems = ThreadLocal.withInitial(() -> false);
+    private final ThreadLocal<Boolean> hasStreamProblems = ThreadLocal.withInitial(() -> false);
+    private final ThreadLocal<Boolean> hasFontProblems = ThreadLocal.withInitial(() -> false);
 
     /**
-     * Process a PDF file and extract its metadata and structure.
-     * This implementation uses parallel processing for page operations.
+     * Process a PDF file and extract its metadata and structure with enhanced error handling.
      *
      * @param uploadedFile The uploaded PDF file
      * @return PdfDocument object with extracted metadata
@@ -72,9 +69,17 @@ public class PdfProcessor {
         // Calculate MD5 hash for the document
         String contentHash = calculateMD5(storedFile);
 
-        try (PDDocument document = PdfLoader.loadDocument(storedFile)) {
-            // Detect problematic fonts that might cause issues later
-            detectProblematicFonts(document);
+        // Reset problem flags
+        hasRenderingProblems.set(false);
+        hasStreamProblems.set(false);
+        hasFontProblems.set(false);
+
+        try (PDDocument document = PDDocument.load(storedFile)) {
+            // Create a robust renderer for this document
+            PdfRenderer robustRenderer = new PdfRenderer(document)
+                    .setDefaultDPI(DEFAULT_DPI)
+                    .setFallbackDPI(THUMBNAIL_DPI)
+                    .setImageType(ImageType.RGB);
 
             // Extract metadata
             Map<String, String> metadata = extractMetadata(document);
@@ -104,10 +109,6 @@ public class PdfProcessor {
 
             log.info("Processing PDF with {} pages using parallel execution", pageCount);
 
-            // Create a PDFRenderer with error handling options
-            PDFRenderer renderer = new PDFRenderer(document);
-            renderer.setSubsamplingAllowed(true); // Allow subsampling for problematic pages
-
             // Create a list to hold all the futures
             List<CompletableFuture<Void>> futures = new ArrayList<>();
 
@@ -130,21 +131,15 @@ public class PdfProcessor {
                                 log.info("Retry #{} for page {}", retries, pageIndex + 1);
                             }
 
-                            // Process with lower DPI on retries
-                            int dpi = retries == 0 ? DEFAULT_DPI : (DEFAULT_DPI / (retries + 1));
-                            int thumbDpi = retries == 0 ? THUMBNAIL_DPI : (THUMBNAIL_DPI / (retries + 1));
-
-                            processPage(
+                            processPageWithRobustHandling(
                                     document,
-                                    renderer,
+                                    robustRenderer,
                                     pageIndex,
                                     pagesDir,
                                     thumbnailsDir,
                                     textDir,
                                     imagesDir,
-                                    fontsDir,
-                                    dpi,
-                                    thumbDpi
+                                    fontsDir
                             );
 
                             success = true;
@@ -171,16 +166,53 @@ public class PdfProcessor {
                 futures.add(future);
             }
 
-            // Wait for all page processing to complete
+            // Wait for all page processing to complete with timeout
             try {
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-
-                log.info("PDF processing completed: {} pages processed successfully, {} pages failed",
-                        successfulPages.get(), failedPages.get());
+                // Convert CompletableFuture array to array with timeout
+                CompletableFuture<?>[] futuresArray = futures.toArray(new CompletableFuture[0]);
+                
+                // Use a timeout for the overall operation
+                CompletableFuture<Void> allFutures = CompletableFuture.allOf(futuresArray);
+                
+                try {
+                    // Wait for completion with a timeout of 5 minutes
+                    allFutures.orTimeout(5, java.util.concurrent.TimeUnit.MINUTES).join();
+                    
+                    log.info("PDF processing completed: {} pages processed successfully, {} pages failed",
+                            successfulPages.get(), failedPages.get());
+                } catch (java.util.concurrent.CompletionException e) {
+                    // Handle timeout or other completion exceptions
+                    if (e.getCause() instanceof java.util.concurrent.TimeoutException) {
+                        log.error("PDF processing timed out after 5 minutes. Some pages may not be processed.");
+                        metadata.put("processingWarning", "Processing timed out, results may be incomplete");
+                        
+                        // Cancel any remaining futures
+                        for (CompletableFuture<?> future : futuresArray) {
+                            if (!future.isDone()) {
+                                future.cancel(true);
+                            }
+                        }
+                    } else {
+                        log.error("Error during parallel PDF processing", e);
+                        metadata.put("processingError", "Document processing encountered errors");
+                    }
+                }
+                
+                // Add processing flags to metadata if problems were detected
+                if (hasRenderingProblems.get()) {
+                    metadata.put("processingNote", "Document has rendering issues that were handled");
+                }
+                if (hasStreamProblems.get()) {
+                    metadata.put("streamWarning", "Document contains problematic data streams");
+                }
+                if (hasFontProblems.get()) {
+                    metadata.put("fontWarning", "Document contains problematic fonts");
+                }
 
             } catch (Exception e) {
-                log.error("Error during parallel PDF processing", e);
-
+                log.error("Unexpected error during PDF processing", e);
+                metadata.put("processingError", "Document processing encountered unexpected errors");
+                
                 // Check for known PDFBox errors
                 if (isKnownPdfBoxIssue(e)) {
                     log.warn("Detected PDF with known processing issue. Continuing with partial results.");
@@ -206,6 +238,185 @@ public class PdfProcessor {
     }
 
     /**
+     * Process a page with robust error handling for each component.
+     */
+    private void processPageWithRobustHandling(
+            PDDocument document,
+            PdfRenderer robustRenderer,
+            int pageIndex,
+            Path pagesDir,
+            Path thumbnailsDir,
+            Path textDir,
+            Path imagesDir,
+            Path fontsDir) throws IOException {
+
+        int pageNumber = pageIndex + 1;
+        log.debug("Processing page {} in thread {}", pageNumber, Thread.currentThread().getName());
+
+        // 1. Render the page with robust handling
+        try {
+            // Use our robust renderer
+            BufferedImage image = robustRenderer.renderPage(pageIndex);
+
+            // Save the rendered page
+            File pageImageFile = pagesDir.resolve(String.format("page_%d.png", pageNumber)).toFile();
+            ImageIOUtil.writeImage(image, pageImageFile.getAbsolutePath(), DEFAULT_DPI);
+
+            // Generate a thumbnail
+            // Scale down the main image for the thumbnail rather than re-rendering
+            BufferedImage thumbnail = createThumbnail(image);
+            File thumbnailFile = thumbnailsDir.resolve(String.format("page_%d_thumbnail.png", pageNumber)).toFile();
+            ImageIOUtil.writeImage(thumbnail, thumbnailFile.getAbsolutePath(), THUMBNAIL_DPI);
+        } catch (Exception e) {
+            log.warn("Error rendering page {} with robust renderer: {}", pageNumber, e.getMessage());
+            hasRenderingProblems.set(true);
+
+            // Create placeholder images
+            createPlaceholderImage(pagesDir.resolve(String.format("page_%d.png", pageNumber)).toFile(),
+                    "Error rendering page " + pageNumber, 800, 1000);
+            createPlaceholderImage(thumbnailsDir.resolve(String.format("page_%d_thumbnail.png", pageNumber)).toFile(),
+                    "Error", 200, 250);
+        }
+
+        // 2. Extract text using robust methods
+        try {
+            // Try multiple text extraction approaches
+            String pageText = extractTextWithFallbacks(document, pageIndex);
+
+            File pageTextFile = textDir.resolve(String.format("page_%d.txt", pageNumber)).toFile();
+            FileUtils.writeStringToFile(pageTextFile, pageText, "UTF-8");
+
+            // Extract detailed text elements - don't fail if this errors
+            List<TextElement> textElements = new ArrayList<>();
+            try {
+                textElements = textExtractor.extractTextElementsFromPage(document, pageIndex);
+            } catch (Exception e) {
+                log.warn("Error extracting text elements from page {}: {}", pageNumber, e.getMessage());
+                hasStreamProblems.set(true);
+            }
+
+            if (!textElements.isEmpty()) {
+                File textElementsFile = textDir.resolve(String.format("page_%d_elements.json", pageNumber)).toFile();
+                FileUtils.writeStringToFile(textElementsFile, convertElementsToJson(textElements), "UTF-8");
+            }
+        } catch (Exception e) {
+            log.error("Complete text extraction failure for page {}: {}", pageNumber, e.getMessage());
+            hasStreamProblems.set(true);
+
+            // Create minimal text file
+            try {
+                File pageTextFile = textDir.resolve(String.format("page_%d.txt", pageNumber)).toFile();
+                FileUtils.writeStringToFile(pageTextFile, "[Text extraction failed for this page]", "UTF-8");
+            } catch (IOException ioe) {
+                log.error("Error creating placeholder text file", ioe);
+            }
+        }
+
+        // 3. Extract images with error handling
+        try {
+            try {
+                // Use a try-catch block just for this operation
+                imageExtractor.extractImagesFromPage(document, pageIndex, imagesDir);
+            } catch (Exception e) {
+                log.warn("Error extracting images from page {}: {}", pageNumber, e.getMessage());
+                hasStreamProblems.set(true);
+
+                // Create a placeholder image file to indicate there was an extraction attempt
+                File placeholderFile = imagesDir.resolve(String.format("page_%d_image_error.txt", pageNumber)).toFile();
+                FileUtils.writeStringToFile(placeholderFile, "Image extraction failed: " + e.getMessage(), "UTF-8");
+            }
+        } catch (Exception e) {
+            log.error("Unexpected error during image extraction for page {}: {}", pageNumber, e.getMessage());
+        }
+
+        // 4. Extract fonts with error handling
+        try {
+            try {
+                // Use robust font extractor to analyze fonts and save to JSON
+                List<FontAnalyzer.FontInfo> fontInfoList = fontAnalyzer.analyzeFontsOnPage(document, pageIndex, fontsDir);
+                
+                // Save the font information as JSON for later reuse during comparison
+                if (fontInfoList != null && !fontInfoList.isEmpty()) {
+                    try {
+                        // Create a JSON file with the font information
+                        File fontInfoFile = fontsDir.resolve(String.format("page_%d_fonts.json", pageNumber)).toFile();
+                        
+                        // Convert the font info list to JSON and save it
+                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                        mapper.writeValue(fontInfoFile, fontInfoList);
+                        
+                        log.debug("Saved font information for page {} to {}", pageNumber, fontInfoFile.getPath());
+                    } catch (Exception jsonEx) {
+                        log.warn("Error saving font information as JSON for page {}: {}", pageNumber, jsonEx.getMessage());
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Error analyzing fonts on page {}: {}", pageNumber, e.getMessage());
+                hasFontProblems.set(true);
+
+                // Create a placeholder font info file
+                File placeholderFile = fontsDir.resolve(String.format("page_%d_fonts_error.txt", pageNumber)).toFile();
+                FileUtils.writeStringToFile(placeholderFile, "Font analysis failed: " + e.getMessage(), "UTF-8");
+            }
+        } catch (Exception e) {
+            log.error("Unexpected error during font analysis for page {}: {}", pageNumber, e.getMessage());
+        }
+    }
+
+    /**
+     * Try multiple text extraction approaches with fallbacks.
+     */
+    private String extractTextWithFallbacks(PDDocument document, int pageIndex) {
+        String pageText = null;
+
+        // Attempt 1: Use the regular text extractor
+        try {
+            pageText = textExtractor.extractTextFromPage(document, pageIndex);
+            if (pageText != null && !pageText.trim().isEmpty()) {
+                return pageText;
+            }
+        } catch (Exception e) {
+            log.warn("Primary text extraction failed for page {}: {}", pageIndex + 1, e.getMessage());
+        }
+
+        // Attempt 2: Use the fallback text extractor
+        try {
+            PDFTextExtractorFallback fallbackExtractor = new PDFTextExtractorFallback();
+            pageText = fallbackExtractor.extractTextFromPage(document, pageIndex);
+            if (pageText != null && !pageText.trim().isEmpty()) {
+                hasStreamProblems.set(true); // Mark that we had to use fallback
+                return pageText;
+            }
+        } catch (Exception e) {
+            log.warn("Fallback text extraction failed for page {}: {}", pageIndex + 1, e.getMessage());
+        }
+
+        // Attempt 3: Try with an extremely simplified approach, just get character data
+        try {
+            // This uses a very basic approach that just gets character data
+            StringBuilder sb = new StringBuilder();
+            PDPage page = document.getPage(pageIndex);
+
+            // Extract characters using a specialized extractor
+            // This is a minimalist implementation that should work even with damaged PDFs
+            CharacterExtractor extractor = new CharacterExtractor();
+            String basicText = extractor.extractBasicText(page);
+
+            if (basicText != null && !basicText.isEmpty()) {
+                sb.append("[Warning: Using emergency text extraction due to PDF issues]\n\n");
+                sb.append(basicText);
+                hasStreamProblems.set(true);
+                return sb.toString();
+            }
+        } catch (Exception e) {
+            log.warn("Emergency text extraction failed for page {}: {}", pageIndex + 1, e.getMessage());
+        }
+
+        // If all attempts fail, return a placeholder
+        return "[This page contains no extractable text or text extraction failed]";
+    }
+
+    /**
      * Creates placeholder files for a page that failed to process.
      */
     private void createPlaceholderFiles(int pageIndex, Path pagesDir, Path thumbnailsDir, Path textDir) {
@@ -217,7 +428,7 @@ public class PdfProcessor {
             FileUtils.writeStringToFile(textFile,
                     "This page could not be processed due to PDF parsing errors.", "UTF-8");
 
-            // Create placeholder image files if needed
+            // Create placeholder image files
             createPlaceholderImage(pagesDir.resolve("page_" + pageNumber + ".png").toFile(),
                     "Page " + pageNumber + " could not be rendered", 800, 1000);
 
@@ -263,282 +474,38 @@ public class PdfProcessor {
     }
 
     /**
-     * Create rendering hints for more robust PDF rendering.
+     * Create a thumbnail from a full-size image.
+     *
+     * @param image The full-size image
+     * @return A scaled-down thumbnail
      */
-    private Map<String, Object> createRobustRenderingHints() {
-        Map<String, Object> hints = new HashMap<>();
+    private BufferedImage createThumbnail(BufferedImage image) {
+        int maxWidth = 300;
+        int maxHeight = 400;
 
-        // Add rendering hints to improve robustness
-        hints.put(RenderDestination.EXPORT.toString(), Boolean.TRUE);  // Optimize for export quality
-        hints.put("org.apache.pdfbox.rendering.UsePureJavaCMYKConversion", Boolean.TRUE);  // More reliable color conversion
+        double scale = Math.min(
+                (double)maxWidth / image.getWidth(),
+                (double)maxHeight / image.getHeight()
+        );
 
-        return hints;
-    }
+        int scaledWidth = (int)(image.getWidth() * scale);
+        int scaledHeight = (int)(image.getHeight() * scale);
 
-    /**
-     * Detect problematic fonts in the document to avoid repeated errors.
-     */
-    private void detectProblematicFonts(PDDocument document) {
-        problematicFonts.clear();
+        BufferedImage thumbnail = new BufferedImage(scaledWidth, scaledHeight, BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = thumbnail.createGraphics();
 
-        try {
-            // Sample a few pages to detect font issues
-            int pageCount = document.getNumberOfPages();
-            int sampleSize = Math.min(3, pageCount);
+        // Configure for quality scaling
+        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING,
+                java.awt.RenderingHints.VALUE_RENDER_QUALITY);
+        g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
 
-            for (int i = 0; i < sampleSize; i++) {
-                PDPage page = document.getPage(i);
-                try {
-                    if (page.getResources() != null) {
-                        // Get font names using the getFontNames method
-                        Iterable<COSName> fontNames = page.getResources().getFontNames();
+        g.drawImage(image, 0, 0, scaledWidth, scaledHeight, null);
+        g.dispose();
 
-                        for (COSName fontName : fontNames) {
-                            try {
-                                // Try to get the font - this may throw exceptions for problematic fonts
-                                PDFont font = page.getResources().getFont(fontName);
-
-                                if (font != null) {
-                                    String fontNameStr = font.getName();
-
-                                    // Try a basic operation that might trigger embedded font issues
-                                    font.isEmbedded();
-
-                                    // Font seems okay
-                                    problematicFonts.put(fontNameStr, false);
-                                }
-                            } catch (Exception e) {
-                                // If we get Ascii85 errors or other font issues, mark as problematic
-                                if (e.getMessage() != null &&
-                                        (e.getMessage().contains("Ascii85") ||
-                                                e.getMessage().contains("embedded") ||
-                                                e.getMessage().contains("NullPointerException"))) {
-
-                                    String fontNameStr = fontName.getName();
-                                    log.warn("Detected problematic font: {} - {}", fontNameStr, e.getMessage());
-                                    problematicFonts.put(fontNameStr, true);
-                                }
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    log.warn("Error checking fonts on page {}: {}", i, e.getMessage());
-                }
-            }
-
-            // Log how many problematic fonts were detected
-            int problemCount = 0;
-            for (Boolean isProblematic : problematicFonts.values()) {
-                if (isProblematic) problemCount++;
-            }
-
-            if (problemCount > 0) {
-                log.warn("Detected {} problematic fonts in the document that may cause rendering issues",
-                        problemCount);
-            }
-
-        } catch (Exception e) {
-            log.warn("Error detecting problematic fonts: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Process a single page of a PDF document with error handling.
-     */
-    private void processPage(
-            PDDocument document,
-            PDFRenderer renderer,
-            int pageIndex,
-            Path pagesDir,
-            Path thumbnailsDir,
-            Path textDir,
-            Path imagesDir,
-            Path fontsDir,
-            int dpi,
-            int thumbDpi) throws IOException {
-
-        int pageNumber = pageIndex + 1;
-        log.debug("Processing page {} in thread {}", pageNumber, Thread.currentThread().getName());
-
-        try {
-            // Render the page to an image (full resolution)
-            BufferedImage image = renderer.renderImageWithDPI(pageIndex, dpi, ImageType.RGB);
-
-            // Save the rendered page
-            File pageImageFile = pagesDir.resolve(String.format("page_%d.png", pageNumber)).toFile();
-            ImageIOUtil.writeImage(image, pageImageFile.getAbsolutePath(), dpi);
-
-            // Generate a thumbnail for quick preview
-            BufferedImage thumbnail = renderer.renderImageWithDPI(pageIndex, thumbDpi, ImageType.RGB);
-            File thumbnailFile = thumbnailsDir.resolve(String.format("page_%d_thumbnail.png", pageNumber)).toFile();
-            ImageIOUtil.writeImage(thumbnail, thumbnailFile.getAbsolutePath(), thumbDpi);
-        } catch (Exception e) {
-            log.warn("Error rendering page {}: {}", pageNumber, e.getMessage());
-            // Create placeholder image for failed rendering
-            createPlaceholderImage(pagesDir.resolve(String.format("page_%d.png", pageNumber)).toFile(),
-                    "Error rendering page " + pageNumber, 800, 1000);
-            createPlaceholderImage(thumbnailsDir.resolve(String.format("page_%d_thumbnail.png", pageNumber)).toFile(),
-                    "Error", 200, 250);
-        }
-
-        try {
-            // Extract text from the page - with retry on error
-            String pageText = null;
-            try {
-                pageText = textExtractor.extractTextFromPage(document, pageIndex);
-            } catch (Exception e) {
-                log.warn("Error extracting text from page {}, using fallback method: {}", pageNumber, e.getMessage());
-                // Try fallback text extraction
-                PDFTextExtractorFallback fallbackExtractor = new PDFTextExtractorFallback();
-                pageText = fallbackExtractor.extractTextFromPage(document, pageIndex);
-            }
-
-            // If still null, use empty string
-            if (pageText == null) {
-                pageText = "[Text extraction failed for this page]";
-            }
-
-            File pageTextFile = textDir.resolve(String.format("page_%d.txt", pageNumber)).toFile();
-            FileUtils.writeStringToFile(pageTextFile, pageText, "UTF-8");
-
-            // Extract detailed text elements with position information - don't fail if it errors
-            List<TextElement> textElements = new ArrayList<>();
-            try {
-                textElements = textExtractor.extractTextElementsFromPage(document, pageIndex);
-            } catch (Exception e) {
-                log.warn("Error extracting text elements from page {}: {}", pageNumber, e.getMessage());
-            }
-
-            if (!textElements.isEmpty()) {
-                File textElementsFile = textDir.resolve(String.format("page_%d_elements.json", pageNumber)).toFile();
-                FileUtils.writeStringToFile(textElementsFile, convertElementsToJson(textElements), "UTF-8");
-            }
-        } catch (Exception e) {
-            log.error("Error processing text for page {}: {}", pageNumber, e.getMessage());
-            // Create minimal text file
-            try {
-                File pageTextFile = textDir.resolve(String.format("page_%d.txt", pageNumber)).toFile();
-                FileUtils.writeStringToFile(pageTextFile, "[Text extraction failed]", "UTF-8");
-            } catch (IOException ioe) {
-                log.error("Error creating placeholder text file", ioe);
-            }
-        }
-
-        try {
-            // Extract images from the page - continue if it fails
-            try {
-                imageExtractor.extractImagesFromPage(document, pageIndex, imagesDir);
-            } catch (Exception e) {
-                log.warn("Error extracting images from page {}: {}", pageNumber, e.getMessage());
-            }
-
-            // Extract fonts from the page - continue if it fails
-            try {
-                fontAnalyzer.analyzeFontsOnPage(document, pageIndex, fontsDir);
-            } catch (Exception e) {
-                log.warn("Error analyzing fonts on page {}: {}", pageNumber, e.getMessage());
-            }
-        } catch (Exception e) {
-            log.error("Complete failure processing page {}: {}", pageNumber, e.getMessage());
-            throw e; // Propagate to retry logic
-        }
-    }
-
-    /**
-     * Check if the exception is from a known PDFBox issue that we can safely continue with.
-     */
-    private boolean isKnownPdfBoxIssue(Exception e) {
-        if (e == null) return false;
-
-        // Check recursion
-        if (e.getMessage() != null && e.getMessage().contains("recursion")) {
-            return true;
-        }
-
-        // Check for ASCII85 stream errors
-        if (e.getMessage() != null && e.getMessage().contains("Ascii85")) {
-            return true;
-        }
-
-        // Check embedded font errors
-        if (e.getMessage() != null && e.getMessage().contains("embedded")) {
-            return true;
-        }
-
-        // Check font-related errors in the cause chain
-        Throwable cause = e.getCause();
-        while (cause != null) {
-            if (cause.getMessage() != null &&
-                    (cause.getMessage().contains("font") ||
-                            cause.getMessage().contains("Ascii85") ||
-                            cause.getMessage().contains("embedded"))) {
-                return true;
-            }
-            cause = cause.getCause();
-        }
-
-        // Check for ArrayIndexOutOfBoundsException
-        if (isArrayIndexOutOfBoundsException(e)) {
-            return true;
-        }
-
-        // Check for other PDFBox rendering issues
-        if (isPdfBoxRenderingError(e)) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if the exception is or contains an ArrayIndexOutOfBoundsException
-     */
-    private boolean isArrayIndexOutOfBoundsException(Exception e) {
-        if (e instanceof ArrayIndexOutOfBoundsException) {
-            return true;
-        }
-
-        // Check if the cause is an ArrayIndexOutOfBoundsException
-        Throwable cause = e.getCause();
-        while (cause != null) {
-            if (cause instanceof ArrayIndexOutOfBoundsException) {
-                return true;
-            }
-
-            // Check if the message contains "ArrayIndexOutOfBoundsException"
-            if (cause.getMessage() != null && cause.getMessage().contains("ArrayIndexOutOfBoundsException")) {
-                return true;
-            }
-
-            cause = cause.getCause();
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if the exception is related to PDFBox rendering
-     */
-    private boolean isPdfBoxRenderingError(Exception e) {
-        // Check if the exception or any of its causes is from PDFBox rendering
-        Throwable cause = e;
-        while (cause != null) {
-            // Check if the stack trace contains PDFBox rendering classes
-            StackTraceElement[] stackTrace = cause.getStackTrace();
-            for (StackTraceElement element : stackTrace) {
-                String className = element.getClassName();
-                if (className.startsWith("org.apache.pdfbox.rendering") ||
-                        className.startsWith("org.apache.pdfbox.pdmodel") ||
-                        className.startsWith("org.apache.pdfbox.contentstream") ||
-                        className.startsWith("org.apache.pdfbox.filter")) {
-                    return true;
-                }
-            }
-
-            cause = cause.getCause();
-        }
-
-        return false;
+        return thumbnail;
     }
 
     /**
@@ -628,32 +595,6 @@ public class PdfProcessor {
     }
 
     /**
-     * Get a rendered page image for a PDF document.
-     *
-     * @param pdfDocument The PDF document
-     * @param pageNumber The page number (1-based index)
-     * @return File reference to the rendered page image
-     */
-    public File getRenderedPage(PdfDocument pdfDocument, int pageNumber) {
-        Path pageImagePath = Paths.get("uploads", "documents", pdfDocument.getFileId(),
-                "pages", String.format("page_%d.png", pageNumber));
-        return pageImagePath.toFile();
-    }
-
-    /**
-     * Get a rendered page thumbnail for a PDF document.
-     *
-     * @param pdfDocument The PDF document
-     * @param pageNumber The page number (1-based index)
-     * @return File reference to the rendered page thumbnail
-     */
-    public File getPageThumbnail(PdfDocument pdfDocument, int pageNumber) {
-        Path thumbnailPath = Paths.get("uploads", "documents", pdfDocument.getFileId(),
-                "thumbnails", String.format("page_%d_thumbnail.png", pageNumber));
-        return thumbnailPath.toFile();
-    }
-
-    /**
      * Convert TextElement list to JSON string.
      *
      * @param elements List of text elements
@@ -700,5 +641,120 @@ public class PdfProcessor {
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")
                 .replace("\t", "\\t");
+    }
+
+    /**
+     * Check if the exception is from a known PDFBox issue that we can safely continue with.
+     */
+    private boolean isKnownPdfBoxIssue(Exception e) {
+        if (e == null) return false;
+
+        // Check recursion
+        if (e.getMessage() != null && e.getMessage().contains("recursion")) {
+            return true;
+        }
+
+        // Check for ASCII85 stream errors
+        if (e.getMessage() != null && e.getMessage().contains("Ascii85")) {
+            return true;
+        }
+
+        // Check embedded font errors
+        if (e.getMessage() != null && e.getMessage().contains("embedded")) {
+            return true;
+        }
+
+        // Check FlateFilter errors
+        if (e.getMessage() != null && (
+                e.getMessage().contains("FlateFilter") ||
+                        e.getMessage().contains("premature end of stream") ||
+                        e.getMessage().contains("DataFormatException"))) {
+            return true;
+        }
+
+        // Check array index bounds errors
+        if (e.getMessage() != null && e.getMessage().contains("Index") &&
+                e.getMessage().contains("out of bounds")) {
+            return true;
+        }
+
+        // Check font-related errors in the cause chain
+        Throwable cause = e.getCause();
+        while (cause != null) {
+            if (cause.getMessage() != null &&
+                    (cause.getMessage().contains("font") ||
+                            cause.getMessage().contains("Ascii85") ||
+                            cause.getMessage().contains("embedded") ||
+                            cause.getMessage().contains("FlateFilter") ||
+                            cause.getMessage().contains("DataFormatException") ||
+                            cause.getMessage().contains("Index") &&
+                                    cause.getMessage().contains("out of bounds"))) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+
+        // Check for ArrayIndexOutOfBoundsException
+        if (isArrayIndexOutOfBoundsException(e)) {
+            return true;
+        }
+
+        // Check for other PDFBox rendering issues
+        if (isPdfBoxRenderingError(e)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if the exception is or contains an ArrayIndexOutOfBoundsException
+     */
+    private boolean isArrayIndexOutOfBoundsException(Exception e) {
+        if (e instanceof ArrayIndexOutOfBoundsException) {
+            return true;
+        }
+
+        // Check if the cause is an ArrayIndexOutOfBoundsException
+        Throwable cause = e.getCause();
+        while (cause != null) {
+            if (cause instanceof ArrayIndexOutOfBoundsException) {
+                return true;
+            }
+
+            // Check if the message contains "ArrayIndexOutOfBoundsException"
+            if (cause.getMessage() != null && cause.getMessage().contains("ArrayIndexOutOfBoundsException")) {
+                return true;
+            }
+
+            cause = cause.getCause();
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if the exception is related to PDFBox rendering
+     */
+    private boolean isPdfBoxRenderingError(Exception e) {
+        // Check if the exception or any of its causes is from PDFBox rendering
+        Throwable cause = e;
+        while (cause != null) {
+            // Check if the stack trace contains PDFBox rendering classes
+            StackTraceElement[] stackTrace = cause.getStackTrace();
+            for (StackTraceElement element : stackTrace) {
+                String className = element.getClassName();
+                if (className.startsWith("org.apache.pdfbox.rendering") ||
+                        className.startsWith("org.apache.pdfbox.pdmodel") ||
+                        className.startsWith("org.apache.pdfbox.contentstream") ||
+                        className.startsWith("org.apache.pdfbox.filter")) {
+                    return true;
+                }
+            }
+
+            cause = cause.getCause();
+        }
+
+        return false;
     }
 }

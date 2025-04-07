@@ -8,6 +8,7 @@ import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -16,16 +17,32 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Utility class for robust font handling that can recover from PDFBox font errors.
+ * Optimized utility class for robust font handling that can recover from PDFBox font errors.
+ * Includes caching, timeout mechanisms, and performance optimizations.
  */
 @Slf4j
 @Component
 public class FontHandler {
 
+    // Cache for font information to avoid repeated extraction
+    private final Map<String, FontInfo> fontCache = new ConcurrentHashMap<>();
+    
+    // Flag to enable/disable detailed font analysis
+    @Value("${app.font.detailed-analysis:false}")
+    private boolean detailedFontAnalysis;
+    
+    // Maximum time to spend on font extraction per page (in milliseconds)
+    @Value("${app.font.extraction-timeout-ms:2000}")
+    private long fontExtractionTimeoutMs;
+
     /**
      * Safely extracts font information from a PDF page, handling potential font errors.
+     * Includes optimizations for performance and robustness.
      *
      * @param document The PDF document
      * @param pageIndex The 0-based page index
@@ -34,54 +51,156 @@ public class FontHandler {
     public List<FontInfo> extractFontsFromPage(PDDocument document, int pageIndex) {
         List<FontInfo> fontInfoList = new ArrayList<>();
         Map<String, PDFont> fontMap = new HashMap<>();
+        
+        // Skip detailed font analysis if disabled
+        if (!detailedFontAnalysis) {
+            // Return minimal font info (just names) for better performance
+            return extractMinimalFontInfo(document, pageIndex);
+        }
 
+        // Set a timeout for font extraction
+        long startTime = System.currentTimeMillis();
+        AtomicBoolean timeoutOccurred = new AtomicBoolean(false);
+        
         try {
             PDPage page = document.getPage(pageIndex);
             PDResources resources = page.getResources();
 
             if (resources == null) {
-                log.warn("No resources found on page {}", pageIndex + 1);
+                log.debug("No resources found on page {}", pageIndex + 1);
                 return fontInfoList;
             }
 
-            // Extract fonts from the page resources
+            // Extract fonts from the page resources with timeout check
             for (COSName fontName : resources.getFontNames()) {
+                // Check if we've exceeded the timeout
+                if (System.currentTimeMillis() - startTime > fontExtractionTimeoutMs) {
+                    log.warn("Font extraction timeout for page {}, returning partial results", pageIndex + 1);
+                    timeoutOccurred.set(true);
+                    break;
+                }
+                
                 try {
+                    // Check if this font is already in the cache
+                    String cacheKey = document.getDocumentId() + "_" + pageIndex + "_" + fontName.getName();
+                    if (fontCache.containsKey(cacheKey)) {
+                        fontInfoList.add(fontCache.get(cacheKey));
+                        continue;
+                    }
+                    
                     PDFont font = resources.getFont(fontName);
 
                     if (font != null && !fontMap.containsValue(font)) {
                         FontInfo fontInfo = extractFontInfo(font, fontName.getName());
                         fontInfoList.add(fontInfo);
                         fontMap.put(fontName.getName(), font);
+                        
+                        // Add to cache for future use
+                        fontCache.put(cacheKey, fontInfo);
                     }
                 } catch (IOException e) {
                     // Handle ASCII85 stream errors and other font extraction issues
                     if (e.getMessage() != null &&
                             (e.getMessage().contains("Invalid data in Ascii85 stream") ||
                                     e.getMessage().contains("Could not read embedded"))) {
-                        log.warn("Recoverable font error for {} on page {}: {}",
+                        log.debug("Recoverable font error for {} on page {}: {}",
                                 fontName.getName(), pageIndex + 1, e.getMessage());
                         // Create placeholder font info for corrupted font
                         FontInfo placeholderInfo = createPlaceholderFontInfo(fontName.getName());
                         fontInfoList.add(placeholderInfo);
                     } else {
-                        log.warn("Error processing font {} on page {}: {}",
+                        log.debug("Error processing font {} on page {}: {}",
                                 fontName.getName(), pageIndex + 1, e.getMessage());
                     }
                 } catch (Exception e) {
-                    log.warn("Unexpected error with font {} on page {}: {}",
+                    log.debug("Unexpected error with font {} on page {}: {}",
                             fontName.getName(), pageIndex + 1, e.getMessage());
                 }
             }
         } catch (Exception e) {
-            log.error("Error analyzing fonts on page " + pageIndex, e);
+            log.warn("Error analyzing fonts on page {}: {}", pageIndex + 1, e.getMessage());
+        }
+        
+        // Log performance metrics if timeout occurred
+        if (timeoutOccurred.get()) {
+            log.warn("Font extraction for page {} took too long (>{}ms) and was interrupted. " +
+                    "Extracted {} fonts before timeout.", 
+                    pageIndex + 1, fontExtractionTimeoutMs, fontInfoList.size());
         }
 
+        return fontInfoList;
+    }
+    
+    /**
+     * Extract minimal font information (just names) for better performance.
+     * This is used when detailed font analysis is disabled.
+     *
+     * @param document The PDF document
+     * @param pageIndex The 0-based page index
+     * @return List of minimal font information objects
+     */
+    private List<FontInfo> extractMinimalFontInfo(PDDocument document, int pageIndex) {
+        List<FontInfo> fontInfoList = new ArrayList<>();
+        
+        try {
+            PDPage page = document.getPage(pageIndex);
+            PDResources resources = page.getResources();
+
+            if (resources == null) {
+                return fontInfoList;
+            }
+
+            // Just extract font names without detailed analysis
+            for (COSName fontName : resources.getFontNames()) {
+                try {
+                    FontInfo info = new FontInfo();
+                    info.setId(UUID.randomUUID().toString());
+                    info.setPdfName(fontName.getName());
+                    info.setFontName(fontName.getName());
+                    
+                    // Try to get the actual font name if possible (quick operation)
+                    try {
+                        PDFont font = resources.getFont(fontName);
+                        if (font != null) {
+                            info.setFontName(font.getName());
+                            
+                            // Set font family to avoid null pointer exceptions
+                            String fontNameStr = font.getName();
+                            if (fontNameStr != null) {
+                                // Simple font family extraction without expensive regex
+                                int plusIndex = fontNameStr.indexOf('+');
+                                if (plusIndex >= 0 && plusIndex < fontNameStr.length() - 1) {
+                                    info.setFontFamily(fontNameStr.substring(plusIndex + 1));
+                                } else {
+                                    info.setFontFamily(fontNameStr);
+                                }
+                            } else {
+                                info.setFontFamily("Unknown");
+                            }
+                        } else {
+                            // Set a default font family to avoid null pointer exceptions
+                            info.setFontFamily("Unknown");
+                        }
+                    } catch (Exception e) {
+                        // Ignore errors, just use the PDF name
+                        info.setFontFamily("Unknown");
+                    }
+                    
+                    fontInfoList.add(info);
+                } catch (Exception e) {
+                    // Ignore errors for minimal extraction
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Error in minimal font extraction for page {}: {}", pageIndex + 1, e.getMessage());
+        }
+        
         return fontInfoList;
     }
 
     /**
      * Extract information about a font.
+     * Optimized for performance with minimal exception handling.
      *
      * @param font The PDF font
      * @param name The font name in the PDF
@@ -96,34 +215,41 @@ public class FontHandler {
         try {
             info.setEmbedded(font.isEmbedded());
         } catch (Exception e) {
-            log.warn("Error determining if font is embedded: {}", e.getMessage());
             info.setEmbedded(false);
         }
 
-        // Determine font family and other attributes
-        info.setFontFamily(getFontFamily(font));
-        info.setIsBold(isBold(font));
-        info.setIsItalic(isItalic(font));
-
-        // Get encoding information
-        try {
-            // PDFont doesn't have a direct getEncoding() method, we need to handle this differently
-            String encoding = "Unknown";
-
-            // Try to get encoding based on font type
-            if (font instanceof PDType1Font) {
-                PDType1Font type1Font = (PDType1Font) font;
-                if (type1Font.getEncoding() != null) {
-                    encoding = type1Font.getEncoding().toString();
-                }
-            } else if (font instanceof PDType0Font) {
-                encoding = "CID";  // Composite fonts typically use CID encoding
+        // Quick font family extraction (simplified)
+        String fontName = font.getName();
+        if (fontName != null) {
+            // Simple font family extraction without expensive regex
+            int plusIndex = fontName.indexOf('+');
+            if (plusIndex >= 0 && plusIndex < fontName.length() - 1) {
+                info.setFontFamily(fontName.substring(plusIndex + 1));
+            } else {
+                info.setFontFamily(fontName);
             }
+            
+            // Quick bold/italic detection
+            String lowerName = fontName.toLowerCase();
+            info.setIsBold(lowerName.contains("bold"));
+            info.setIsItalic(lowerName.contains("italic") || lowerName.contains("oblique"));
+        } else {
+            info.setFontFamily("Unknown");
+            info.setIsBold(false);
+            info.setIsItalic(false);
+        }
 
-            info.setEncoding(encoding);
+        // Simplified encoding detection
+        try {
+            if (font instanceof PDType1Font) {
+                info.setEncoding("Type1");
+            } else if (font instanceof PDType0Font) {
+                info.setEncoding("CID");
+            } else {
+                info.setEncoding("Other");
+            }
         } catch (Exception e) {
             info.setEncoding("Unknown");
-            log.warn("Could not determine font encoding: {}", e.getMessage());
         }
 
         return info;
@@ -140,70 +266,13 @@ public class FontHandler {
         info.setId(UUID.randomUUID().toString());
         info.setFontName(fontName + " (damaged)");
         info.setPdfName(fontName);
-        info.setFontFamily("Unknown (damaged font)");
-        info.setEmbedded(true); // Assume it was embedded but corrupted
+        info.setFontFamily("Unknown");
+        info.setEmbedded(true);
         info.setIsBold(false);
         info.setIsItalic(false);
         info.setEncoding("Unknown");
-        info.setDamaged(true); // Mark as damaged for special handling
+        info.setDamaged(true);
         return info;
-    }
-
-    /**
-     * Determine the font family from a PDF font.
-     *
-     * @param font The PDF font
-     * @return Font family name
-     */
-    private String getFontFamily(PDFont font) {
-        String fontName = font.getName();
-
-        // Extract family name from font name
-        if (fontName != null) {
-            // Remove style indicators
-            String family = fontName.replaceAll("(?i)[-\\+]?(bold|italic|oblique|light|medium|black|regular|condensed|extended)", "");
-
-            // Remove common prefixes
-            family = family.replaceAll("^[A-Z]{6}\\+", "");
-
-            // Remove any remaining special characters
-            family = family.replaceAll("[^a-zA-Z0-9 ]", "").trim();
-
-            if (!family.isEmpty()) {
-                return family;
-            }
-        }
-
-        return "Unknown";
-    }
-
-    /**
-     * Determine if a font is bold.
-     *
-     * @param font The PDF font
-     * @return True if the font is bold
-     */
-    private boolean isBold(PDFont font) {
-        String fontName = font.getName();
-        if (fontName != null) {
-            return fontName.toLowerCase().contains("bold");
-        }
-        return false;
-    }
-
-    /**
-     * Determine if a font is italic.
-     *
-     * @param font The PDF font
-     * @return True if the font is italic
-     */
-    private boolean isItalic(PDFont font) {
-        String fontName = font.getName();
-        if (fontName != null) {
-            String lowerName = fontName.toLowerCase();
-            return lowerName.contains("italic") || lowerName.contains("oblique");
-        }
-        return false;
     }
 
     /**

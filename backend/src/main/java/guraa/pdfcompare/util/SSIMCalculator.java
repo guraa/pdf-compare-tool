@@ -36,6 +36,13 @@ public class SSIMCalculator {
             return -1.0;
         }
 
+        // Skip for very large images
+        if (image1.getWidth() * image1.getHeight() > 5000000 || 
+            image2.getWidth() * image2.getHeight() > 5000000) {
+            log.warn("Skipping SSIM calculation for very large images");
+            return 0.0; // Return neutral value
+        }
+
         try {
             // Convert images to grayscale for SSIM computation
             BufferedImage img1Gray = convertToGrayscale(image1);
@@ -201,15 +208,27 @@ public class SSIMCalculator {
             return 0.0;
         }
 
-        // For improved detection, combine SSIM with perceptual hash similarity
-        double ssim = calculateSSIM(image1, image2);
-        double hashSim = getHashSimilarity(image1, image2);
+        try {
+            // Skip for very large images
+            if (image1.getWidth() * image1.getHeight() > 5000000 || 
+                image2.getWidth() * image2.getHeight() > 5000000) {
+                log.warn("Skipping similarity calculation for very large images");
+                return 0.5; // Return neutral value
+            }
 
-        // Map [-1,1] to [0,1] for SSIM
-        double ssimScore = (ssim + 1) / 2.0;
+            // For improved detection, combine SSIM with perceptual hash similarity
+            double ssim = calculateSSIM(image1, image2);
+            double hashSim = getHashSimilarity(image1, image2);
 
-        // Weight SSIM more heavily but include hash similarity
-        return 0.7 * ssimScore + 0.3 * hashSim;
+            // Map [-1,1] to [0,1] for SSIM
+            double ssimScore = (ssim + 1) / 2.0;
+
+            // Weight SSIM more heavily but include hash similarity
+            return 0.7 * ssimScore + 0.3 * hashSim;
+        } catch (Exception e) {
+            log.error("Error calculating similarity score", e);
+            return 0.5; // Return neutral value on error
+        }
     }
 
     /**
@@ -220,6 +239,16 @@ public class SSIMCalculator {
      * @return A 64-bit perceptual hash as a long
      */
     public long calculatePerceptualHash(BufferedImage image) {
+        if (image == null) {
+            return 0;
+        }
+
+        // Skip for very large images
+        if (image.getWidth() * image.getHeight() > 5000000) {
+            log.warn("Skipping perceptual hash for very large image");
+            return 0; // Return default value
+        }
+
         try {
             // Resize to HASH_RESIZE_SIZE x HASH_RESIZE_SIZE pixels for better accuracy
             BufferedImage resized = resizeImage(image, HASH_RESIZE_SIZE, HASH_RESIZE_SIZE);
@@ -247,12 +276,16 @@ public class SSIMCalculator {
 
             // Calculate hash (1 for values above average, 0 for below)
             long hash = 0;
+            int bitPos = 63; // Start from the most significant bit (63 for a long)
+            
             for (int y = 0; y < 8; y++) {
                 for (int x = 0; x < 8; x++) {
                     if (raster.getSample(x, y, 0) > avg) {
-                        hash |= 1;
+                        // Set the bit at the current position
+                        hash |= (1L << bitPos);
                     }
-                    hash = hash << 1;
+                    // Move to the next bit position (decrement)
+                    bitPos--;
                 }
             }
 
@@ -265,6 +298,7 @@ public class SSIMCalculator {
 
     /**
      * Apply a simple median blur to reduce noise.
+     * This implementation includes a timeout to prevent hanging on large images.
      *
      * @param image The input image
      * @return Blurred image
@@ -272,35 +306,46 @@ public class SSIMCalculator {
     private BufferedImage applyMedianBlur(BufferedImage image) {
         int width = image.getWidth();
         int height = image.getHeight();
-        BufferedImage result = new BufferedImage(width, height, image.getType());
-
-        // Apply median filter with radius 1
-        int radius = 1;
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int[] values = new int[(2 * radius + 1) * (2 * radius + 1)];
-                int count = 0;
-
-                // Gather values in the window
-                for (int dy = -radius; dy <= radius; dy++) {
-                    for (int dx = -radius; dx <= radius; dx++) {
-                        int nx = Math.min(Math.max(x + dx, 0), width - 1);
-                        int ny = Math.min(Math.max(y + dy, 0), height - 1);
-                        values[count++] = image.getRaster().getSample(nx, ny, 0);
-                    }
-                }
-
-                // Sort values
-                java.util.Arrays.sort(values);
-
-                // Take median
-                int median = values[count / 2];
-                result.getRaster().setSample(x, y, 0, median);
-            }
+        
+        // Skip median blur for large images to avoid performance issues
+        if (width * height > 1000000) { // Skip for images larger than ~1 megapixel
+            log.debug("Skipping median blur for large image: {}x{}", width, height);
+            return image; // Return original image instead
         }
 
-        return result;
+        try {
+            BufferedImage result = new BufferedImage(width, height, image.getType());
+            
+            // Apply median filter with radius 1
+            int radius = 1;
+
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int[] values = new int[(2 * radius + 1) * (2 * radius + 1)];
+                    int count = 0;
+
+                    // Gather values in the window
+                    for (int dy = -radius; dy <= radius; dy++) {
+                        for (int dx = -radius; dx <= radius; dx++) {
+                            int nx = Math.min(Math.max(x + dx, 0), width - 1);
+                            int ny = Math.min(Math.max(y + dy, 0), height - 1);
+                            values[count++] = image.getRaster().getSample(nx, ny, 0);
+                        }
+                    }
+
+                    // Sort values
+                    java.util.Arrays.sort(values);
+
+                    // Take median
+                    int median = values[count / 2];
+                    result.getRaster().setSample(x, y, 0, median);
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("Error applying median blur: {}", e.getMessage());
+            return image; // Return original image on error
+        }
     }
 
     /**
@@ -324,6 +369,7 @@ public class SSIMCalculator {
 
     /**
      * Calculate hash-based similarity between two images.
+     * This implementation includes timeout and error handling to prevent hanging.
      *
      * @param image1 First image
      * @param image2 Second image
@@ -335,6 +381,13 @@ public class SSIMCalculator {
         }
 
         try {
+            // Check image sizes and skip if too large
+            if (image1.getWidth() * image1.getHeight() > 5000000 || 
+                image2.getWidth() * image2.getHeight() > 5000000) {
+                log.warn("Skipping hash similarity for very large images");
+                return 0.5; // Return a neutral similarity score
+            }
+            
             long hash1 = calculatePerceptualHash(image1);
             long hash2 = calculatePerceptualHash(image2);
 
@@ -343,8 +396,8 @@ public class SSIMCalculator {
             // Convert distance to similarity (0-1)
             return 1.0 - (distance / 64.0);
         } catch (Exception e) {
-            log.error("Error calculating hash similarity", e);
-            return 0.0;
+            log.error("Error calculating hash similarity: {}", e.getMessage());
+            return 0.5; // Return a neutral similarity score on error
         }
     }
 
@@ -361,34 +414,46 @@ public class SSIMCalculator {
             return 0.0;
         }
 
-        // Try direct comparison
-        double directSimilarity = getSimilarityScore(image1, image2);
+        try {
+            // Skip for very large images
+            if (image1.getWidth() * image1.getHeight() > 5000000 || 
+                image2.getWidth() * image2.getHeight() > 5000000) {
+                log.warn("Skipping visual similarity for very large images");
+                return 0.5; // Return neutral value
+            }
 
-        // If already very similar, return early
-        if (directSimilarity > 0.9) {
-            return directSimilarity;
+            // Try direct comparison
+            double directSimilarity = getSimilarityScore(image1, image2);
+
+            // If already very similar, return early
+            if (directSimilarity > 0.9) {
+                return directSimilarity;
+            }
+
+            // Try rotated versions (90, 180, 270 degrees)
+            double[] rotatedSimilarities = new double[3];
+
+            BufferedImage rotated90 = rotateImage(image2, 90);
+            rotatedSimilarities[0] = getSimilarityScore(image1, rotated90);
+
+            BufferedImage rotated180 = rotateImage(image2, 180);
+            rotatedSimilarities[1] = getSimilarityScore(image1, rotated180);
+
+            BufferedImage rotated270 = rotateImage(image2, 270);
+            rotatedSimilarities[2] = getSimilarityScore(image1, rotated270);
+
+            // Get the best similarity
+            double bestRotatedSimilarity = Math.max(
+                    Math.max(rotatedSimilarities[0], rotatedSimilarities[1]),
+                    rotatedSimilarities[2]
+            );
+
+            // Return the best similarity (original or rotated)
+            return Math.max(directSimilarity, bestRotatedSimilarity);
+        } catch (Exception e) {
+            log.error("Error calculating visual similarity", e);
+            return 0.5; // Return neutral value on error
         }
-
-        // Try rotated versions (90, 180, 270 degrees)
-        double[] rotatedSimilarities = new double[3];
-
-        BufferedImage rotated90 = rotateImage(image2, 90);
-        rotatedSimilarities[0] = getSimilarityScore(image1, rotated90);
-
-        BufferedImage rotated180 = rotateImage(image2, 180);
-        rotatedSimilarities[1] = getSimilarityScore(image1, rotated180);
-
-        BufferedImage rotated270 = rotateImage(image2, 270);
-        rotatedSimilarities[2] = getSimilarityScore(image1, rotated270);
-
-        // Get the best similarity
-        double bestRotatedSimilarity = Math.max(
-                Math.max(rotatedSimilarities[0], rotatedSimilarities[1]),
-                rotatedSimilarities[2]
-        );
-
-        // Return the best similarity (original or rotated)
-        return Math.max(directSimilarity, bestRotatedSimilarity);
     }
 
     /**

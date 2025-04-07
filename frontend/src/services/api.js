@@ -16,7 +16,7 @@ const api = axios.create({
     'Content-Type': 'application/json'
   },
   // Add timeout to prevent indefinite waiting
-  timeout: 120000 // 30 seconds
+  timeout: 1200000 // 30 seconds
 });
 
 // Add request interceptor for error handling and circuit breaker
@@ -164,7 +164,7 @@ export const getComparisonResult = async (comparisonId) => {
   try {
     // Use a longer timeout for this specific request as it might take time
     const response = await api.get(`/pdfs/comparison/${comparisonId}`, {
-      timeout: 120000, // 60 seconds timeout for comparison results
+      timeout: 1200000, // 60 seconds timeout for comparison results
       validateStatus: function (status) {
         // Accept 202 Accepted as a valid response (still processing)
         return (status >= 200 && status < 300) || status === 202;
@@ -217,7 +217,7 @@ export const getComparisonDetails = async (comparisonId, page, filters = {}) => 
       try {
         const response = await api.get(`/pdfs/comparison/${comparisonId}/page/${pageNumber}`, { 
           params,
-          timeout: 120000,
+          timeout: 1200000,
           validateStatus: function (status) {
             return (status >= 200 && status < 300) || status === 202;
           }
@@ -280,7 +280,7 @@ export const getDocumentPairs = async (comparisonId) => {
     try {
       // Use a longer timeout for this specific request as it might take time
       const response = await api.get(`/pdfs/comparison/${comparisonId}/documents`, {
-        timeout: 120000, // 60 seconds timeout
+        timeout: 1200000, // 60 seconds timeout
         validateStatus: function (status) {
           // Accept 202 Accepted as a valid response (still processing)
           return (status >= 200 && status < 300) || status === 202;
@@ -310,7 +310,7 @@ export const getDocumentPairs = async (comparisonId) => {
   export const getDocumentPairResult = async (comparisonId, pairIndex) => {
     try {
       const response = await api.get(`/pdfs/comparison/${comparisonId}/documents/${pairIndex}`, {
-        timeout: 120000, // 60 seconds timeout
+        timeout: 1200000, // 60 seconds timeout
         validateStatus: function (status) {
           // Accept 202 Accepted as a valid response (still processing)
           return (status >= 200 && status < 300) || status === 202;

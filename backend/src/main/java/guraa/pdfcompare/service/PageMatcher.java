@@ -14,6 +14,9 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 /**
  * Responsible for matching individual pages between documents
@@ -58,6 +61,7 @@ public class PageMatcher {
         int comparePageCount = compareBoundary.getEndPage() - compareBoundary.getStartPage() + 1;
 
         // Simple case: equal number of pages
+        log.debug("Simple case: equal number of pages");
         if (basePageCount == comparePageCount) {
             createOneToOnePageMappings(
                     pair, baseBoundary, compareBoundary,
@@ -65,12 +69,13 @@ public class PageMatcher {
                     baseRenderer, compareRenderer);
         } else {
             // Complex case: different number of pages
-            // Use dynamic programming to find optimal page mappings
+            log.debug("Complex case: different number of pages");
             createOptimalPageMappings(
                     pair, baseBoundary, compareBoundary,
                     baseTexts, compareTexts, basePdf, comparePdf,
                     baseRenderer, compareRenderer);
         }
+
     }
 
     /**
@@ -90,14 +95,17 @@ public class PageMatcher {
         int basePageCount = baseBoundary.getEndPage() - baseBoundary.getStartPage() + 1;
 
         // Create one-to-one mappings
+        log.debug("Create one-to-one mappings");
         for (int i = 0; i < basePageCount; i++) {
             int baseIndex = baseBoundary.getStartPage() + i;
             int compareIndex = compareBoundary.getStartPage() + i;
 
+            log.debug("similarity");
+
             double similarity = calculatePageSimilarity(
                     baseIndex, compareIndex, baseTexts, compareTexts,
                     basePdf, comparePdf, baseRenderer, compareRenderer);
-
+            log.debug("calculatePageSimilarity: {}", similarity);
             DocumentPair.PageMapping mapping = DocumentPair.PageMapping.builder()
                     .basePageNumber(baseIndex + 1) // Convert to 1-based
                     .comparePageNumber(compareIndex + 1) // Convert to 1-based
@@ -123,7 +131,7 @@ public class PageMatcher {
             PDDocument comparePdf,
             PDFRenderer baseRenderer,
             PDFRenderer compareRenderer) throws IOException {
-
+        log.debug("createOptimalPageMappings");
         int basePageCount = baseBoundary.getEndPage() - baseBoundary.getStartPage() + 1;
         int comparePageCount = compareBoundary.getEndPage() - compareBoundary.getStartPage() + 1;
 
@@ -238,6 +246,7 @@ public class PageMatcher {
 
     /**
      * Calculate similarity between two pages using a combination of text and visual similarity.
+     * This implementation includes timeout handling to prevent hanging on problematic pages.
      *
      * @param basePageIndex    Page index in base PDF
      * @param comparePageIndex Page index in comparison PDF
@@ -259,37 +268,114 @@ public class PageMatcher {
             PDDocument comparePdf,
             PDFRenderer baseRenderer,
             PDFRenderer compareRenderer) throws IOException {
-
         // Ensure page indices are valid
         if (basePageIndex >= baseTexts.size() || comparePageIndex >= compareTexts.size()) {
             return 0.0;
         }
 
-        // Calculate text similarity
-        double textSimilarity = TextSimilarityUtils.calculateTextSimilarity(
-                baseTexts.get(basePageIndex), compareTexts.get(comparePageIndex));
+        // Calculate text similarity with timeout protection
+        double textSimilarity = 0.0;
+        try {
+            // Use a CompletableFuture with timeout for text similarity calculation
+            CompletableFuture<Double> textSimilarityFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return TextSimilarityUtils.calculateTextSimilarity(
+                            baseTexts.get(basePageIndex), compareTexts.get(comparePageIndex));
+                } catch (Exception e) {
+                    log.warn("Error calculating text similarity: {}", e.getMessage());
+                    return 0.0;
+                }
+            });
+            
+            // Wait for completion with a timeout of 10 seconds
+            textSimilarity = textSimilarityFuture.orTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .exceptionally(ex -> {
+                        if (ex.getCause() instanceof java.util.concurrent.TimeoutException) {
+                            log.warn("Text similarity calculation timed out for pages {} and {}", 
+                                    basePageIndex, comparePageIndex);
+                        } else {
+                            log.warn("Error in text similarity calculation: {}", ex.getMessage());
+                        }
+                        return 0.0;
+                    }).join();
+        } catch (Exception e) {
+            log.warn("Unexpected error in text similarity calculation: {}", e.getMessage());
+            textSimilarity = 0.0;
+        }
 
         // If text similarity is very low, no need to check visual similarity
         if (textSimilarity < textSimilarityThreshold / 2) {
             return textSimilarity;
         }
 
-        // Calculate visual similarity
-        double visualSimilarity = 0.0;
+        // Calculate visual similarity with robust error handling and timeout
+        double visualSimilarity = 0.5; // Default neutral value
         try {
-            BufferedImage baseImage = baseRenderer.renderImageWithDPI(
-                    basePageIndex, 72, ImageType.RGB);
+            // Use a CompletableFuture with timeout for visual similarity calculation
+            CompletableFuture<Double> visualSimilarityFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    // Use a lower DPI to reduce memory usage and avoid rendering issues
+                    BufferedImage baseImage = null;
+                    BufferedImage compareImage = null;
+                    
+                    try {
+                        baseImage = baseRenderer.renderImageWithDPI(basePageIndex, 36, ImageType.RGB);
+                    } catch (Exception e) {
+                        log.warn("Error rendering base page {}, using fallback: {}", basePageIndex, e.getMessage());
+                        try {
+                            // Try with even lower DPI as fallback
+                            baseImage = baseRenderer.renderImageWithDPI(basePageIndex, 24, ImageType.BINARY);
+                        } catch (Exception e2) {
+                            log.warn("Fallback rendering failed for base page {}: {}", basePageIndex, e2.getMessage());
+                            // Create a blank image as last resort
+                            baseImage = new BufferedImage(100, 100, BufferedImage.TYPE_BYTE_BINARY);
+                        }
+                    }
+                    
+                    try {
+                        compareImage = compareRenderer.renderImageWithDPI(comparePageIndex, 36, ImageType.RGB);
+                    } catch (Exception e) {
+                        log.warn("Error rendering compare page {}, using fallback: {}", comparePageIndex, e.getMessage());
+                        try {
+                            // Try with even lower DPI as fallback
+                            compareImage = compareRenderer.renderImageWithDPI(comparePageIndex, 24, ImageType.BINARY);
+                        } catch (Exception e2) {
+                            log.warn("Fallback rendering failed for compare page {}: {}", comparePageIndex, e2.getMessage());
+                            // Create a blank image as last resort
+                            compareImage = new BufferedImage(100, 100, BufferedImage.TYPE_BYTE_BINARY);
+                        }
+                    }
 
-            BufferedImage compareImage = compareRenderer.renderImageWithDPI(
-                    comparePageIndex, 72, ImageType.RGB);
-
-            visualSimilarity = ssimCalculator.getSimilarityScore(baseImage, compareImage);
+                    // Calculate similarity with robust error handling
+                    try {
+                        return ssimCalculator.getSimilarityScore(baseImage, compareImage);
+                    } catch (Exception e) {
+                        log.warn("Error calculating visual similarity, using neutral value: {}", e.getMessage());
+                        return 0.5; // Neutral value
+                    }
+                } catch (Exception e) {
+                    log.error("Unexpected error in visual comparison: {}", e.getMessage());
+                    return 0.5; // Neutral value on error
+                }
+            });
+            
+            // Wait for completion with a timeout of 15 seconds
+            visualSimilarity = visualSimilarityFuture.orTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .exceptionally(ex -> {
+                        if (ex.getCause() instanceof java.util.concurrent.TimeoutException) {
+                            log.warn("Visual similarity calculation timed out for pages {} and {}", 
+                                    basePageIndex, comparePageIndex);
+                        } else {
+                            log.warn("Error in visual similarity calculation: {}", ex.getMessage());
+                        }
+                        return 0.5; // Neutral value on timeout or error
+                    }).join();
         } catch (Exception e) {
-            log.warn("Error calculating visual similarity for pages: {} and {}",
-                    basePageIndex, comparePageIndex, e);
+            log.error("Unexpected error in visual similarity calculation: {}", e.getMessage());
+            visualSimilarity = 0.5; // Neutral value on error
         }
 
-        // Combined similarity score (60% text, 40% visual)
-        return 0.6 * textSimilarity + 0.4 * visualSimilarity;
+        // Combined similarity score (70% text, 30% visual when visual comparison is problematic)
+        return 0.7 * textSimilarity + 0.3 * visualSimilarity;
     }
 }
