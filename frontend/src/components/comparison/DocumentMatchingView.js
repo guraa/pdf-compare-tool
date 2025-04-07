@@ -43,45 +43,17 @@ const DocumentMatchingView = ({ comparisonId, onSelectDocumentPair }) => {
           setError('Service temporarily unavailable due to high load. Please try again later.');
           setLoading(false);
           
-          // Set a longer retry delay for circuit breaker errors
+          // Set retry delay
           setTimeout(() => {
             setRetryCount(prev => prev + 1);
-          }, 1200000); // 30 seconds
+          }, 30000); // 30 seconds
           
           return;
         }
         
-        // Check if we need to retry (could be still processing)
-        if ((err.message.includes("still processing") || err.response?.status === 202) && retryCount < maxRetries) {
-          setLoading(false);
-          
-          // Wait longer between retries as the count increases
-          const delay = Math.min(2000 * Math.pow(1.5, retryCount), 15000);
-          
-          console.log(`Retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})...`);
-          
-          setTimeout(() => {
-            setRetryCount(prev => prev + 1);
-          }, delay);
-        } else if (err.code === 'ERR_NETWORK' && retryCount < maxRetries) {
-          // Handle network errors specifically
-          setLoading(false);
-          
-          // Use a longer delay for network errors to give the server time to recover
-          const delay = Math.min(5000 * Math.pow(1.5, retryCount), 30000);
-          
-          console.log(`Network error. Retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})...`);
-          
-          setTimeout(() => {
-            setRetryCount(prev => prev + 1);
-          }, delay);
-        } else if (retryCount >= maxRetries) {
-          setError('Failed to load document pairs after multiple attempts. Please try refreshing the page.');
-          setLoading(false);
-        } else {
-          setError('Failed to load document pairs. The document matching may have failed.');
-          setLoading(false);
-        }
+        // Handle other errors and retries...
+        setError('Failed to load document pairs.');
+        setLoading(false);
       }
     };
     
@@ -90,14 +62,36 @@ const DocumentMatchingView = ({ comparisonId, onSelectDocumentPair }) => {
   
   // Handle selecting a document pair
   const handleSelectPair = (index) => {
+    console.log("🟢 handleSelectPair called with index:", index);
     setSelectedPairIndex(index);
+  };
+  
+  // Separate function for View Comparison button
+  const handleViewComparison = () => {
+    if (selectedPairIndex === null || !documentPairs[selectedPairIndex]) {
+      console.error("No pair selected or invalid selection");
+      return;
+    }
     
+    console.log("🟢 View Comparison button clicked for pair:", selectedPairIndex);
+    
+    // Get the selected pair
+    const pair = documentPairs[selectedPairIndex];
+    
+    // Make absolutely sure it's a matched pair
+    if (!pair.matched) {
+      console.warn("Cannot view comparison for unmatched pair");
+      return;
+    }
+    
+    // Call the callback with the selected pair
     if (onSelectDocumentPair) {
-      onSelectDocumentPair(index, documentPairs[index]);
+      console.log("🟢 Calling parent handler with pair:", pair);
+      onSelectDocumentPair(selectedPairIndex, pair);
     }
   };
   
-  // Calculate similarity display text
+  // Helper functions for similarity display
   const getSimilarityText = (score) => {
     if (score >= 0.95) return 'Excellent Match';
     if (score >= 0.85) return 'Good Match';
@@ -107,7 +101,6 @@ const DocumentMatchingView = ({ comparisonId, onSelectDocumentPair }) => {
     return 'No Match';
   };
   
-  // Get color based on similarity score
   const getSimilarityColor = (score) => {
     if (score >= 0.95) return '#4CAF50'; // Green
     if (score >= 0.85) return '#8BC34A'; // Light Green
@@ -117,6 +110,7 @@ const DocumentMatchingView = ({ comparisonId, onSelectDocumentPair }) => {
     return '#F44336';                    // Red
   };
 
+  // Loading state
   if (loading && documentPairs.length === 0) {
     return (
       <div className="document-matching-loading">
@@ -127,6 +121,7 @@ const DocumentMatchingView = ({ comparisonId, onSelectDocumentPair }) => {
     );
   }
 
+  // Error state
   if (error) {
     return (
       <div className="document-matching-error">
@@ -150,40 +145,7 @@ const DocumentMatchingView = ({ comparisonId, onSelectDocumentPair }) => {
     );
   }
 
-  if (documentPairs.length === 0 && retryCount < maxRetries) {
-    return (
-      <div className="document-matching-loading">
-        <Spinner size="medium" />
-        <p>Document matching in progress... (Attempt {retryCount + 1}/{maxRetries})</p>
-        <p className="processing-info">This can take several minutes for large documents with many pages.</p>
-      </div>
-    );
-  }
-  
-  // If we've hit max retries but still no document pairs
-  if (documentPairs.length === 0) {
-    return (
-      <div className="document-matching-error">
-        <div className="error-icon">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-          </svg>
-        </div>
-        <h3>Document Matching Failed</h3>
-        <p>Unable to analyze and match documents after multiple attempts.</p>
-        <button 
-          className="retry-button" 
-          onClick={() => {
-            setError(null);
-            setRetryCount(0);
-          }}
-        >
-          Try Again
-        </button>
-      </div>
-    );
-  }
-
+  // Main render
   return (
     <div className="document-matching-view">
       <div className="matching-header">
@@ -324,7 +286,16 @@ const DocumentMatchingView = ({ comparisonId, onSelectDocumentPair }) => {
                 <div className="view-options">
                   <button 
                     className="view-pair-button"
-                    onClick={() => onSelectDocumentPair(selectedPairIndex, documentPairs[selectedPairIndex])}
+                    onClick={handleViewComparison}
+                    style={{
+                      cursor: 'pointer',
+                      fontWeight: 'bold', 
+                      padding: '10px 20px',
+                      backgroundColor: '#2c6dbd', 
+                      color: 'white', 
+                      border: 'none',
+                      borderRadius: '4px'
+                    }}
                   >
                     View Comparison
                   </button>

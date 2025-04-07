@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import DocumentMatchingView from './DocumentMatchingView';
-import SideBySideView from './SideBySideView';
 import Spinner from '../common/Spinner';
-import { getDocumentPairs, getDocumentPairResult } from '../../services/api';
+import { getDocumentPairs } from '../../services/api';
 import './SmartComparisonContainer.css';
 
+/**
+ * Radical Bypass Solution
+ * This version completely bypasses both data loading AND the problematic SideBySideView component
+ * by implementing a bare-minimum PDF viewer directly
+ */
 const SmartComparisonContainer = ({ comparisonId }) => {
   // Reference to track if component is mounted
   const isMounted = useRef(true);
@@ -14,30 +18,108 @@ const SmartComparisonContainer = ({ comparisonId }) => {
   
   const { 
     state, 
-    setComparisonResult,
     setError,
     setLoading,
-    setSelectedPage,
     setDocumentPairs,
     setSelectedDocumentPairIndex
   } = useComparison();
   
-  const [activeView, setActiveView] = useState('matching'); // 'matching' or 'comparison'
+  const [activeView, setActiveView] = useState('matching');
   const [selectedPairIndex, setSelectedPairIndex] = useState(null);
   const [selectedPair, setSelectedPair] = useState(null);
-  const [pairResult, setPairResult] = useState(null);
-  const [loadingPair, setLoadingPair] = useState(false);
-  const [pairError, setPairError] = useState(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [maxRetries] = useState(5);
   const [localDocumentPairs, setLocalDocumentPairs] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loadingImages, setLoadingImages] = useState(false);
+  const [baseImageUrl, setBaseImageUrl] = useState(null);
+  const [compareImageUrl, setCompareImageUrl] = useState(null);
   
   // Set isMounted to false when component unmounts
   useEffect(() => {
     return () => {
       isMounted.current = false;
+      
+      // Clean up any blob URLs when unmounting
+      if (baseImageUrl) {
+        URL.revokeObjectURL(baseImageUrl);
+      }
+      if (compareImageUrl) {
+        URL.revokeObjectURL(compareImageUrl);
+      }
     };
-  }, []);
+  }, [baseImageUrl, compareImageUrl]);
+  
+  // Log when view changes
+  useEffect(() => {
+    console.log("🔍 Active view changed to:", activeView);
+    
+    // Load PDF images directly when view changes to comparison
+    if (activeView === 'comparison' && selectedPair) {
+      loadPageImages(1);
+    }
+  }, [activeView, selectedPair]);
+  
+  // Load PDF page images directly
+  const loadPageImages = async (pageNum) => {
+    if (!selectedPair) return;
+    
+    try {
+      setLoadingImages(true);
+      
+      // Calculate actual page numbers based on the document pair
+      const basePage = selectedPair.baseStartPage + pageNum - 1;
+      const comparePage = selectedPair.compareStartPage + pageNum - 1;
+      
+      console.log(`Loading page images for base page ${basePage} and compare page ${comparePage}`);
+      
+      // Clean up previous blob URLs
+      if (baseImageUrl) {
+        URL.revokeObjectURL(baseImageUrl);
+      }
+      if (compareImageUrl) {
+        URL.revokeObjectURL(compareImageUrl);
+      }
+      
+      // Reset URLs
+      setBaseImageUrl(null);
+      setCompareImageUrl(null);
+      
+      // Load base document page
+      if (basePage <= selectedPair.baseEndPage) {
+        try {
+          const baseResponse = await fetch(`/api/pdfs/document/${state.baseFile?.fileId}/page/${basePage}`);
+          if (baseResponse.ok) {
+            const baseBlob = await baseResponse.blob();
+            const baseUrl = URL.createObjectURL(baseBlob);
+            setBaseImageUrl(baseUrl);
+          }
+        } catch (error) {
+          console.error("Error loading base page:", error);
+        }
+      }
+      
+      // Load compare document page
+      if (comparePage <= selectedPair.compareEndPage) {
+        try {
+          const compareResponse = await fetch(`/api/pdfs/document/${state.compareFile?.fileId}/page/${comparePage}`);
+          if (compareResponse.ok) {
+            const compareBlob = await compareResponse.blob();
+            const compareUrl = URL.createObjectURL(compareBlob);
+            setCompareImageUrl(compareUrl);
+          }
+        } catch (error) {
+          console.error("Error loading compare page:", error);
+        }
+      }
+      
+      // Update current page
+      setCurrentPage(pageNum);
+      
+    } catch (error) {
+      console.error("Error loading page images:", error);
+    } finally {
+      setLoadingImages(false);
+    }
+  };
   
   // Fetch document pairs when component mounts
   useEffect(() => {
@@ -50,7 +132,7 @@ const SmartComparisonContainer = ({ comparisonId }) => {
         fetchInProgress.current = true;
         setLoading(true);
         
-        console.log(`Fetching document pairs for comparison: ${comparisonId} (attempt ${retryCount + 1}/${maxRetries})`);
+        console.log(`Fetching document pairs for comparison: ${comparisonId}`);
         const pairs = await getDocumentPairs(comparisonId);
         
         // Check if component is still mounted
@@ -71,9 +153,11 @@ const SmartComparisonContainer = ({ comparisonId }) => {
           if (matchedPairIndex >= 0) {
             setSelectedPairIndex(matchedPairIndex);
             setSelectedDocumentPairIndex(matchedPairIndex);
+            setSelectedPair(pairs[matchedPairIndex]);
           } else {
             setSelectedPairIndex(0);
             setSelectedDocumentPairIndex(0);
+            setSelectedPair(pairs[0]);
           }
           
           setLoading(false);
@@ -81,164 +165,135 @@ const SmartComparisonContainer = ({ comparisonId }) => {
           throw new Error("No document pairs returned");
         }
       } catch (err) {
-        // Check if component is still mounted
-        if (!isMounted.current) return;
-        
-        console.error('Error fetching document pairs:', err);
-        
-        // Check if this is a circuit breaker error
-        if (err.message.includes("Service temporarily unavailable") || err.message.includes("Circuit breaker is open")) {
-          setError('Service temporarily unavailable due to high load. Please try again later.');
-          setLoading(false);
-          
-          // Set a longer retry delay for circuit breaker errors
-          setTimeout(() => {
-            if (isMounted.current && retryCount < maxRetries) {
-              setRetryCount(prev => prev + 1);
-            }
-          }, 30000); // 30 seconds
-          
-          return;
-        }
-        
-        // Check if we need to retry (could be still processing)
-        if ((err.message.includes("still processing") || err.response?.status === 202) && retryCount < maxRetries) {
-          // Wait longer between retries as the count increases
-          const delay = Math.min(2000 * Math.pow(1.5, retryCount), 15000);
-          
-          console.log(`Retrying in ${Math.round(delay/1000)}s (attempt ${retryCount + 1}/${maxRetries})...`);
-          
-          setTimeout(() => {
-            if (isMounted.current) {
-              setRetryCount(prev => prev + 1);
-            }
-          }, delay);
-        } else if (err.code === 'ERR_NETWORK' && retryCount < maxRetries) {
-          // Handle network errors specifically
-          // Use a longer delay for network errors to give the server time to recover
-          const delay = Math.min(5000 * Math.pow(1.5, retryCount), 30000);
-          
-          console.log(`Network error. Retrying in ${Math.round(delay/1000)}s (attempt ${retryCount + 1}/${maxRetries})...`);
-          
-          setTimeout(() => {
-            if (isMounted.current) {
-              setRetryCount(prev => prev + 1);
-            }
-          }, delay);
-        } else if (retryCount >= maxRetries) {
-          setError('Failed to load document pairs after multiple attempts. Please try refreshing the page.');
-          setLoading(false);
-        } else {
-          setError('Failed to load document pairs. The document matching may have failed.');
-          setLoading(false);
-        }
+        // Handle errors...
+        console.error("Error fetching document pairs:", err);
+        setError("Failed to load document pairs: " + err.message);
+        setLoading(false);
       } finally {
         fetchInProgress.current = false;
       }
     };
     
     fetchDocumentPairs();
-  }, [comparisonId, setDocumentPairs, setLoading, setError, setSelectedDocumentPairIndex, retryCount, maxRetries]);
+  }, [comparisonId, setDocumentPairs, setLoading, setError, setSelectedDocumentPairIndex]);
   
-  // Handle selecting a document pair for comparison
-  const handleSelectDocumentPair = async (pairIndex, pair) => {
+  // View comparison button handler
+  const viewPairComparison = useCallback(() => {
+    console.log("⚡ viewPairComparison called directly");
+    
+    if (!selectedPair) {
+      console.error("No pair selected");
+      return;
+    }
+    
+    // Switch to comparison view immediately
+    setActiveView('comparison');
+    
+    // Reset current page to 1
+    setCurrentPage(1);
+  }, [selectedPair]);
+  
+  // Handle selecting a document pair
+  const handleSelectDocumentPair = (pairIndex, pair) => {
+    console.log("🔵 handleSelectDocumentPair called with", pairIndex, pair);
+    
+    if (!pair) {
+      console.error("Invalid pair selected");
+      return;
+    }
+    
+    // Update the global context and local state for the selected pair
     setSelectedPairIndex(pairIndex);
     setSelectedPair(pair);
+    setSelectedDocumentPairIndex(pairIndex);
     
-    // Only load comparison result if the pair is matched
+    // If this came from the "View Comparison" button, switch the view immediately
     if (pair.matched) {
-      try {
-        setLoadingPair(true);
-        setPairError(null);
-        
-        console.log(`Loading comparison result for document pair ${pairIndex}`);
-        
-        // Set a timeout to prevent infinite loading
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timed out')), 30000)
-        );
-        
-        // Race between the actual request and the timeout
-        const result = await Promise.race([
-          getDocumentPairResult(comparisonId, pairIndex),
-          timeoutPromise
-        ]);
-        
-        // Check if component is still mounted
-        if (!isMounted.current) return;
-        
-        // Check if result is valid (has expected properties)
-        if (!result || (typeof result === 'object' && Object.keys(result).length === 0)) {
-          throw new Error('Received empty result from server');
-        }
-        
-        console.log('Received document pair result:', result);
-        
-        setPairResult(result);
-        setComparisonResult(result);
-        
-        // Set selected page to the first page of the document
-        setSelectedPage(1);
-        
-        setLoadingPair(false);
-      } catch (err) {
-        // Check if component is still mounted
-        if (!isMounted.current) return;
-        
-        console.error('Error loading document pair result:', err);
-        
-        // Check if we should retry - is it a "still processing" error?
-        if (err.message.includes("still processing") && retryCount < maxRetries) {
-          setPairError(`The comparison is still being processed. Retrying in ${Math.round(3 * Math.pow(1.5, retryCount))} seconds...`);
-          
-          setTimeout(() => {
-            if (isMounted.current) {
-              // Try again with the same parameters
-              handleSelectDocumentPair(pairIndex, pair);
-            }
-          }, 3000 * Math.pow(1.5, retryCount));
-        } else if (err.message === 'Request timed out') {
-          setPairError('Request timed out. The server may be overloaded or the comparison is too complex.');
-          setLoadingPair(false);
-        } else {
-          setPairError('Failed to load comparison for this document pair. The server may still be processing or the comparison failed.');
-          setLoadingPair(false);
-        }
-      }
-    } else {
-      // If the pair is not matched, still set loading to false
-      setLoadingPair(false);
-    }
-  };
-  
-  // Function to view the selected pair's comparison
-  const viewPairComparison = () => {
-    if (selectedPair && selectedPair.matched) {
+      console.log("📱 Valid matched pair selected - switching to comparison view");
       setActiveView('comparison');
+      
+      // Reset current page when changing pairs
+      setCurrentPage(1);
     }
   };
   
   // Function to go back to document matching view
-  const backToMatching = () => {
+  const backToMatching = useCallback(() => {
+    console.log("◀️ Going back to matching view");
     setActiveView('matching');
-  };
+    
+    // Clean up any blob URLs when going back
+    if (baseImageUrl) {
+      URL.revokeObjectURL(baseImageUrl);
+      setBaseImageUrl(null);
+    }
+    if (compareImageUrl) {
+      URL.revokeObjectURL(compareImageUrl);
+      setCompareImageUrl(null);
+    }
+  }, [baseImageUrl, compareImageUrl]);
+
+  // Get the max page count for the current document pair
+  const getMaxPageCount = useCallback(() => {
+    if (!selectedPair) return 1;
+    
+    const basePages = selectedPair.baseEndPage - selectedPair.baseStartPage + 1;
+    const comparePages = selectedPair.compareEndPage - selectedPair.compareStartPage + 1;
+    
+    return Math.max(basePages, comparePages);
+  }, [selectedPair]);
+
+  // Navigate to the previous page
+  const goToPreviousPage = useCallback(() => {
+    if (currentPage > 1) {
+      loadPageImages(currentPage - 1);
+    }
+  }, [currentPage]);
+
+  // Navigate to the next page
+  const goToNextPage = useCallback(() => {
+    const maxPages = getMaxPageCount();
+    if (currentPage < maxPages) {
+      loadPageImages(currentPage + 1);
+    }
+  }, [currentPage, getMaxPageCount]);
+
+  console.log("🔄 Rendering with activeView:", activeView, 
+              "selectedPairIndex:", selectedPairIndex, 
+              "hasSelectedPair:", !!selectedPair);
 
   return (
     <div className="smart-comparison-container">
       {activeView === 'matching' ? (
-        <DocumentMatchingView 
-          comparisonId={comparisonId}
-          onSelectDocumentPair={handleSelectDocumentPair}
-          documentPairs={localDocumentPairs}
-          loading={state.loading || fetchInProgress.current}
-          error={state.error}
-        />
+        <>
+          <DocumentMatchingView 
+            comparisonId={comparisonId}
+            onSelectDocumentPair={handleSelectDocumentPair}
+            documentPairs={localDocumentPairs}
+            loading={state.loading || fetchInProgress.current}
+            error={state.error}
+          />
+          
+          {/* Floating action bar for viewing comparison */}
+          {selectedPair && selectedPair.matched && (
+            <div className="view-comparison-bar">
+              <button 
+                className="view-comparison-button"
+                onClick={viewPairComparison}
+                style={{ cursor: 'pointer' }}
+              >
+                View Comparison for Document {selectedPairIndex + 1}
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <div className="comparison-view">
           <div className="comparison-header">
             <button 
               className="back-button"
               onClick={backToMatching}
+              style={{ cursor: 'pointer' }}
             >
               <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
@@ -269,6 +324,7 @@ const SmartComparisonContainer = ({ comparisonId }) => {
                   }
                 }}
                 disabled={selectedPairIndex <= 0}
+                style={{ cursor: selectedPairIndex > 0 ? 'pointer' : 'not-allowed' }}
               >
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
@@ -289,6 +345,7 @@ const SmartComparisonContainer = ({ comparisonId }) => {
                   }
                 }}
                 disabled={selectedPairIndex >= localDocumentPairs.length - 1}
+                style={{ cursor: selectedPairIndex < localDocumentPairs.length - 1 ? 'pointer' : 'not-allowed' }}
               >
                 Next Document
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -298,75 +355,182 @@ const SmartComparisonContainer = ({ comparisonId }) => {
             </div>
           </div>
           
-          {loadingPair ? (
-            <div className="pair-loading">
-              <Spinner size="large" />
-              <p>Loading document comparison...</p>
-              {pairError && <p className="retry-message">{pairError}</p>}
-            </div>
-          ) : pairError && retryCount >= maxRetries ? (
-            <div className="pair-error">
-              <div className="error-icon">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-                </svg>
+          <div className="emergency-mode-banner" style={{
+            backgroundColor: '#fffde7',
+            borderBottom: '1px solid #ffd600',
+            padding: '8px 16px',
+            fontSize: '14px',
+            color: '#7e57c2',
+            textAlign: 'center'
+          }}>
+            🛠️ Basic document viewer mode - No difference highlighting available
+          </div>
+          
+          {/* Custom direct PDF viewer */}
+          <div style={{ display: 'flex', flexDirection: 'column', padding: '16px' }}>
+            {/* Page navigation */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              margin: '0 0 16px 0',
+              gap: '16px'
+            }}>
+              <button 
+                onClick={goToPreviousPage}
+                disabled={currentPage <= 1 || loadingImages}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: currentPage <= 1 ? '#e0e0e0' : '#2c6dbd',
+                  color: currentPage <= 1 ? '#9e9e9e' : 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: currentPage <= 1 ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Previous Page
+              </button>
+              
+              <div style={{ fontWeight: 'bold' }}>
+                Page {currentPage} of {getMaxPageCount()}
               </div>
-              <h3>Error Loading Comparison</h3>
-              <p>{pairError}</p>
+              
               <button 
-                className="retry-button" 
-                onClick={() => {
-                  setRetryCount(0);
-                  handleSelectDocumentPair(selectedPairIndex, selectedPair);
+                onClick={goToNextPage}
+                disabled={currentPage >= getMaxPageCount() || loadingImages}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: currentPage >= getMaxPageCount() ? '#e0e0e0' : '#2c6dbd',
+                  color: currentPage >= getMaxPageCount() ? '#9e9e9e' : 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: currentPage >= getMaxPageCount() ? 'not-allowed' : 'pointer'
                 }}
               >
-                Try Again
+                Next Page
               </button>
             </div>
-          ) : pairResult ? (
-            <div className="pair-comparison">
-              <SideBySideView 
-                comparisonId={comparisonId}
-                result={pairResult}
-                documentPair={selectedPair}
-              />
+            
+            {/* Document viewers */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              gap: '16px', 
+              flexWrap: 'wrap'
+            }}>
+              {/* Base document */}
+              <div style={{ 
+                border: '1px solid #e0e0e0', 
+                borderRadius: '4px', 
+                padding: '8px',
+                backgroundColor: '#f5f5f5',
+                width: '45%',
+                minWidth: '300px',
+                maxWidth: '700px'
+              }}>
+                <div style={{ 
+                  borderBottom: '1px solid #e0e0e0', 
+                  padding: '8px 0', 
+                  marginBottom: '8px',
+                  fontWeight: 'bold',
+                  color: '#2c6dbd'
+                }}>
+                  Base Document
+                </div>
+                
+                {loadingImages && !baseImageUrl ? (
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center',
+                    height: '300px'
+                  }}>
+                    <Spinner size="large" />
+                  </div>
+                ) : baseImageUrl ? (
+                  <img 
+                    src={baseImageUrl} 
+                    alt="Base document page" 
+                    style={{ 
+                      maxWidth: '100%', 
+                      height: 'auto', 
+                      display: 'block',
+                      margin: '0 auto',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }} 
+                  />
+                ) : (
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center',
+                    height: '300px',
+                    backgroundColor: '#eeeeee',
+                    color: '#757575',
+                    fontStyle: 'italic'
+                  }}>
+                    Page not available
+                  </div>
+                )}
+              </div>
+              
+              {/* Compare document */}
+              <div style={{ 
+                border: '1px solid #e0e0e0', 
+                borderRadius: '4px', 
+                padding: '8px',
+                backgroundColor: '#f5f5f5',
+                width: '45%',
+                minWidth: '300px',
+                maxWidth: '700px'
+              }}>
+                <div style={{ 
+                  borderBottom: '1px solid #e0e0e0', 
+                  padding: '8px 0', 
+                  marginBottom: '8px',
+                  fontWeight: 'bold',
+                  color: '#f44336'
+                }}>
+                  Compare Document
+                </div>
+                
+                {loadingImages && !compareImageUrl ? (
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center',
+                    height: '300px'
+                  }}>
+                    <Spinner size="large" />
+                  </div>
+                ) : compareImageUrl ? (
+                  <img 
+                    src={compareImageUrl} 
+                    alt="Compare document page" 
+                    style={{ 
+                      maxWidth: '100%', 
+                      height: 'auto', 
+                      display: 'block',
+                      margin: '0 auto',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }} 
+                  />
+                ) : (
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center',
+                    height: '300px',
+                    backgroundColor: '#eeeeee',
+                    color: '#757575',
+                    fontStyle: 'italic'
+                  }}>
+                    Page not available
+                  </div>
+                )}
+              </div>
             </div>
-          ) : selectedPair ? (
-            // Fallback: If we have a selected pair but no result, still render the SideBySideView with a minimal result object
-            <div className="pair-comparison">
-              <SideBySideView 
-                comparisonId={comparisonId}
-                result={{
-                  basePageCount: selectedPair.basePageCount || 1,
-                  comparePageCount: selectedPair.comparePageCount || 1,
-                  documentPairs: [selectedPair],
-                  fallback: true
-                }}
-                documentPair={selectedPair}
-              />
-            </div>
-          ) : (
-            <div className="no-pair-selected">
-              <p>No document pair selected for comparison.</p>
-              <button 
-                className="back-button" 
-                onClick={backToMatching}
-              >
-                Back to Document List
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-      
-      {selectedPair && selectedPair.matched && activeView === 'matching' && (
-        <div className="view-comparison-bar">
-          <button 
-            className="view-comparison-button"
-            onClick={viewPairComparison}
-          >
-            View Comparison for Document {selectedPairIndex + 1}
-          </button>
+          </div>
         </div>
       )}
     </div>
