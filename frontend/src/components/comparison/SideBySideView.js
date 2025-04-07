@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import { usePreferences } from '../../context/PreferencesContext';
 import { getDocumentPageDetails } from '../../services/api';
@@ -7,11 +7,15 @@ import SideBySidePanel from './panels/SideBySidePanel';
 import OverlayPanel from './panels/OverlayPanel';
 import DifferencePanel from './panels/DifferencePanel';
 import DifferenceViewer from './DifferenceViewer';
-import EnhancedDiffView from './EnhancedDiffView';
 import Spinner from '../common/Spinner';
 import './SideBySideView.css';
 
 const SideBySideView = ({ comparisonId, result }) => {
+  // Avoid excessive re-renders by using useRef for logging control
+  const hasLoggedResult = useRef(false);
+  const fetchAttempts = useRef(0);
+  const isComponentMounted = useRef(true);
+  
   const { 
     state, 
     setSelectedPage, 
@@ -39,21 +43,40 @@ const SideBySideView = ({ comparisonId, result }) => {
   // Check if we're in smart comparison mode - don't trigger error if pageDifferences is missing
   const isSmartComparisonMode = result && result.documentPairs && result.documentPairs.length > 0;
   
+  // Log the result once
+  useEffect(() => {
+    if (result && !hasLoggedResult.current) {
+      console.log("Comparison result structure:", result);
+      hasLoggedResult.current = true;
+      
+      if (isSmartComparisonMode) {
+        console.log(`Found ${result.documentPairs.length} document pairs`);
+        // Initialize with the first pair
+        if (result.documentPairs.length > 0) {
+          setSelectedPairIndex(0);
+        }
+      }
+    }
+    
+    // Cleanup function to prevent memory leaks
+    return () => {
+      isComponentMounted.current = false;
+    };
+  }, [result, isSmartComparisonMode]);
+  
   // Calculate derived values
   let basePageCount = 0;
   let comparePageCount = 0;
   
-  if (isSmartComparisonMode && result.documentPairs && result.documentPairs.length > 0) {
+  if (isSmartComparisonMode && result && result.documentPairs && result.documentPairs.length > 0) {
     const pair = result.documentPairs[selectedPairIndex];
     if (pair) {
       basePageCount = pair.basePageCount || 0;
       comparePageCount = pair.comparePageCount || 0;
-      console.log(`Document pair ${selectedPairIndex} page counts: base=${basePageCount}, compare=${comparePageCount}`);
     }
   } else if (result) {
     basePageCount = result.basePageCount || 0;
     comparePageCount = result.comparePageCount || 0;
-    console.log(`Overall document page counts: base=${basePageCount}, compare=${comparePageCount}`);
   }
   
   // Total pages is the maximum of base and compare
@@ -62,7 +85,6 @@ const SideBySideView = ({ comparisonId, result }) => {
   // Ensure we don't try to access pages beyond the document pair's page count
   useEffect(() => {
     if (state.selectedPage > totalPages && totalPages > 0) {
-      console.log(`Selected page ${state.selectedPage} is beyond total pages ${totalPages}, resetting to page 1`);
       setSelectedPage(1);
     }
   }, [state.selectedPage, totalPages, setSelectedPage]);
@@ -74,100 +96,138 @@ const SideBySideView = ({ comparisonId, result }) => {
     }
   }, [state.selectedPage, setSelectedPage]);
   
-  // Log the structure of the result object
-  useEffect(() => {
-    console.log("Comparison result structure:", result);
+  // Memoize fetchPageDetails to avoid recreation on every render
+  const fetchPageDetails = useCallback(async () => {
+    if (!comparisonId || !state.selectedPage || !isComponentMounted.current) return;
     
-    if (isSmartComparisonMode) {
-      console.log(`Found ${result.documentPairs.length} document pairs`);
-      // Initialize with the first pair
-      if (result.documentPairs.length > 0) {
-        setSelectedPairIndex(0);
-      }
-    } else if (result && !result.pageDifferences) {
-      // Only log this as a warning rather than error in smart mode
-      console.warn("Result does not contain pageDifferences array, but we're handling it in smart mode", result);
-    } else if (result && result.pageDifferences) {
-      console.log(`Found ${result.pageDifferences.length} page differences entries`);
-    }
-  }, [result, isSmartComparisonMode]);
-  
-  // Fetch page details when selected page changes
-  useEffect(() => {
-    const fetchPageDetails = async () => {
-      if (!comparisonId || !state.selectedPage) return;
+    try {
+      setLoading(true);
+      setError(null);
       
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // Ensure we always use a valid page number (minimum 1)
-        const pageNumber = Math.max(1, state.selectedPage);
-        
+      // Ensure we always use a valid page number (minimum 1)
+      const pageNumber = Math.max(1, state.selectedPage);
+      
+      // Avoid excessive logging
+      if (fetchAttempts.current < 5) {
         console.log(`Fetching comparison details for ID: ${comparisonId}, page: ${pageNumber}, pairIndex: ${selectedPairIndex}`);
-        
-        // Use document pair specific API for smart comparison mode
-        const details = await getDocumentPageDetails(
+        fetchAttempts.current++;
+      }
+      
+      // Set a timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timed out')), 20000)
+      );
+      
+      // Add a fallback promise that resolves with empty data after a longer timeout
+      // This ensures we always get something to display even if the backend is completely unresponsive
+      const fallbackPromise = new Promise((resolve) => {
+        setTimeout(() => {
+          console.warn('Using fallback empty data due to backend unresponsiveness');
+          resolve({
+            baseDifferences: [],
+            compareDifferences: [],
+            message: "Backend may be unresponsive. Showing empty comparison view.",
+            fallback: true
+          });
+        }, 30000); // 30 seconds fallback timeout
+      });
+      
+      // Race between the actual request, the timeout, and the fallback
+      const details = await Promise.race([
+        getDocumentPageDetails(
           comparisonId,
           selectedPairIndex,
           pageNumber,
           state.filters
-        );
+        ),
+        timeoutPromise,
+        fallbackPromise
+      ]);
+      
+      // Only update state if component is still mounted
+      if (!isComponentMounted.current) return;
+      
+      // Check if the response is valid
+      if (!details) {
+        throw new Error('Received empty response from server');
+      }
+      
+      // Check if the page is out of bounds
+      if (details && details.message && details.message.includes("Page not found")) {
+        console.warn("Page not found in document pair:", details.message);
         
-        console.log('Page details received:', details);
-        
-        // Check if the page is out of bounds
-        if (details && details.message && details.message.includes("Page not found")) {
-          console.warn("Page not found in document pair:", details.message);
-          
-          // If we have a maxPage value, navigate to the last valid page
-          if (details.maxPage && details.maxPage > 0) {
-            console.log(`Navigating to max page: ${details.maxPage}`);
-            setSelectedPage(details.maxPage);
-            setLoading(false);
-            return;
-          }
-          
-          // Otherwise, show an error
-          setError(`${details.message}. Please navigate to a valid page.`);
+        // If we have a maxPage value, navigate to the last valid page
+        if (details.maxPage && details.maxPage > 0) {
+          console.log(`Navigating to max page: ${details.maxPage}`);
+          setSelectedPage(details.maxPage);
           setLoading(false);
           return;
         }
         
-        // Check if we got any differences in the response
-        if (details && details.baseDifferences && details.baseDifferences.length === 0 &&
-            details.compareDifferences && details.compareDifferences.length === 0) {
-          console.warn("No differences found in API response for this page.");
-        }
-        
-        setPageDetails(details);
+        // Otherwise, show an error
+        setError(`${details.message}. Please navigate to a valid page.`);
         setLoading(false);
-        setRetryCount(0);
-      } catch (err) {
-        console.error('Error fetching page details:', err);
-        
-        // Handle "still processing" error differently from other errors
-        if (err.message && err.message.includes("still processing") && retryCount < maxRetries) {
-          console.log(`Comparison still processing. Retry ${retryCount + 1}/${maxRetries} in 3 seconds...`);
-          setError('Comparison details are still being processed. Please wait a moment...');
-          setLoading(false);
-          
-          // Try again after a delay
-          setTimeout(() => {
-            setRetryCount(prev => prev + 1);
-          }, 3000);
-        } else {
-          setError('Failed to load page comparison details. Please try navigating to another page.');
-          setLoading(false);
-        }
+        return;
       }
-    };
-    
-    fetchPageDetails();
+      
+      // Check if we got any differences in the response
+      if (details && details.baseDifferences && details.baseDifferences.length === 0 &&
+          details.compareDifferences && details.compareDifferences.length === 0) {
+        console.warn("No differences found in API response for this page.");
+      }
+      
+      // Ensure the response has the expected structure
+      if (!details.baseDifferences) details.baseDifferences = [];
+      if (!details.compareDifferences) details.compareDifferences = [];
+      
+      console.log('Received page details:', details);
+      
+      setPageDetails(details);
+      setLoading(false);
+      setRetryCount(0);
+    } catch (err) {
+      // Only update state if component is still mounted
+      if (!isComponentMounted.current) return;
+      
+      console.error('Error fetching page details:', err);
+      
+      // Handle different error types
+      if (err.message === 'Request timed out') {
+        setError('Request timed out. The server may be overloaded or the comparison is too complex.');
+        setLoading(false);
+      } else if (err.message && err.message.includes("still processing") && retryCount < maxRetries) {
+        console.log(`Comparison still processing. Retry ${retryCount + 1}/${maxRetries} in 3 seconds...`);
+        setError('Comparison details are still being processed. Please wait a moment...');
+        setLoading(false);
+        
+        // Try again after a delay
+        setTimeout(() => {
+          if (isComponentMounted.current) {
+            setRetryCount(prev => prev + 1);
+          }
+        }, 3000);
+      } else {
+        // For any other error, provide a clear message and fallback to empty data
+        setError('Failed to load page comparison details. Please try navigating to another page or refreshing.');
+        setLoading(false);
+        
+        // Set empty page details to prevent UI from being stuck in loading state
+        setPageDetails({
+          baseDifferences: [],
+          compareDifferences: [],
+          error: err.message
+        });
+      }
+    }
   }, [comparisonId, state.selectedPage, state.filters, retryCount, maxRetries, selectedPairIndex, setSelectedPage]);
 
-  // Handler for difference selection
-  const handleDifferenceSelect = (difference) => {
+  // Fetch page details when selected page changes
+  useEffect(() => {
+    fetchPageDetails();
+  }, [fetchPageDetails]);
+
+  // Handler for difference selection - memoized to prevent recreation on every render
+  const handleDifferenceSelect = useCallback((difference) => {
     console.log("Difference selected:", difference);
     setSelectedDifference(difference);
     setActiveDifference(difference);
@@ -199,10 +259,10 @@ const SideBySideView = ({ comparisonId, result }) => {
         });
       }
     }
-  };
+  }, [setSelectedDifference, state.viewSettings]);
   
-  // Handler for synchronized scrolling
-  const handleScroll = (event, source) => {
+  // Handler for synchronized scrolling - memoized to prevent recreation on every render
+  const handleScroll = useCallback((event, source) => {
     if (!state.viewSettings?.syncScroll) return;
     
     const { scrollTop, scrollLeft } = event.target;
@@ -214,14 +274,14 @@ const SideBySideView = ({ comparisonId, result }) => {
       baseContainerRef.current.scrollTop = scrollTop;
       baseContainerRef.current.scrollLeft = scrollLeft;
     }
-  };
+  }, [state.viewSettings]);
   
-  const toggleDifferencePanel = () => {
+  const toggleDifferencePanel = useCallback(() => {
     setShowDifferencePanel(!showDifferencePanel);
-  };
+  }, [showDifferencePanel]);
   
   // Helper function to check if a page has differences
-  const hasDifferences = (page) => {
+  const hasDifferences = useCallback((page) => {
     if (!page) return false;
     
     let hasDiff = false;
@@ -262,7 +322,7 @@ const SideBySideView = ({ comparisonId, result }) => {
     }
     
     return hasDiff;
-  };
+  }, []);
   
   // Count differences for the active page
   const differencesCount = (() => {
@@ -291,6 +351,30 @@ const SideBySideView = ({ comparisonId, result }) => {
       </div>
     );
   }
+  
+  // If this is a fallback result, show a warning
+  if (result.fallback) {
+    console.warn("Using fallback result object for SideBySideView");
+  }
+  
+  // Create a notification component for fallback mode
+  const FallbackNotification = () => {
+    if (!result.fallback) return null;
+    
+    return (
+      <div className="fallback-notification">
+        <div className="fallback-icon">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+          </svg>
+        </div>
+        <div className="fallback-message">
+          <p>The backend may be unresponsive. Showing a limited view with reduced functionality.</p>
+          <p>Try refreshing the page if the comparison doesn't appear correctly.</p>
+        </div>
+      </div>
+    );
+  };
 
   // Loading state for page details
   if (loading && !pageDetails) {
@@ -321,13 +405,11 @@ const SideBySideView = ({ comparisonId, result }) => {
       </div>
     );
   }
-  
-  // We no longer show an error when a page doesn't exist in one of the documents
-  // Instead, we'll let the SideBySidePanel handle this case by showing a message
-  // for the missing page while still displaying the page that does exist
 
   return (
     <div className="side-by-side-view">
+      {result.fallback && <FallbackNotification />}
+      
       <ViewToolbar 
         viewMode={viewMode}
         setViewMode={setViewMode}
@@ -389,14 +471,6 @@ const SideBySideView = ({ comparisonId, result }) => {
           />
         )}
         
-        {viewMode === 'enhanced' && (
-          <EnhancedDiffView
-            comparisonId={comparisonId}
-            result={result}
-            documentPair={isSmartComparisonMode && result.documentPairs ? result.documentPairs[selectedPairIndex] : null}
-          />
-        )}
-        
         {viewMode !== 'enhanced' && (
           <button 
             className="toggle-panel-button"
@@ -440,7 +514,7 @@ const SideBySideView = ({ comparisonId, result }) => {
           ) : null;
         })()}
         
-        {showDifferencePanel && viewMode !== 'enhanced' && (
+        {showDifferencePanel && viewMode !== 'enhanced' && pageDetails && (
           <DifferenceViewer 
             pageDetails={pageDetails}
             selectedDifference={state.selectedDifference}

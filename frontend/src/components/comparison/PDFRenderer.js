@@ -52,6 +52,10 @@ const PDFRenderer = ({
       // Ensure we have a valid fileId and page number
       if (!fileId || page === undefined || page === null) {
         console.warn("Missing fileId or page number:", { fileId, page });
+        // Set a fallback empty image to prevent UI from being stuck
+        setIsImage(true);
+        setDimensions({ width: 800, height: 1000 });
+        setRendered(true);
         return;
       }
       

@@ -1,13 +1,17 @@
-// SmartComparisonContainer.js - optimized version
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import DocumentMatchingView from './DocumentMatchingView';
 import SideBySideView from './SideBySideView';
 import Spinner from '../common/Spinner';
-import { getDocumentPairResult, getDocumentPairs } from '../../services/api';
+import { getDocumentPairs, getDocumentPairResult } from '../../services/api';
 import './SmartComparisonContainer.css';
 
 const SmartComparisonContainer = ({ comparisonId }) => {
+  // Reference to track if component is mounted
+  const isMounted = useRef(true);
+  const fetchInProgress = useRef(false);
+  const pairsAlreadyFetched = useRef(false);
+  
   const { 
     state, 
     setComparisonResult,
@@ -26,21 +30,41 @@ const SmartComparisonContainer = ({ comparisonId }) => {
   const [pairError, setPairError] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const [maxRetries] = useState(5);
-  const [documentPairs, setLocalDocumentPairs] = useState([]);
+  const [localDocumentPairs, setLocalDocumentPairs] = useState([]);
+  
+  // Set isMounted to false when component unmounts
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
   
   // Fetch document pairs when component mounts
   useEffect(() => {
     const fetchDocumentPairs = async () => {
-      if (!comparisonId) return;
+      if (!comparisonId || !isMounted.current || fetchInProgress.current || pairsAlreadyFetched.current) {
+        return;
+      }
       
       try {
+        fetchInProgress.current = true;
         setLoading(true);
+        
+        console.log(`Fetching document pairs for comparison: ${comparisonId} (attempt ${retryCount + 1}/${maxRetries})`);
         const pairs = await getDocumentPairs(comparisonId);
         
+        // Check if component is still mounted
+        if (!isMounted.current) return;
+        
         if (pairs && pairs.length > 0) {
+          console.log(`Received ${pairs.length} document pairs`);
+          
+          // Update state
           setLocalDocumentPairs(pairs);
-          setDocumentPairs(pairs); // Store in global state
-          setLoading(false);
+          setDocumentPairs(pairs);
+          
+          // Set flag to prevent refetching
+          pairsAlreadyFetched.current = true;
           
           // Auto-select the first matched pair if available
           const matchedPairIndex = pairs.findIndex(pair => pair.matched);
@@ -51,10 +75,15 @@ const SmartComparisonContainer = ({ comparisonId }) => {
             setSelectedPairIndex(0);
             setSelectedDocumentPairIndex(0);
           }
+          
+          setLoading(false);
         } else {
           throw new Error("No document pairs returned");
         }
       } catch (err) {
+        // Check if component is still mounted
+        if (!isMounted.current) return;
+        
         console.error('Error fetching document pairs:', err);
         
         // Check if this is a circuit breaker error
@@ -64,7 +93,9 @@ const SmartComparisonContainer = ({ comparisonId }) => {
           
           // Set a longer retry delay for circuit breaker errors
           setTimeout(() => {
-            setRetryCount(prev => prev + 1);
+            if (isMounted.current && retryCount < maxRetries) {
+              setRetryCount(prev => prev + 1);
+            }
           }, 30000); // 30 seconds
           
           return;
@@ -75,20 +106,24 @@ const SmartComparisonContainer = ({ comparisonId }) => {
           // Wait longer between retries as the count increases
           const delay = Math.min(2000 * Math.pow(1.5, retryCount), 15000);
           
-          console.log(`Retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+          console.log(`Retrying in ${Math.round(delay/1000)}s (attempt ${retryCount + 1}/${maxRetries})...`);
           
           setTimeout(() => {
-            setRetryCount(prev => prev + 1);
+            if (isMounted.current) {
+              setRetryCount(prev => prev + 1);
+            }
           }, delay);
         } else if (err.code === 'ERR_NETWORK' && retryCount < maxRetries) {
           // Handle network errors specifically
           // Use a longer delay for network errors to give the server time to recover
           const delay = Math.min(5000 * Math.pow(1.5, retryCount), 30000);
           
-          console.log(`Network error. Retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+          console.log(`Network error. Retrying in ${Math.round(delay/1000)}s (attempt ${retryCount + 1}/${maxRetries})...`);
           
           setTimeout(() => {
-            setRetryCount(prev => prev + 1);
+            if (isMounted.current) {
+              setRetryCount(prev => prev + 1);
+            }
           }, delay);
         } else if (retryCount >= maxRetries) {
           setError('Failed to load document pairs after multiple attempts. Please try refreshing the page.');
@@ -97,6 +132,8 @@ const SmartComparisonContainer = ({ comparisonId }) => {
           setError('Failed to load document pairs. The document matching may have failed.');
           setLoading(false);
         }
+      } finally {
+        fetchInProgress.current = false;
       }
     };
     
@@ -114,7 +151,29 @@ const SmartComparisonContainer = ({ comparisonId }) => {
         setLoadingPair(true);
         setPairError(null);
         
-        const result = await getDocumentPairResult(comparisonId, pairIndex);
+        console.log(`Loading comparison result for document pair ${pairIndex}`);
+        
+        // Set a timeout to prevent infinite loading
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timed out')), 30000)
+        );
+        
+        // Race between the actual request and the timeout
+        const result = await Promise.race([
+          getDocumentPairResult(comparisonId, pairIndex),
+          timeoutPromise
+        ]);
+        
+        // Check if component is still mounted
+        if (!isMounted.current) return;
+        
+        // Check if result is valid (has expected properties)
+        if (!result || (typeof result === 'object' && Object.keys(result).length === 0)) {
+          throw new Error('Received empty result from server');
+        }
+        
+        console.log('Received document pair result:', result);
+        
         setPairResult(result);
         setComparisonResult(result);
         
@@ -123,21 +182,32 @@ const SmartComparisonContainer = ({ comparisonId }) => {
         
         setLoadingPair(false);
       } catch (err) {
+        // Check if component is still mounted
+        if (!isMounted.current) return;
+        
         console.error('Error loading document pair result:', err);
         
         // Check if we should retry - is it a "still processing" error?
         if (err.message.includes("still processing") && retryCount < maxRetries) {
           setPairError(`The comparison is still being processed. Retrying in ${Math.round(3 * Math.pow(1.5, retryCount))} seconds...`);
+          
           setTimeout(() => {
-            setRetryCount(prev => prev + 1);
-            // Try again with the same parameters
-            handleSelectDocumentPair(pairIndex, pair);
+            if (isMounted.current) {
+              // Try again with the same parameters
+              handleSelectDocumentPair(pairIndex, pair);
+            }
           }, 3000 * Math.pow(1.5, retryCount));
+        } else if (err.message === 'Request timed out') {
+          setPairError('Request timed out. The server may be overloaded or the comparison is too complex.');
+          setLoadingPair(false);
         } else {
           setPairError('Failed to load comparison for this document pair. The server may still be processing or the comparison failed.');
+          setLoadingPair(false);
         }
-        setLoadingPair(false);
       }
+    } else {
+      // If the pair is not matched, still set loading to false
+      setLoadingPair(false);
     }
   };
   
@@ -159,6 +229,9 @@ const SmartComparisonContainer = ({ comparisonId }) => {
         <DocumentMatchingView 
           comparisonId={comparisonId}
           onSelectDocumentPair={handleSelectDocumentPair}
+          documentPairs={localDocumentPairs}
+          loading={state.loading || fetchInProgress.current}
+          error={state.error}
         />
       ) : (
         <div className="comparison-view">
@@ -192,7 +265,7 @@ const SmartComparisonContainer = ({ comparisonId }) => {
                 onClick={() => {
                   if (selectedPairIndex > 0) {
                     const newIndex = selectedPairIndex - 1;
-                    handleSelectDocumentPair(newIndex, documentPairs[newIndex]);
+                    handleSelectDocumentPair(newIndex, localDocumentPairs[newIndex]);
                   }
                 }}
                 disabled={selectedPairIndex <= 0}
@@ -204,18 +277,18 @@ const SmartComparisonContainer = ({ comparisonId }) => {
               </button>
               
               <div className="document-counter">
-                {selectedPairIndex + 1} / {documentPairs.length}
+                {selectedPairIndex + 1} / {localDocumentPairs.length}
               </div>
               
               <button 
                 className="nav-button next"
                 onClick={() => {
-                  if (selectedPairIndex < documentPairs.length - 1) {
+                  if (selectedPairIndex < localDocumentPairs.length - 1) {
                     const newIndex = selectedPairIndex + 1;
-                    handleSelectDocumentPair(newIndex, documentPairs[newIndex]);
+                    handleSelectDocumentPair(newIndex, localDocumentPairs[newIndex]);
                   }
                 }}
-                disabled={selectedPairIndex >= documentPairs.length - 1}
+                disabled={selectedPairIndex >= localDocumentPairs.length - 1}
               >
                 Next Document
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -255,6 +328,20 @@ const SmartComparisonContainer = ({ comparisonId }) => {
               <SideBySideView 
                 comparisonId={comparisonId}
                 result={pairResult}
+                documentPair={selectedPair}
+              />
+            </div>
+          ) : selectedPair ? (
+            // Fallback: If we have a selected pair but no result, still render the SideBySideView with a minimal result object
+            <div className="pair-comparison">
+              <SideBySideView 
+                comparisonId={comparisonId}
+                result={{
+                  basePageCount: selectedPair.basePageCount || 1,
+                  comparePageCount: selectedPair.comparePageCount || 1,
+                  documentPairs: [selectedPair],
+                  fallback: true
+                }}
                 documentPair={selectedPair}
               />
             </div>

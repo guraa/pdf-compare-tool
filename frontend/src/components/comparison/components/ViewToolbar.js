@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { getDocumentPageDetails } from '../../../services/api';
 
 const ViewToolbar = ({ 
@@ -16,26 +16,43 @@ const ViewToolbar = ({
   overlayOpacity,
   setOverlayOpacity
 }) => {
+  // State to track if we're currently checking for differences
+  const [isCheckingDifferences, setIsCheckingDifferences] = useState(false);
+  
+  // Use refs to prevent excessive logging and memory usage
+  const requestInProgress = useRef(false);
+  const checkedPages = useRef({});
+
   // Navigation handlers
-  const handlePreviousPage = () => {
+  const handlePreviousPage = useCallback(() => {
     if (currentPage > 1) {
       setSelectedPage(currentPage - 1);
     }
-  };
+  }, [currentPage, setSelectedPage]);
   
-  const handleNextPage = () => {
+  const handleNextPage = useCallback(() => {
     if (currentPage < totalPages) {
       setSelectedPage(currentPage + 1);
     }
-  };
-  
-  // State to track if we're currently checking for differences
-  const [isCheckingDifferences, setIsCheckingDifferences] = useState(false);
+  }, [currentPage, totalPages, setSelectedPage]);
 
-  // Helper function to check if a page has differences
-  const checkPageForDifferences = async (comparisonId, pairIndex, pageNumber) => {
+  // Helper function to check if a page has differences (memoized with useCallback)
+  const checkPageForDifferences = useCallback(async (comparisonId, pairIndex, pageNumber) => {
+    // Avoid duplicate checks for the same page
+    const cacheKey = `${comparisonId}-${pairIndex}-${pageNumber}`;
+    if (checkedPages.current[cacheKey] !== undefined) {
+      return checkedPages.current[cacheKey];
+    }
+    
+    // Return early if a request is already in progress
+    if (requestInProgress.current) {
+      return { exists: false, hasDifferences: false, cacheHit: false };
+    }
+    
     try {
+      requestInProgress.current = true;
       console.log(`Checking page ${pageNumber} for differences...`);
+      
       const pageDetails = await getDocumentPageDetails(comparisonId, pairIndex, pageNumber);
       
       // Check for specific messages
@@ -43,13 +60,17 @@ const ViewToolbar = ({
         // Skip pages that don't exist in the document pair
         if (pageDetails.message.includes("Page not found")) {
           console.log(`Page ${pageNumber} not found in document pair, skipping`);
-          return { exists: false, hasDifferences: false };
+          const result = { exists: false, hasDifferences: false };
+          checkedPages.current[cacheKey] = result;
+          return result;
         }
         
         // Handle pages that exist but don't have differences
         if (pageDetails.message.includes("Page exists but has no differences")) {
           console.log(`Page ${pageNumber} exists but has no differences`);
-          return { exists: true, hasDifferences: false };
+          const result = { exists: true, hasDifferences: false };
+          checkedPages.current[cacheKey] = result;
+          return result;
         }
       }
       
@@ -59,15 +80,20 @@ const ViewToolbar = ({
         (pageDetails.compareDifferences && pageDetails.compareDifferences.length > 0);
       
       console.log(`Page ${pageNumber} has differences: ${hasDifferencesOnPage}`);
-      return { exists: true, hasDifferences: hasDifferencesOnPage };
+      
+      const result = { exists: true, hasDifferences: hasDifferencesOnPage };
+      checkedPages.current[cacheKey] = result;
+      return result;
     } catch (err) {
       console.error(`Error checking page ${pageNumber} for differences:`, err);
       return { exists: false, hasDifferences: false };
+    } finally {
+      requestInProgress.current = false;
     }
-  };
+  }, []);
 
-  // Go to the next page that has differences
-  const handleNextDifferencePage = async () => {
+  // Go to the next page that has differences (memoized with useCallback)
+  const handleNextDifferencePage = useCallback(async () => {
     if (!result || isCheckingDifferences) return;
     
     // Handle smart comparison mode differently
@@ -98,33 +124,27 @@ const ViewToolbar = ({
           return;
         }
         
-        // Try to find the next page with differences
         console.log("Smart comparison mode: looking for next page with differences");
         
-        // Check pages from current+1 to maxPage
-        for (let i = currentPage + 1; i <= maxPage; i++) {
-          const result = await checkPageForDifferences(comparisonId, 0, i);
-          if (result.exists && result.hasDifferences) {
-            console.log(`Found differences on page ${i}, navigating there`);
-            setSelectedPage(i);
-            setIsCheckingDifferences(false);
-            return;
-          }
-        }
+        // Only check a few pages ahead to prevent excessive API calls
+        const pagesToCheck = Math.min(5, maxPage - currentPage);
         
-        // If we reached the end, start from the beginning
-        for (let i = 1; i < currentPage; i++) {
-          const result = await checkPageForDifferences(comparisonId, 0, i);
+        // Check pages from current+1 to current+pagesToCheck
+        for (let i = 1; i <= pagesToCheck; i++) {
+          const pageToCheck = currentPage + i;
+          if (pageToCheck > maxPage) break;
+          
+          const result = await checkPageForDifferences(comparisonId, 0, pageToCheck);
           if (result.exists && result.hasDifferences) {
-            console.log(`Found differences on page ${i} (wrapped), navigating there`);
-            setSelectedPage(i);
+            console.log(`Found differences on page ${pageToCheck}, navigating there`);
+            setSelectedPage(pageToCheck);
             setIsCheckingDifferences(false);
             return;
           }
         }
         
         // If we couldn't find any page with differences, just go to the next page
-        console.log("No pages with differences found, falling back to simple page navigation");
+        console.log("No pages with differences found in our window, using simple navigation");
         let nextPage = currentPage + 1;
         if (nextPage > maxPage) {
           nextPage = 1;
@@ -159,10 +179,10 @@ const ViewToolbar = ({
         return;
       }
     }
-  };
+  }, [result, isCheckingDifferences, currentPage, totalPages, hasDifferences, setSelectedPage, checkPageForDifferences]);
   
-  // Go to the previous page that has differences
-  const handlePreviousDifferencePage = async () => {
+  // Go to the previous page that has differences (memoized with useCallback)
+  const handlePreviousDifferencePage = useCallback(async () => {
     if (!result || isCheckingDifferences) return;
     
     // Handle smart comparison mode differently
@@ -186,33 +206,27 @@ const ViewToolbar = ({
           return;
         }
         
-        // Try to find the previous page with differences
         console.log("Smart comparison mode: looking for previous page with differences");
         
-        // Check pages from current-1 down to 1
-        for (let i = currentPage - 1; i >= 1; i--) {
-          const result = await checkPageForDifferences(comparisonId, 0, i);
-          if (result.exists && result.hasDifferences) {
-            console.log(`Found differences on page ${i}, navigating there`);
-            setSelectedPage(i);
-            setIsCheckingDifferences(false);
-            return;
-          }
-        }
+        // Only check a few pages back to prevent excessive API calls
+        const pagesToCheck = Math.min(5, currentPage - 1);
         
-        // If we reached the beginning, start from the end
-        for (let i = maxPage; i > currentPage; i--) {
-          const result = await checkPageForDifferences(comparisonId, 0, i);
+        // Check pages from current-1 down 
+        for (let i = 1; i <= pagesToCheck; i++) {
+          const pageToCheck = currentPage - i;
+          if (pageToCheck < 1) break;
+          
+          const result = await checkPageForDifferences(comparisonId, 0, pageToCheck);
           if (result.exists && result.hasDifferences) {
-            console.log(`Found differences on page ${i} (wrapped), navigating there`);
-            setSelectedPage(i);
+            console.log(`Found differences on page ${pageToCheck}, navigating there`);
+            setSelectedPage(pageToCheck);
             setIsCheckingDifferences(false);
             return;
           }
         }
         
         // If we couldn't find any page with differences, just go to the previous page
-        console.log("No pages with differences found, falling back to simple page navigation");
+        console.log("No pages with differences found in our window, using simple navigation");
         let prevPage = currentPage - 1;
         if (prevPage < 1) {
           prevPage = maxPage;
@@ -247,37 +261,28 @@ const ViewToolbar = ({
         return;
       }
     }
-  };
+  }, [result, isCheckingDifferences, currentPage, totalPages, hasDifferences, setSelectedPage, checkPageForDifferences]);
   
   // View settings handlers
-  const handleZoomChange = (newZoom) => {
+  const handleZoomChange = useCallback((newZoom) => {
     updateViewSettings({ zoom: newZoom });
-  };
+  }, [updateViewSettings]);
   
-  const handleHighlightModeChange = (mode) => {
+  const handleHighlightModeChange = useCallback((mode) => {
     updateViewSettings({ highlightMode: mode });
-  };
+  }, [updateViewSettings]);
   
-  const toggleViewMode = (mode) => {
+  const toggleViewMode = useCallback((mode) => {
     setViewMode(mode);
-  };
+  }, [setViewMode]);
   
-  const toggleSyncScroll = () => {
+  const toggleSyncScroll = useCallback(() => {
     updateViewSettings({ syncScroll: !viewSettings?.syncScroll });
-  };
+  }, [updateViewSettings, viewSettings]);
   
-  const toggleShowChangesOnly = () => {
+  const toggleShowChangesOnly = useCallback(() => {
     updateViewSettings({ showChangesOnly: !viewSettings?.showChangesOnly });
-  };
-  
-  // Navigation for active differences in the page
-  const navigateToNextDifference = () => {
-    // This will be implemented in the parent component
-  };
-  
-  const navigateToPreviousDifference = () => {
-    // This will be implemented in the parent component
-  };
+  }, [updateViewSettings, viewSettings]);
 
   return (
     <div className="view-toolbar">
@@ -326,6 +331,7 @@ const ViewToolbar = ({
             className="nav-button diff-nav-button"
             onClick={handlePreviousDifferencePage}
             title="Previous page with differences"
+            disabled={isCheckingDifferences}
           >
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path d="M17.7 15.89L13.82 12l3.89-3.89c.39-.39.39-1.02 0-1.41-.39-.39-1.02-.39-1.41 0l-4.59 4.59c-.39.39-.39 1.02 0 1.41l4.59 4.59c.39.39 1.02.39 1.41 0 .38-.38.38-1.02-.01-1.4zM7 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1z" />
@@ -342,6 +348,7 @@ const ViewToolbar = ({
             className="nav-button diff-nav-button"
             onClick={handleNextDifferencePage}
             title="Next page with differences"
+            disabled={isCheckingDifferences}
           >
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path d="M6.3 15.89l3.88-3.89-3.88-3.89c-.39-.39-.39-1.02 0-1.41.39-.39 1.02-.39 1.41 0l4.59 4.59c.39.39.39 1.02 0 1.41l-4.59 4.59c-.39.39-1.02.39-1.41 0-.38-.38-.38-1.02 0-1.4zM17 6c.55 0 1 .45 1 1v10c0 .55-.45 1-1 1s-1-.45-1-1V7c0-.55.45-1 1-1z" />
@@ -380,16 +387,6 @@ const ViewToolbar = ({
           >
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-7-2h2V7h-4v2h2z" />
-            </svg>
-          </button>
-          
-          <button
-            className={`view-mode-button ${viewMode === 'enhanced' ? 'active' : ''}`}
-            onClick={() => toggleViewMode('enhanced')}
-            title="Enhanced difference view"
-          >
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 5v14h18V5H3zm16 12H5V7h14v10zm-7-8H7v2h5V9zm5 0h-3v2h3V9zm-5 4H7v2h5v-2zm5 0h-3v2h3v-2z" />
             </svg>
           </button>
         </div>
@@ -487,17 +484,6 @@ const ViewToolbar = ({
       </div>
       
       <div className="diff-navigation-buttons">
-        <button
-          className="nav-button"
-          onClick={navigateToPreviousDifference}
-          disabled={differencesCount === 0}
-          title="Previous difference"
-        >
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 7l-5 5 5 5V7z" />
-          </svg>
-        </button>
-        
         <div className="diff-indicator">
           {activeDifference ? (
             <>
@@ -512,17 +498,6 @@ const ViewToolbar = ({
             <span>No difference selected</span>
           )}
         </div>
-        
-        <button
-          className="nav-button"
-          onClick={navigateToNextDifference}
-          disabled={differencesCount === 0}
-          title="Next difference"
-        >
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10 17l5-5-5-5v10z" />
-          </svg>
-        </button>
       </div>
     </div>
   );

@@ -23,6 +23,11 @@ const SideBySidePanel = ({
   
   console.log("documentPair:", documentPair);
   
+  // If this is a fallback result, show a warning
+  if (result.fallback) {
+    console.warn("Using fallback result object for SideBySidePanel");
+  }
+  
   // Calculate the actual page in base and compare documents
   // Make sure page numbers start at 1, not 0
   let selectedPage = state.selectedPage || 1;

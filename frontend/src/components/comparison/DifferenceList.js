@@ -27,11 +27,14 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
     const fetchAllDifferences = async () => {
       if (!result) return;
       
+      // Store differences from all pages for an overview
+      const allDiffs = [];
+      
+      // Store pages with differences for navigation
+      const pagesWithDifferences = [];
+      
       try {
         setLoading(true);
-        
-        // Store differences from all pages for an overview
-        const allDiffs = [];
         
         // Determine the correct page count based on whether we're in smart comparison mode
         let maxPages = 0;
@@ -50,19 +53,38 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
           console.log(`Standard mode: Using max page count ${maxPages}`);
         }
         
-        // Store pages with differences for navigation
-        const pagesWithDifferences = [];
+        // Set a timeout for the entire fetch operation
+        const fetchTimeout = setTimeout(() => {
+          console.warn('Difference fetching timed out after 30 seconds');
+          if (allDiffs.length > 0) {
+            // If we have some differences, use what we've got
+            setAllDifferences(allDiffs);
+            applyFilters(allDiffs, searchTerm, typeFilter, severityFilter);
+          } else {
+            // If we have no differences, set an error
+            setError('Timed out while loading differences. The server may be overloaded.');
+          }
+          setLoading(false);
+        }, 30000);
         
         // Loop through all pages to collect differences
-        for (let i = 1; i <= maxPages; i++) {
+        for (let i = 1; i <= maxPages && i <= 20; i++) { // Limit to 20 pages to prevent excessive requests
           try {
+            // Set a timeout for each page request
+            const pageTimeout = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Page request timed out')), 5000)
+            );
+            
             // In smart mode, use the document pair-specific endpoint
-            let pageDetails;
+            let pageDetailsPromise;
             if (result.documentPairs && result.documentPairs.length > 0) {
-              pageDetails = await getDocumentPageDetails(state.comparisonId, 0, i);
+              pageDetailsPromise = getDocumentPageDetails(state.comparisonId, 0, i);
             } else {
-              pageDetails = await getComparisonDetails(state.comparisonId, i);
+              pageDetailsPromise = getComparisonDetails(state.comparisonId, i);
             }
+            
+            // Race between the actual request and the timeout
+            const pageDetails = await Promise.race([pageDetailsPromise, pageTimeout]);
             
             // Skip pages with "Page not found" message
             if (pageDetails && pageDetails.message && pageDetails.message.includes("Page not found")) {
@@ -70,9 +92,13 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
               continue;
             }
             
+            // Ensure the response has the expected structure
+            if (!pageDetails.baseDifferences) pageDetails.baseDifferences = [];
+            if (!pageDetails.compareDifferences) pageDetails.compareDifferences = [];
+            
             let hasDifferencesOnPage = false;
             
-            if (pageDetails && pageDetails.baseDifferences && pageDetails.baseDifferences.length > 0) {
+            if (pageDetails.baseDifferences.length > 0) {
               hasDifferencesOnPage = true;
               allDiffs.push(...pageDetails.baseDifferences.map(diff => ({
                 ...diff,
@@ -80,7 +106,7 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
               })));
             }
             
-            if (pageDetails && pageDetails.compareDifferences && pageDetails.compareDifferences.length > 0) {
+            if (pageDetails.compareDifferences.length > 0) {
               // Only add differences not already included from base
               const uniqueCompareDiffs = pageDetails.compareDifferences.filter(
                 compDiff => !pageDetails.baseDifferences.some(
@@ -102,10 +128,21 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
               pagesWithDifferences.push(i);
               console.log(`Page ${i} has differences`);
             }
+            
+            // Update the differences list as we go, so the user sees something even if not all pages load
+            if (i % 3 === 0 || i === maxPages) { // Update every 3 pages or on the last page
+              setAllDifferences([...allDiffs]);
+              applyFilters([...allDiffs], searchTerm, typeFilter, severityFilter);
+            }
+            
           } catch (err) {
             console.warn(`Could not load differences for page ${i}:`, err);
+            // Continue with the next page even if this one failed
           }
         }
+        
+        // Clear the timeout since we finished normally
+        clearTimeout(fetchTimeout);
         
         console.log(`Loaded ${allDiffs.length} total differences across all pages`);
         console.log(`Pages with differences: ${pagesWithDifferences.join(', ')}`);
@@ -122,21 +159,27 @@ const DifferenceList = ({ result, onDifferenceClick, onFilterChange }) => {
           }
         }
         
+        // Final update of differences
         setAllDifferences(allDiffs);
-        
-        // Apply initial filtering
         applyFilters(allDiffs, searchTerm, typeFilter, severityFilter);
         
         setLoading(false);
       } catch (err) {
         console.error('Error fetching all differences:', err);
-        setError('Failed to load differences. Please try again.');
+        setError('Failed to load all differences. Some pages may be missing.');
+        
+        // If we have partial results, still show them
+        if (allDiffs && allDiffs.length > 0) {
+          setAllDifferences(allDiffs);
+          applyFilters(allDiffs, searchTerm, typeFilter, severityFilter);
+        }
+        
         setLoading(false);
       }
     };
     
     fetchAllDifferences();
-  }, [result, state.comparisonId]);
+  }, [result, state.comparisonId, searchTerm, typeFilter, severityFilter]);
 
   useEffect(() => {
     applyFilters(allDifferences, searchTerm, typeFilter, severityFilter);
