@@ -78,7 +78,6 @@ public class PdfProcessor {
             // Create a robust renderer for this document
             PdfRenderer robustRenderer = new PdfRenderer(document)
                     .setDefaultDPI(DEFAULT_DPI)
-                    .setFallbackDPI(THUMBNAIL_DPI)
                     .setImageType(ImageType.RGB);
 
             // Extract metadata
@@ -700,7 +699,11 @@ public class PdfProcessor {
         }
 
         // Check for other PDFBox rendering issues
-        return isPdfBoxRenderingError(e);
+        if (isPdfBoxRenderingError(e)) {
+            return true;
+        }
+
+        return false;
     }
 
     /**

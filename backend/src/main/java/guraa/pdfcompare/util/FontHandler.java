@@ -331,7 +331,7 @@ public class FontHandler {
          */
         public static FontInfo createListPlaceholder(List<FontInfo> list) {
             FontInfo placeholder = new FontInfo();
-            placeholder.setId("placeholder_" + UUID.randomUUID());
+            placeholder.setId("placeholder_" + UUID.randomUUID().toString());
             placeholder.setListReference(list);
             return placeholder;
         }

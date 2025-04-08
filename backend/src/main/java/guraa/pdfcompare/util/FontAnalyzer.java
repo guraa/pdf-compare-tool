@@ -270,7 +270,11 @@ public class FontAnalyzer {
         String name1 = normalizeFontName(font1.getFontName());
         String name2 = normalizeFontName(font2.getFontName());
 
-        return !name1.isEmpty() && !name2.isEmpty() && name1.equals(name2);
+        if (!name1.isEmpty() && !name2.isEmpty() && name1.equals(name2)) {
+            return true;
+        }
+
+        return false;
     }
 
     /**

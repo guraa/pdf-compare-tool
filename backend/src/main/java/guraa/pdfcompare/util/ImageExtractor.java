@@ -86,7 +86,7 @@ public class ImageExtractor extends PDFStreamEngine {
             try {
                 // Generate a unique name for the image file
                 String imageName = String.format("page_%d_image_%s.%s",
-                        pageIndex + 1, UUID.randomUUID(), imageInfo.getFormat());
+                        pageIndex + 1, UUID.randomUUID().toString(), imageInfo.getFormat());
 
                 File outputFile = outputDir.resolve(imageName).toFile();
                 ImageIO.write(imageInfo.getImage(), imageInfo.getFormat(), outputFile);

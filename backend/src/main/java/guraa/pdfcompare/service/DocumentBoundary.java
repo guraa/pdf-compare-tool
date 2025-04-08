@@ -63,7 +63,6 @@ public class DocumentBoundary {
         return pageIndex >= startPage && pageIndex <= endPage;
     }
 
-
     /**
      * Convert an absolute page index to a relative page index (within this document).
      *

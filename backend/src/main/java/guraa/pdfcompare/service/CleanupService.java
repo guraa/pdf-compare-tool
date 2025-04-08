@@ -161,7 +161,7 @@ public class CleanupService {
         }
 
         // Calculate cutoff time for temp files
-        long cutoffTime = System.currentTimeMillis() - ((long) tempExpirationDays * 24 * 60 * 60 * 1000);
+        long cutoffTime = System.currentTimeMillis() - (tempExpirationDays * 24 * 60 * 60 * 1000);
 
         int deletedCount = 0;
         for (File file : tempFiles) {
