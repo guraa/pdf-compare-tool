@@ -3,7 +3,7 @@
  */
 
 // Main view components
-import SideBySideView from './SideBySideView';
+
 import DifferenceViewer from './DifferenceViewer';
 import ComparisonSettings from './ComparisonSettings';
 
@@ -19,11 +19,10 @@ import ViewToolbar from './components/ViewToolbar';
 import PDFRenderer from './PDFRenderer';
 import DifferenceList from './DifferenceList';
 import DocumentMatchingView from './DocumentMatchingView';
-import SmartComparisonContainer from './SmartComparisonContainer';
+import SideBySideView from './SideBySideView';
 
 export {
   // Main views
-  SideBySideView,
   DifferenceViewer,
   ComparisonSettings,
   
@@ -39,5 +38,5 @@ export {
   PDFRenderer,
   DifferenceList,
   DocumentMatchingView,
-  SmartComparisonContainer
+  SideBySideView
 };

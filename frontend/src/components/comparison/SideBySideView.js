@@ -1,472 +1,363 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
-import { usePreferences } from '../../context/PreferencesContext';
 import { getDocumentPageDetails, getDocumentPage } from '../../services/api';
-import EnhancedDiffHighlighter from './EnhancedDiffHighlighter';
 import EnhancedDifferenceList from './EnhancedDifferenceList';
-import DifferenceComparisonToolbar from './DifferenceComparisonToolbar';
-import DifferenceLegend from './DifferenceLegend';
-import ViewToolbar from './components/ViewToolbar';
-import SideBySidePanel from './panels/SideBySidePanel'; // Keep import for potential future use or error states
-import OverlayPanel from './panels/OverlayPanel';
-import DifferencePanel from './panels/DifferencePanel';
-import DifferenceViewer from './DifferenceViewer';
 import Spinner from '../common/Spinner';
 import './SideBySideView.css';
 
-// Accept selectedPairIndexProp
-const SideBySideView = ({ comparisonId, result, selectedPairIndexProp = 0 }) => { 
-  // Reference to track if component is mounted
-  const isMounted = useRef(true);
-  const fetchAttempts = useRef(0);
+// Simple PDF page component with improved error handling and debugging
+const PDFPage = ({ imageUrl, differences = [], onSelectDifference, selectedDifference }) => {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   
+  // Debug output for component props
+  console.log(`PDFPage: Rendering with imageUrl=${imageUrl ? 'present' : 'missing'}, differences=${differences.length}`);
+
+  // Reset state when imageUrl changes
+  useEffect(() => {
+    console.log(`PDFPage: imageUrl changed to ${imageUrl ? imageUrl.substring(0, 30) + '...' : 'null'}`);
+    setImageError(false);
+    setImageLoaded(false);
+  }, [imageUrl]);
+
+  // Debug output for component state
+  useEffect(() => {
+    console.log(`PDFPage: State updated - imageError=${imageError}, imageLoaded=${imageLoaded}`);
+  }, [imageError, imageLoaded]);
+
+  const handleImageLoad = () => {
+    console.log("PDFPage: Image loaded successfully");
+    setImageLoaded(true);
+  };
+
+  const handleImageError = (e) => {
+    console.error("PDFPage: Image loading error:", e);
+    setImageError(true);
+  };
+
+  return (
+    <div className="pdf-page">
+      {imageUrl ? (
+        <div className="pdf-image-container">
+          {!imageError ? (
+            <>
+              <img 
+                src={imageUrl} 
+                alt="PDF page" 
+                className="pdf-image"
+                style={{ display: imageLoaded ? 'block' : 'none' }}
+                onLoad={handleImageLoad}
+                onError={handleImageError}
+              />
+              {!imageLoaded && !imageError && (
+                <div className="pdf-placeholder">
+                  <Spinner size="small" />
+                  <p>Loading image...</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="pdf-error-placeholder">
+              <p>Failed to load image</p>
+              <p>URL: {imageUrl ? imageUrl.substring(0, 30) + '...' : 'null'}</p>
+              <p>Please try refreshing the page</p>
+            </div>
+          )}
+          
+          {imageLoaded && !imageError && (
+            <div className="highlight-layer">
+              {differences && differences.map((diff) => (
+                <div 
+                  key={diff.id}
+                  className={`highlight-box ${diff.type || ''} ${diff.changeType || ''} ${selectedDifference?.id === diff.id ? 'selected' : ''}`}
+                  style={{
+                    left: diff.position?.x || 0,
+                    top: diff.position?.y || 0,
+                    width: diff.bounds?.width || 100,
+                    height: diff.bounds?.height || 30
+                  }}
+                  onClick={() => onSelectDifference(diff)}
+                  title={diff.description || `${diff.type} ${diff.changeType}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="pdf-placeholder">
+          <Spinner size="small" />
+          <p>Waiting for image URL...</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Main component
+const SideBySideView = ({ comparisonId, result, baseFileId, compareFileId, selectedPairIndexProp = 0 }) => {
+  // Refs for cleanup
+  const isMounted = useRef(true);
+  
+  // Context
   const { 
     state, 
     setSelectedPage, 
-    setSelectedDifference,
-    updateFilters,
-    updateViewSettings
+    setSelectedDifference
   } = useComparison();
   
-  const { preferences } = usePreferences();
-  
-  // State variables
+  // Component state
   const [pageDetails, setPageDetails] = useState(null);
-  const [loading, setLoading] = useState(false); // Unified loading state
-  const [error, setError] = useState(null);
-  const [showDifferencePanel, setShowDifferencePanel] = useState(true);
-  const [viewMode, setViewMode] = useState('sideBySide'); // 'sideBySide', 'overlay', 'difference'
-  const [overlayOpacity, setOverlayOpacity] = useState(0.5);
-  const [activeDifference, setActiveDifference] = useState(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [maxRetries] = useState(3);
-  // Removed local selectedPairIndex state - use selectedPairIndexProp instead
-  
-  // Added for enhanced visual highlighting
   const [baseImageUrl, setBaseImageUrl] = useState(null);
   const [compareImageUrl, setCompareImageUrl] = useState(null);
+  const [showDifferencePanel, setShowDifferencePanel] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(state.selectedPage || 1);
   
-  // Refs
-  const baseContainerRef = useRef(null);
-  const compareContainerRef = useRef(null);
+  // Get document pair
+  const documentPair = result?.documentPairs?.[selectedPairIndexProp] || null;
   
-  // Check if we're in smart comparison mode
-  const isSmartComparisonMode = result && result.documentPairs && result.documentPairs.length > 0;
+  // Calculate page counts and make sure we have a valid selected page
+  const basePageCount = documentPair?.basePageCount || result?.basePageCount || 0;
+  const comparePageCount = documentPair?.comparePageCount || result?.comparePageCount || 0;
+  const totalPages = Math.max(basePageCount, comparePageCount);
   
-  // Set isMounted to false when component unmounts
+  // Ensure selected page is valid
+  useEffect(() => {
+    if (!currentPage || currentPage < 1 || (currentPage > totalPages && totalPages > 0)) {
+      setCurrentPage(1);
+      setSelectedPage(1);
+    }
+  }, [currentPage, totalPages, setSelectedPage]);
+  
+  // Sync with context selected page
+  useEffect(() => {
+    if (state.selectedPage && state.selectedPage !== currentPage) {
+      setCurrentPage(state.selectedPage);
+    }
+  }, [state.selectedPage, currentPage]);
+  
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       isMounted.current = false;
-      
-      // Clean up any blob URLs when unmounting
       if (baseImageUrl) URL.revokeObjectURL(baseImageUrl);
       if (compareImageUrl) URL.revokeObjectURL(compareImageUrl);
     };
   }, [baseImageUrl, compareImageUrl]);
   
-  // Log the result once
-  useEffect(() => {
-    if (result && !fetchAttempts.current) {
-      console.log("Comparison result structure:", result);
-      fetchAttempts.current++;
-      
-      if (isSmartComparisonMode) {
-        console.log(`Found ${result.documentPairs.length} document pairs`);
-        // No need to set local index state here
-      }
-    }
-  }, [result, isSmartComparisonMode]);
-  
-  // Calculate derived values
-  let basePageCount = 0;
-  let comparePageCount = 0;
-  
-  // Use selectedPairIndexProp here
-  if (isSmartComparisonMode && result && result.documentPairs && result.documentPairs.length > selectedPairIndexProp) { 
-    const pair = result.documentPairs[selectedPairIndexProp]; // Use prop
-    if (pair) {
-      basePageCount = pair.basePageCount || 0;
-      comparePageCount = pair.comparePageCount || 0;
-    }
-  } else if (result) { // Fallback for non-smart mode (though this component is likely only used in smart mode now)
-    basePageCount = result.basePageCount || 0;
-    comparePageCount = result.comparePageCount || 0;
-  }
-  
-  // Total pages is the maximum of base and compare for the *selected pair*
-  const totalPages = Math.max(basePageCount, comparePageCount);
-  
-  // Ensure we don't try to access pages beyond the document pair's page count
-  useEffect(() => {
-    if (state.selectedPage > totalPages && totalPages > 0) {
-      setSelectedPage(1);
-    }
-  }, [state.selectedPage, totalPages, setSelectedPage]);
-  
-  // Ensure we have a valid selected page
-  useEffect(() => {
-    if (!state.selectedPage || state.selectedPage < 1) {
-      setSelectedPage(1);
-    }
-  }, [state.selectedPage, setSelectedPage]);
-  
-  // Fetch page details when selected page changes OR selected pair index changes
-  useEffect(() => {
-    const fetchPageDetails = async () => {
-      // Ensure result and the specific pair exist before fetching
-      if (!comparisonId || !state.selectedPage || !isMounted.current || !result?.documentPairs?.[selectedPairIndexProp]) {
-          console.warn("Skipping fetchPageDetails due to missing data", { comparisonId, selectedPage: state.selectedPage, hasPair: !!result?.documentPairs?.[selectedPairIndexProp] });
-          setLoading(false); // Ensure loading is off if we skip
-          return;
-      }
-      
-      try {
-        setLoading(true);
-        setError(null); // Clear previous errors
-        setPageDetails(null); // Clear previous details
-        setBaseImageUrl(null); // Clear previous images
-        setCompareImageUrl(null);
-        
-        // Ensure we always use a valid page number (minimum 1)
-        const pageNumber = Math.max(1, state.selectedPage);
-        
-        // Avoid excessive logging
-        if (fetchAttempts.current < 5) {
-          // Use prop in log
-          console.log(`Fetching comparison details for ID: ${comparisonId}, page: ${pageNumber}, pairIndex: ${selectedPairIndexProp}`); 
-          fetchAttempts.current++;
-        }
-        
-        // Set a timeout to prevent infinite loading
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timed out')), 20000)
-        );
-        
-        // Add a fallback promise that resolves with empty data after a longer timeout
-        const fallbackPromise = new Promise((resolve) => {
-          setTimeout(() => {
-            console.warn('Using fallback empty data due to backend unresponsiveness');
-            resolve({
-              baseDifferences: [],
-              compareDifferences: [],
-              message: "Backend may be unresponsive. Showing empty comparison view.",
-              fallback: true
-            });
-          }, 30000); // 30 seconds fallback timeout
-        });
-        
-        // Race between the actual request, the timeout, and the fallback
-        const details = await Promise.race([
-          getDocumentPageDetails(
-            comparisonId,
-            selectedPairIndexProp, // Use prop
-            pageNumber,
-            state.filters
-          ),
-          timeoutPromise,
-          fallbackPromise
-        ]);
-        
-        // Only update state if component is still mounted
-        if (!isMounted.current) return;
-        
-        // Check if the response is valid
-        if (!details) {
-          throw new Error('Received empty response from server');
-        }
-        
-        // Check if the page is out of bounds for the *current pair*
-        const currentPair = result.documentPairs[selectedPairIndexProp];
-        const pairTotalPages = Math.max(currentPair?.basePageCount || 0, currentPair?.comparePageCount || 0);
-        if (pageNumber > pairTotalPages) {
-             console.warn(`Requested page ${pageNumber} is out of bounds for pair ${selectedPairIndexProp} (max: ${pairTotalPages}). Resetting to page 1.`);
-             setSelectedPage(1); // Reset to page 1 of the current pair
-             setLoading(false);
-             return; // Skip further processing for this invalid page request
-        }
-
-        if (details && details.message && details.message.includes("Page not found")) {
-          console.warn("Page not found in document pair:", details.message);
-          
-          // If we have a maxPage value, navigate to the last valid page
-          if (details.maxPage && details.maxPage > 0) {
-            console.log(`Navigating to max page: ${details.maxPage}`);
-            setSelectedPage(details.maxPage);
-            setLoading(false);
-            return;
-          }
-          
-          // Otherwise, show an error
-          setError(`${details.message}. Please navigate to a valid page.`);
-          setLoading(false);
-          return;
-        }
-        
-        // Ensure the response has the expected structure
-        if (!details.baseDifferences) details.baseDifferences = [];
-        if (!details.compareDifferences) details.compareDifferences = [];
-        
-        console.log('Received page details:', details);
-        
-        // Set details *first*
-        setPageDetails(details);
-        setRetryCount(0);
-
-        // Fetch images *before* setting loading to false
-        try {
-          await fetchPageImages(); 
-        } catch (imageError) {
-           console.error("Error occurred during fetchPageImages:", imageError);
-           // If image fetch fails, we still proceed to set loading false, 
-           // the component will then render the fallback panel (or error message).
-        } 
-        
-        // Set loading to false only after details AND image fetch attempt are complete
-        if (isMounted.current) {
-          setLoading(false);
-        }
-        
-      } catch (err) {
-        // Only update state if component is still mounted
-        if (!isMounted.current) return;
-        
-        console.error('Error fetching page details:', err);
-        
-        // Handle different error types (ensure loading states are reset here too)
-        if (err.message === 'Request timed out') {
-          setError('Request timed out. The server may be overloaded or the comparison is too complex.');
-        } else if (err.message && err.message.includes("still processing") && retryCount < maxRetries) {
-          console.log(`Comparison still processing. Retry ${retryCount + 1}/${maxRetries} in 3 seconds...`);
-          setError('Comparison details are still being processed. Please wait a moment...');
-          
-          // Try again after a delay
-          setTimeout(() => {
-            if (isMounted.current) {
-              setRetryCount(prev => prev + 1);
-              // Don't set loading false here, let the retry handle it
-            }
-          }, 3000);
-          // Return early to prevent setting loading false immediately
-          return; 
-        } else {
-          // For any other error, provide a clear message and fallback to empty data
-            setError('Failed to load page comparison details. Please try navigating to another page or refreshing.');
-            // Set empty page details to prevent UI from being stuck in loading state
-            setPageDetails({
-            baseDifferences: [],
-            compareDifferences: [],
-            error: err.message
-          });
-        }
-        // Ensure loading is false on ANY error path that doesn't retry
-        if (isMounted.current) {
-            setLoading(false);
-        }
-      }
-    };
+  // Fetch base page image - using direct fetch like SmartComparisonContainer
+  const fetchBaseImage = useCallback(async (fileId, page) => {
+    if (!fileId || page < 1) return null;
     
-    fetchPageDetails();
-    // Use prop in dependency array
-  }, [comparisonId, state.selectedPage, state.filters, retryCount, maxRetries, selectedPairIndexProp, setSelectedPage, result]); // Added result to dependencies
-
-  // Fetch page images for enhanced highlighting using Promise.allSettled
-  const fetchPageImages = async () => {
-    // No need to set loadingImages here, main 'loading' covers it
-    if (!comparisonId || !state.baseFile?.fileId || !state.compareFile?.fileId || !isMounted.current || !result?.documentPairs?.[selectedPairIndexProp]) return;
-
-    // Clean up previous URLs immediately
-    if (baseImageUrl) URL.revokeObjectURL(baseImageUrl);
-    if (compareImageUrl) URL.revokeObjectURL(compareImageUrl);
-    setBaseImageUrl(null);
-    setCompareImageUrl(null);
-
+    console.log(`SideBySideView: Fetching base image for fileId=${fileId}, page=${page}`);
+    
     try {
-      // Calculate base and compare page numbers
+      // Use direct fetch instead of the API service
+      const url = `/api/pdfs/document/${fileId}/page/${page}`;
+      console.log(`SideBySideView: Fetch URL for base image: ${url}`);
+      
+      const response = await fetch(url);
+      console.log(`SideBySideView: Base image fetch response status: ${response.status}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch base image: ${response.status} ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      console.log(`SideBySideView: Base image blob received, size: ${blob.size} bytes, type: ${blob.type}`);
+      
+      if (!isMounted.current) return null;
+      
+      // Clean up previous URL
+      if (baseImageUrl) {
+        console.log(`SideBySideView: Revoking previous base image URL`);
+        URL.revokeObjectURL(baseImageUrl);
+      }
+      
+      const objectUrl = URL.createObjectURL(blob);
+      console.log(`SideBySideView: Created base image object URL: ${objectUrl}`);
+      return objectUrl;
+    } catch (error) {
+      console.error("Error fetching base image:", error);
+      return null;
+    }
+  }, [baseImageUrl]);
+  
+  // Fetch compare page image - using direct fetch like SmartComparisonContainer
+  const fetchCompareImage = useCallback(async (fileId, page) => {
+    if (!fileId || page < 1) return null;
+    
+    console.log(`SideBySideView: Fetching compare image for fileId=${fileId}, page=${page}`);
+    
+    try {
+      // Use direct fetch instead of the API service
+      const url = `/api/pdfs/document/${fileId}/page/${page}`;
+      console.log(`SideBySideView: Fetch URL for compare image: ${url}`);
+      
+      const response = await fetch(url);
+      console.log(`SideBySideView: Compare image fetch response status: ${response.status}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch compare image: ${response.status} ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      console.log(`SideBySideView: Compare image blob received, size: ${blob.size} bytes, type: ${blob.type}`);
+      
+      if (!isMounted.current) return null;
+      
+      // Clean up previous URL
+      if (compareImageUrl) {
+        console.log(`SideBySideView: Revoking previous compare image URL`);
+        URL.revokeObjectURL(compareImageUrl);
+      }
+      
+      const objectUrl = URL.createObjectURL(blob);
+      console.log(`SideBySideView: Created compare image object URL: ${objectUrl}`);
+      return objectUrl;
+    } catch (error) {
+      console.error("Error fetching compare image:", error);
+      return null;
+    }
+  }, [compareImageUrl]);
+  
+  // Main data loading function
+  const loadPageData = useCallback(async () => {
+    if (!comparisonId || !currentPage || !baseFileId || !compareFileId) {
+      console.error("SideBySideView: Missing required data for loading pages", {
+        comparisonId,
+        currentPage,
+        baseFileId,
+        compareFileId
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    console.log("Loading page data for SideBySideView...");
+    
+    try {
+      // Calculate page numbers
       let basePage, comparePage;
-      // Use selectedPairIndexProp here
-      if (isSmartComparisonMode && result.documentPairs.length > selectedPairIndexProp) { 
-        const pair = result.documentPairs[selectedPairIndexProp]; // Use prop
-        // Ensure pair exists before accessing properties
-        if (!pair) {
-          throw new Error(`Document pair at index ${selectedPairIndexProp} not found.`); // Use prop in error
-        }
-        // Page numbers within the *pair* context (1-based) need to map to absolute page numbers
-        const relativePage = Math.max(1, state.selectedPage); 
-        basePage = pair.baseStartPage + relativePage - 1;
-        comparePage = pair.compareStartPage + relativePage - 1;
-      } else { 
-        // Fallback for non-smart mode (shouldn't happen if used correctly)
-        basePage = state.selectedPage;
+      
+      if (documentPair) {
+        // Smart mode
+        basePage = documentPair.baseStartPage + (currentPage - 1);
+        comparePage = documentPair.compareStartPage + (currentPage - 1);
+      } else {
+        // Regular mode
+        basePage = currentPage;
         comparePage = state.selectedPage;
       }
-
-      // Ensure page numbers are valid (absolute)
+      
+      // Ensure page numbers are valid
       basePage = Math.max(1, basePage);
       comparePage = Math.max(1, comparePage);
-
-      console.log(`Fetching images for absolute pages: Base ${basePage}, Compare ${comparePage}`);
-
-      // Fetch images concurrently
-      const [baseResult, compareResult] = await Promise.allSettled([
-        getDocumentPage(state.baseFile.fileId, basePage),
-        getDocumentPage(state.compareFile.fileId, comparePage)
-      ]);
-
-      if (!isMounted.current) return; // Check mount status again after async operations
-
-      let newBaseUrl = null;
-      let newCompareUrl = null;
-
-      if (baseResult.status === 'fulfilled') {
-        newBaseUrl = URL.createObjectURL(baseResult.value);
-      } else {
-        console.error('Error fetching base page image:', baseResult.reason);
-        setError(prev => prev || 'Error loading base page image.'); // Set error state
+      
+      console.log(`Fetching pages - Base: ${basePage}, Compare: ${comparePage}`);
+      
+      // Reset image URLs before loading new ones
+      if (baseImageUrl) {
+        URL.revokeObjectURL(baseImageUrl);
+        setBaseImageUrl(null);
       }
-
-      if (compareResult.status === 'fulfilled') {
-        newCompareUrl = URL.createObjectURL(compareResult.value);
-      } else {
-        console.error('Error fetching compare page image:', compareResult.reason);
-        setError(prev => prev || 'Error loading compare page image.'); // Set error state
+      
+      if (compareImageUrl) {
+        URL.revokeObjectURL(compareImageUrl);
+        setCompareImageUrl(null);
       }
-
-      // Update state together after both promises settle
-      setBaseImageUrl(newBaseUrl);
-      setCompareImageUrl(newCompareUrl);
-
+      
+      // DIRECT APPROACH: Load images directly without Promise.all
+      // This approach is more similar to SmartComparisonContainer
+      
+      // First, try to get page details
+      let details;
+      try {
+        details = await getDocumentPageDetails(comparisonId, selectedPairIndexProp, state.selectedPage, state.filters);
+        console.log("SideBySideView: Got page details:", details);
+      } catch (err) {
+        console.error("Page details fetch error:", err);
+        details = { baseDifferences: [], compareDifferences: [] };
+      }
+      
+      if (details && isMounted.current) {
+        setPageDetails(details);
+      }
+      
+      // Then, try to get base image
+      try {
+        console.log(`SideBySideView: Fetching base image for page ${basePage}`);
+        const baseUrl = await fetchBaseImage(state.baseFile.fileId, basePage);
+        if (baseUrl && isMounted.current) {
+          console.log("SideBySideView: Setting base image URL:", baseUrl);
+          setBaseImageUrl(baseUrl);
+        } else {
+          console.warn("SideBySideView: No base image URL received");
+        }
+      } catch (err) {
+        console.error("Base image fetch error:", err);
+      }
+      
+      // Finally, try to get compare image
+      try {
+        console.log(`SideBySideView: Fetching compare image for page ${comparePage}`);
+        const compareUrl = await fetchCompareImage(state.compareFile.fileId, comparePage);
+        if (compareUrl && isMounted.current) {
+          console.log("SideBySideView: Setting compare image URL:", compareUrl);
+          setCompareImageUrl(compareUrl);
+        } else {
+          console.warn("SideBySideView: No compare image URL received");
+        }
+      } catch (err) {
+        console.error("Compare image fetch error:", err);
+      }
+      
+      if (isMounted.current) {
+        setIsLoading(false);
+      }
     } catch (error) {
-      // Catch errors during setup or calculation
-      console.error('Unexpected error in fetchPageImages setup:', error);
-      setError(prev => prev || 'Unexpected error loading images.'); // Set error state
-    }
-    // No finally block needed here for loadingImages
-  };
-
-  // Handler for difference selection
-  const handleDifferenceSelect = useCallback((difference) => {
-    console.log("Difference selected:", difference);
-    setSelectedDifference(difference);
-    setActiveDifference(difference);
-    
-    // Scroll to the difference location if available
-    if (difference.position && baseContainerRef.current && compareContainerRef.current) {
-      const { x, y } = difference.position;
-      
-      // Calculate scroll position (center the difference in the viewport)
-      const container = baseContainerRef.current;
-      const containerWidth = container.clientWidth;
-      const containerHeight = container.clientHeight;
-      
-      const scrollLeft = x - containerWidth / 2;
-      const scrollTop = y - containerHeight / 2;
-      
-      // Apply scrolling
-      baseContainerRef.current.scrollTo({
-        left: scrollLeft > 0 ? scrollLeft : 0,
-        top: scrollTop > 0 ? scrollTop : 0,
-        behavior: 'smooth'
-      });
-      
-      if (state.viewSettings?.syncScroll && compareContainerRef.current) {
-        compareContainerRef.current.scrollTo({
-          left: scrollLeft > 0 ? scrollLeft : 0,
-          top: scrollTop > 0 ? scrollTop : 0,
-          behavior: 'smooth'
-        });
+      console.error("Error loading page data:", error);
+      if (isMounted.current) {
+        // Even if there's an error, try to continue with what we have
+        setIsLoading(false);
       }
     }
-  }, [setSelectedDifference, state.viewSettings]);
+  }, [
+    comparisonId,
+    state.selectedPage,
+    state.filters,
+    state.baseFile,
+    state.compareFile,
+    selectedPairIndexProp,
+    documentPair,
+    fetchBaseImage,
+    fetchCompareImage
+  ]);
   
-  // Handler for synchronized scrolling
-  const handleScroll = useCallback((event, source) => {
-    if (!state.viewSettings?.syncScroll) return;
-    
-    const { scrollTop, scrollLeft } = event.target;
-    
-    if (source === 'base' && compareContainerRef.current) {
-      compareContainerRef.current.scrollTop = scrollTop;
-      compareContainerRef.current.scrollLeft = scrollLeft;
-    } else if (source === 'compare' && baseContainerRef.current) {
-      baseContainerRef.current.scrollTop = scrollTop;
-      baseContainerRef.current.scrollLeft = scrollLeft;
-    }
-  }, [state.viewSettings]);
+  // Load data when dependencies change
+  useEffect(() => {
+    loadPageData();
+  }, [loadPageData]);
   
+  // Handle difference selection
+  const handleDifferenceSelect = useCallback((diff) => {
+    if (!diff) return;
+    setSelectedDifference(diff);
+  }, [setSelectedDifference]);
+  
+  // Toggle difference panel
   const toggleDifferencePanel = useCallback(() => {
-    setShowDifferencePanel(!showDifferencePanel);
-  }, [showDifferencePanel]);
-  
-  // Helper function to check if a page has differences
-  const hasDifferences = useCallback((page) => {
-    if (!page) return false;
-    
-    let hasDiff = false;
-    
-    try {
-      // Check for page existence differences
-      if (page.onlyInBase || page.onlyInCompare) {
-        hasDiff = true;
-      }
-      
-      // Check for text differences
-      if (page.textDifferences && 
-          page.textDifferences.differences && 
-          page.textDifferences.differences.length > 0) {
-        hasDiff = true;
-      }
-      
-      // Check for text element differences
-      if (page.textElementDifferences && 
-          page.textElementDifferences.length > 0) {
-        hasDiff = true;
-      }
-      
-      // Check for image differences
-      if (page.imageDifferences && 
-          page.imageDifferences.length > 0) {
-        hasDiff = true;
-      }
-      
-      // Check for font differences
-      if (page.fontDifferences && 
-          page.fontDifferences.length > 0) {
-        hasDiff = true;
-      }
-    } catch (err) {
-      console.error("Error checking page differences:", err);
-      return false;
-    }
-    
-    return hasDiff;
+    setShowDifferencePanel(prev => !prev);
   }, []);
   
-  // Count differences for the active page
-  const differencesCount = (() => {
-    if (!pageDetails) return 0;
-    
-    try {
-      // Account for duplicates by using a Set
-      const uniqueIds = new Set([
-        ...(pageDetails.baseDifferences || []).map(d => d.id),
-        ...(pageDetails.compareDifferences || []).map(d => d.id)
-      ]);
-      
-      return uniqueIds.size;
-    } catch (err) {
-      console.error("Error counting differences:", err);
-      return 0;
-    }
-  })();
-  
-  // Navigation function to go to a specific page
+  // Page navigation
   const goToPage = useCallback((pageNum) => {
     if (pageNum >= 1 && pageNum <= totalPages) {
       setSelectedPage(pageNum);
     }
   }, [totalPages, setSelectedPage]);
-
-  // If we're still loading result data (initial load)
+  
+  // If no result yet, show loading
   if (!result) {
     return (
       <div className="side-by-side-view-loading">
@@ -475,123 +366,82 @@ const SideBySideView = ({ comparisonId, result, selectedPairIndexProp = 0 }) => 
       </div>
     );
   }
-
-  // Unified loading state check (covers details + image fetch attempt)
-  if (loading) { 
-    return (
-      <div className="side-by-side-view-loading">
-        <Spinner size="large" />
-        <p>Loading page comparison...</p>
-      </div>
-    );
-  }
   
-  // Handle potential errors after loading attempt
-  if (error) {
-     return (
-       <div className="side-by-side-view-error">
-         <p>Error: {error}</p>
-         <p>Please try selecting a different page or document pair.</p>
-       </div>
-     );
-  }
-
-  // Ensure pageDetails are available before rendering main view
-  if (!pageDetails) {
-     return (
-       <div className="side-by-side-view-loading">
-         <Spinner size="large" />
-         <p>Initializing comparison view...</p>
-       </div>
-     );
-  }
- 
-
   return (
     <div className="side-by-side-view">
-      {/* Use either the enhanced toolbar or original ViewToolbar */}
-      <DifferenceComparisonToolbar
-        differences={pageDetails}
-        selectedDifference={state.selectedDifference}
-        onSelectDifference={handleDifferenceSelect}
-        currentPage={state.selectedPage}
-        totalPages={totalPages} // total pages within the current pair
-        onPageChange={goToPage}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-        highlightMode={state.viewSettings?.highlightMode || 'all'}
-        onHighlightModeChange={(mode) => updateViewSettings({ highlightMode: mode })}
-      />
+      <div className="page-navigation">
+        <button 
+          className="nav-button prev"
+          onClick={() => goToPage(state.selectedPage - 1)}
+          disabled={state.selectedPage <= 1}
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+          </svg>
+          <span>Previous</span>
+        </button>
+        
+        <div className="page-indicator">
+          Page 
+          <input 
+            type="number"
+            value={state.selectedPage || 1}
+            min={1}
+            max={totalPages}
+            onChange={(e) => {
+              const page = parseInt(e.target.value);
+              if (!isNaN(page) && page >= 1 && page <= totalPages) {
+                goToPage(page);
+              }
+            }}
+          /> 
+          of {totalPages}
+        </div>
+        
+        <button 
+          className="nav-button next"
+          onClick={() => goToPage(state.selectedPage + 1)}
+          disabled={state.selectedPage >= totalPages}
+        >
+          <span>Next</span>
+          <svg viewBox="0 0 24 24">
+            <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+          </svg>
+        </button>
+      </div>
       
       <div className="comparison-container">
-        <div className={`documents-container ${showDifferencePanel ? 'with-panel' : 'full-width'}`}>
-          {viewMode === 'sideBySide' && (
-            // Check if images are loaded AFTER main loading is complete
-            baseImageUrl && compareImageUrl ? (
-              // Render the main highlighter if images are ready
-              <EnhancedDiffHighlighter
-              result={result} // Pass full result
-                pageDetails={pageDetails}
-                baseImageUrl={baseImageUrl}
-                compareImageUrl={compareImageUrl}
-                viewSettings={state.viewSettings}
-                onDifferenceSelect={handleDifferenceSelect}
+        <div className={`pdf-container ${showDifferencePanel ? 'with-panel' : 'full-width'}`}>
+          <div className="document-header-bar">
+            <div className="document-header base">Base Document</div>
+            <div className="document-header compare">Compare Document</div>
+          </div>
+          
+          <div className="document-content">
+            <div className="pdf-view base">
+              <PDFPage 
+                imageUrl={baseImageUrl}
+                differences={pageDetails?.baseDifferences || []}
+                onSelectDifference={handleDifferenceSelect}
                 selectedDifference={state.selectedDifference}
-                // Pass selectedPairIndexProp if needed by highlighter
-                selectedPairIndex={selectedPairIndexProp} 
               />
-            ) : (
-              // Explicitly show an image loading state or error instead of fallback panel
-              // This prevents SideBySidePanel/PDFRenderer from being called unnecessarily
-              <div className="side-by-side-view-loading" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {error ? ( // Check if an error occurred during image fetch specifically
-                  <span>Error loading page images. Please try again.</span>
-                ) : (
-                  // Otherwise, assume images are still loading (or failed silently)
-                  <>
-                    <Spinner size="medium" />
-                    <p style={{ marginLeft: '10px' }}>Loading page images...</p>
-                  </>
-                )}
-              </div>
-              // Fallback SideBySidePanel removed to prevent incorrect rendering
-            )
-          )}
-          
-          {viewMode === 'overlay' && (
-            <OverlayPanel
-              result={result}
-              pageDetails={pageDetails}
-              loading={loading}
-              state={state}
-              handleDifferenceSelect={handleDifferenceSelect}
-              showDifferencePanel={showDifferencePanel}
-              overlayOpacity={overlayOpacity}
-              selectedPairIndex={selectedPairIndexProp} // Use prop
-              isSmartMode={isSmartComparisonMode}
-            />
-          )}
-          
-          {viewMode === 'difference' && (
-            <DifferencePanel
-              result={result}
-              pageDetails={pageDetails}
-              baseContainerRef={baseContainerRef}
-              loading={loading}
-              state={state}
-              handleDifferenceSelect={handleDifferenceSelect}
-              showDifferencePanel={showDifferencePanel}
-              selectedPairIndex={selectedPairIndexProp} // Use prop
-              isSmartMode={isSmartComparisonMode}
-            />
-          )}
+            </div>
+            
+            <div className="pdf-view compare">
+              <PDFPage 
+                imageUrl={compareImageUrl}
+                differences={pageDetails?.compareDifferences || []}
+                onSelectDifference={handleDifferenceSelect}
+                selectedDifference={state.selectedDifference}
+              />
+            </div>
+          </div>
         </div>
         
         {showDifferencePanel && (
           <div className="difference-panel">
-            {/* Use the enhanced difference list instead of the original DifferenceViewer */}
             <EnhancedDifferenceList
-              differences={pageDetails}
+              differences={pageDetails || { baseDifferences: [], compareDifferences: [] }}
               onDifferenceSelect={handleDifferenceSelect}
               selectedDifference={state.selectedDifference}
             />
@@ -603,22 +453,17 @@ const SideBySideView = ({ comparisonId, result, selectedPairIndexProp = 0 }) => 
           onClick={toggleDifferencePanel}
           title={showDifferencePanel ? "Hide difference panel" : "Show difference panel"}
         >
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            {showDifferencePanel ? (
-              <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6-6-6z" />
-            ) : (
-              <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
-            )}
-          </svg>
+          {showDifferencePanel ? '›' : '‹'}
         </button>
       </div>
       
-      {/* Add the difference legend at the bottom */}
-      <DifferenceLegend differences={pageDetails} />
+      {isLoading && (
+        <div className="loading-overlay">
+          <Spinner size="medium" />
+        </div>
+      )}
     </div>
   );
 };
 
 export default SideBySideView;
-
-

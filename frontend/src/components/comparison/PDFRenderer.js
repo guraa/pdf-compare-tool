@@ -411,3 +411,5 @@ const PDFRenderer = ({
     </div>
   );
 };
+
+export default PDFRenderer;
