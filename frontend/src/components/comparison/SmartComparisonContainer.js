@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import DocumentMatchingView from './DocumentMatchingView';
+import SideBySideView from './SideBySideView'; // Import the SideBySideView component
 import Spinner from '../common/Spinner';
 import { getDocumentPairs } from '../../services/api';
 import './SmartComparisonContainer.css';
@@ -25,101 +26,25 @@ const SmartComparisonContainer = ({ comparisonId }) => {
   } = useComparison();
   
   const [activeView, setActiveView] = useState('matching');
-  const [selectedPairIndex, setSelectedPairIndex] = useState(null);
-  const [selectedPair, setSelectedPair] = useState(null);
-  const [localDocumentPairs, setLocalDocumentPairs] = useState([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [loadingImages, setLoadingImages] = useState(false);
-  const [baseImageUrl, setBaseImageUrl] = useState(null);
-  const [compareImageUrl, setCompareImageUrl] = useState(null);
+  const [selectedPairIndex, setSelectedPairIndex] = useState(0); // Default to 0
+  const [comparisonResultData, setComparisonResultData] = useState(null); // Store full result
+  // Removed localDocumentPairs and selectedPair state
   
   // Set isMounted to false when component unmounts
   useEffect(() => {
     return () => {
       isMounted.current = false;
-      
-      // Clean up any blob URLs when unmounting
-      if (baseImageUrl) {
-        URL.revokeObjectURL(baseImageUrl);
-      }
-      if (compareImageUrl) {
-        URL.revokeObjectURL(compareImageUrl);
-      }
+      // Removed cleanup for custom viewer blob URLs
     };
-  }, [baseImageUrl, compareImageUrl]);
+  }, []); // Removed dependencies related to custom viewer
   
   // Log when view changes
   useEffect(() => {
     console.log("🔍 Active view changed to:", activeView);
-    
-    // Load PDF images directly when view changes to comparison
-    if (activeView === 'comparison' && selectedPair) {
-      loadPageImages(1);
-    }
-  }, [activeView, selectedPair]);
+    // Removed logic to load images directly for custom viewer
+  }, [activeView]);
   
-  // Load PDF page images directly
-  const loadPageImages = async (pageNum) => {
-    if (!selectedPair) return;
-    
-    try {
-      setLoadingImages(true);
-      
-      // Calculate actual page numbers based on the document pair
-      const basePage = selectedPair.baseStartPage + pageNum - 1;
-      const comparePage = selectedPair.compareStartPage + pageNum - 1;
-      
-      console.log(`Loading page images for base page ${basePage} and compare page ${comparePage}`);
-      
-      // Clean up previous blob URLs
-      if (baseImageUrl) {
-        URL.revokeObjectURL(baseImageUrl);
-      }
-      if (compareImageUrl) {
-        URL.revokeObjectURL(compareImageUrl);
-      }
-      
-      // Reset URLs
-      setBaseImageUrl(null);
-      setCompareImageUrl(null);
-      
-      // Load base document page
-      if (basePage <= selectedPair.baseEndPage) {
-        try {
-          const baseResponse = await fetch(`/api/pdfs/document/${state.baseFile?.fileId}/page/${basePage}`);
-          if (baseResponse.ok) {
-            const baseBlob = await baseResponse.blob();
-            const baseUrl = URL.createObjectURL(baseBlob);
-            setBaseImageUrl(baseUrl);
-          }
-        } catch (error) {
-          console.error("Error loading base page:", error);
-        }
-      }
-      
-      // Load compare document page
-      if (comparePage <= selectedPair.compareEndPage) {
-        try {
-          const compareResponse = await fetch(`/api/pdfs/document/${state.compareFile?.fileId}/page/${comparePage}`);
-          if (compareResponse.ok) {
-            const compareBlob = await compareResponse.blob();
-            const compareUrl = URL.createObjectURL(compareBlob);
-            setCompareImageUrl(compareUrl);
-          }
-        } catch (error) {
-          console.error("Error loading compare page:", error);
-        }
-      }
-      
-      // Update current page
-      setCurrentPage(pageNum);
-      
-    } catch (error) {
-      console.error("Error loading page images:", error);
-    } finally {
-      setLoadingImages(false);
-    }
-  };
+  // Removed the loadPageImages function
   
   // Fetch document pairs when component mounts
   useEffect(() => {
@@ -141,25 +66,23 @@ const SmartComparisonContainer = ({ comparisonId }) => {
         if (pairs && pairs.length > 0) {
           console.log(`Received ${pairs.length} document pairs`);
           
+          // Construct the full result object (assuming getDocumentPairs returns just the array)
+          const fullResult = { id: comparisonId, documentPairs: pairs };
+          console.log("Constructed full comparison result:", fullResult);
+          
           // Update state
-          setLocalDocumentPairs(pairs);
-          setDocumentPairs(pairs);
+          setComparisonResultData(fullResult); // Store the full result object
+          setDocumentPairs(pairs); // Update context (if still needed elsewhere)
           
           // Set flag to prevent refetching
           pairsAlreadyFetched.current = true;
           
           // Auto-select the first matched pair if available
           const matchedPairIndex = pairs.findIndex(pair => pair.matched);
-          if (matchedPairIndex >= 0) {
-            setSelectedPairIndex(matchedPairIndex);
-            setSelectedDocumentPairIndex(matchedPairIndex);
-            setSelectedPair(pairs[matchedPairIndex]);
-          } else {
-            setSelectedPairIndex(0);
-            setSelectedDocumentPairIndex(0);
-            setSelectedPair(pairs[0]);
-          }
-          
+          const initialIndex = matchedPairIndex >= 0 ? matchedPairIndex : 0;
+          setSelectedPairIndex(initialIndex); // Set local index state
+          setSelectedDocumentPairIndex(initialIndex); // Update context index
+                    
           setLoading(false);
         } else {
           throw new Error("No document pairs returned");
@@ -179,41 +102,35 @@ const SmartComparisonContainer = ({ comparisonId }) => {
   
   // View comparison button handler
   const viewPairComparison = useCallback(() => {
-    console.log("⚡ viewPairComparison called directly");
+    console.log("⚡ viewPairComparison called directly for index:", selectedPairIndex);
     
-    if (!selectedPair) {
-      console.error("No pair selected");
+    if (selectedPairIndex === null || !comparisonResultData?.documentPairs?.[selectedPairIndex]) {
+      console.error("No valid pair selected at index:", selectedPairIndex);
       return;
     }
     
     // Switch to comparison view immediately
     setActiveView('comparison');
-    
-    // Reset current page to 1
-    setCurrentPage(1);
-  }, [selectedPair]);
+  }, [selectedPairIndex, comparisonResultData]);
   
-  // Handle selecting a document pair
-  const handleSelectDocumentPair = (pairIndex, pair) => {
-    console.log("🔵 handleSelectDocumentPair called with", pairIndex, pair);
+  // Handle selecting a document pair (only needs index now)
+  const handleSelectDocumentPair = (pairIndex) => {
+    console.log("🔵 handleSelectDocumentPair called with index:", pairIndex);
     
-    if (!pair) {
-      console.error("Invalid pair selected");
-      return;
-    }
-    
-    // Update the global context and local state for the selected pair
-    setSelectedPairIndex(pairIndex);
-    setSelectedPair(pair);
-    setSelectedDocumentPairIndex(pairIndex);
-    
-    // If this came from the "View Comparison" button, switch the view immediately
-    if (pair.matched) {
-      console.log("📱 Valid matched pair selected - switching to comparison view");
-      setActiveView('comparison');
+    if (comparisonResultData?.documentPairs?.[pairIndex]) {
+      const pair = comparisonResultData.documentPairs[pairIndex];
       
-      // Reset current page when changing pairs
-      setCurrentPage(1);
+      // Update the global context and local state for the selected pair index
+      setSelectedPairIndex(pairIndex);
+      setSelectedDocumentPairIndex(pairIndex); // Update context
+      
+      // If this came from the "View Comparison" button or selection, switch the view
+      if (pair.matched) { // Assuming 'matched' property indicates view switch trigger
+        console.log("📱 Valid matched pair selected - switching to comparison view");
+        setActiveView('comparison');
+      }
+    } else {
+       console.error("Invalid pair index selected:", pairIndex);
     }
   };
   
@@ -221,46 +138,16 @@ const SmartComparisonContainer = ({ comparisonId }) => {
   const backToMatching = useCallback(() => {
     console.log("◀️ Going back to matching view");
     setActiveView('matching');
-    
-    // Clean up any blob URLs when going back
-    if (baseImageUrl) {
-      URL.revokeObjectURL(baseImageUrl);
-      setBaseImageUrl(null);
-    }
-    if (compareImageUrl) {
-      URL.revokeObjectURL(compareImageUrl);
-      setCompareImageUrl(null);
-    }
-  }, [baseImageUrl, compareImageUrl]);
+    // Removed cleanup for custom viewer blob URLs
+  }, []); // Removed dependencies
 
-  // Get the max page count for the current document pair
-  const getMaxPageCount = useCallback(() => {
-    if (!selectedPair) return 1;
-    
-    const basePages = selectedPair.baseEndPage - selectedPair.baseStartPage + 1;
-    const comparePages = selectedPair.compareEndPage - selectedPair.compareStartPage + 1;
-    
-    return Math.max(basePages, comparePages);
-  }, [selectedPair]);
+  // Removed getMaxPageCount, goToPreviousPage, goToNextPage functions
 
-  // Navigate to the previous page
-  const goToPreviousPage = useCallback(() => {
-    if (currentPage > 1) {
-      loadPageImages(currentPage - 1);
-    }
-  }, [currentPage]);
-
-  // Navigate to the next page
-  const goToNextPage = useCallback(() => {
-    const maxPages = getMaxPageCount();
-    if (currentPage < maxPages) {
-      loadPageImages(currentPage + 1);
-    }
-  }, [currentPage, getMaxPageCount]);
-
-  console.log("🔄 Rendering with activeView:", activeView, 
+  console.log("🔄 Rendering SmartComparisonContainer with activeView:", activeView, 
               "selectedPairIndex:", selectedPairIndex, 
-              "hasSelectedPair:", !!selectedPair);
+              "hasResultData:", !!comparisonResultData);
+
+  const currentPair = comparisonResultData?.documentPairs?.[selectedPairIndex];
 
   return (
     <div className="smart-comparison-container">
@@ -268,18 +155,19 @@ const SmartComparisonContainer = ({ comparisonId }) => {
         <>
           <DocumentMatchingView 
             comparisonId={comparisonId}
-            onSelectDocumentPair={handleSelectDocumentPair}
-            documentPairs={localDocumentPairs}
-            loading={state.loading || fetchInProgress.current}
+            onSelectDocumentPair={handleSelectDocumentPair} // Pass index selection handler
+            documentPairs={comparisonResultData?.documentPairs || []} // Pass pairs from full result
+            loading={state.loading || fetchInProgress.current || !comparisonResultData} // Loading if fetching or no data yet
             error={state.error}
+            selectedPairIndex={selectedPairIndex} // Pass selected index for highlighting
           />
           
           {/* Floating action bar for viewing comparison */}
-          {selectedPair && selectedPair.matched && (
+          {currentPair && currentPair.matched && (
             <div className="view-comparison-bar">
               <button 
                 className="view-comparison-button"
-                onClick={viewPairComparison}
+                onClick={viewPairComparison} // Already uses selectedPairIndex state
                 style={{ cursor: 'pointer' }}
               >
                 View Comparison for Document {selectedPairIndex + 1}
@@ -301,14 +189,15 @@ const SmartComparisonContainer = ({ comparisonId }) => {
               Back to Document List
             </button>
             
+            {/* Simplified header for SideBySideView */}
             <div className="document-info">
-              {selectedPair && (
+              {currentPair && (
                 <>
                   <h3>Document {selectedPairIndex + 1} Comparison</h3>
                   <div className="page-ranges">
-                    <span className="base-range">Base: {selectedPair.baseStartPage}-{selectedPair.baseEndPage}</span>
+                    <span className="base-range">Base: {currentPair.baseStartPage}-{currentPair.baseEndPage}</span>
                     <span className="separator">vs</span>
-                    <span className="compare-range">Compare: {selectedPair.compareStartPage}-{selectedPair.compareEndPage}</span>
+                    <span className="compare-range">Compare: {currentPair.compareStartPage}-{currentPair.compareEndPage}</span>
                   </div>
                 </>
               )}
@@ -317,12 +206,7 @@ const SmartComparisonContainer = ({ comparisonId }) => {
             <div className="document-navigation">
               <button 
                 className="nav-button prev"
-                onClick={() => {
-                  if (selectedPairIndex > 0) {
-                    const newIndex = selectedPairIndex - 1;
-                    handleSelectDocumentPair(newIndex, localDocumentPairs[newIndex]);
-                  }
-                }}
+                onClick={() => handleSelectDocumentPair(selectedPairIndex - 1)}
                 disabled={selectedPairIndex <= 0}
                 style={{ cursor: selectedPairIndex > 0 ? 'pointer' : 'not-allowed' }}
               >
@@ -333,19 +217,14 @@ const SmartComparisonContainer = ({ comparisonId }) => {
               </button>
               
               <div className="document-counter">
-                {selectedPairIndex + 1} / {localDocumentPairs.length}
+                {selectedPairIndex + 1} / {comparisonResultData?.documentPairs?.length || 0}
               </div>
               
               <button 
                 className="nav-button next"
-                onClick={() => {
-                  if (selectedPairIndex < localDocumentPairs.length - 1) {
-                    const newIndex = selectedPairIndex + 1;
-                    handleSelectDocumentPair(newIndex, localDocumentPairs[newIndex]);
-                  }
-                }}
-                disabled={selectedPairIndex >= localDocumentPairs.length - 1}
-                style={{ cursor: selectedPairIndex < localDocumentPairs.length - 1 ? 'pointer' : 'not-allowed' }}
+                onClick={() => handleSelectDocumentPair(selectedPairIndex + 1)}
+                disabled={!comparisonResultData || selectedPairIndex >= comparisonResultData.documentPairs.length - 1}
+                style={{ cursor: comparisonResultData && selectedPairIndex < comparisonResultData.documentPairs.length - 1 ? 'pointer' : 'not-allowed' }}
               >
                 Next Document
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -355,182 +234,19 @@ const SmartComparisonContainer = ({ comparisonId }) => {
             </div>
           </div>
           
-          <div className="emergency-mode-banner" style={{
-            backgroundColor: '#fffde7',
-            borderBottom: '1px solid #ffd600',
-            padding: '8px 16px',
-            fontSize: '14px',
-            color: '#7e57c2',
-            textAlign: 'center'
-          }}>
-            🛠️ Basic document viewer mode - No difference highlighting available
-          </div>
-          
-          {/* Custom direct PDF viewer */}
-          <div style={{ display: 'flex', flexDirection: 'column', padding: '16px' }}>
-            {/* Page navigation */}
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              alignItems: 'center', 
-              margin: '0 0 16px 0',
-              gap: '16px'
-            }}>
-              <button 
-                onClick={goToPreviousPage}
-                disabled={currentPage <= 1 || loadingImages}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: currentPage <= 1 ? '#e0e0e0' : '#2c6dbd',
-                  color: currentPage <= 1 ? '#9e9e9e' : 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: currentPage <= 1 ? 'not-allowed' : 'pointer'
-                }}
-              >
-                Previous Page
-              </button>
-              
-              <div style={{ fontWeight: 'bold' }}>
-                Page {currentPage} of {getMaxPageCount()}
-              </div>
-              
-              <button 
-                onClick={goToNextPage}
-                disabled={currentPage >= getMaxPageCount() || loadingImages}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: currentPage >= getMaxPageCount() ? '#e0e0e0' : '#2c6dbd',
-                  color: currentPage >= getMaxPageCount() ? '#9e9e9e' : 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: currentPage >= getMaxPageCount() ? 'not-allowed' : 'pointer'
-                }}
-              >
-                Next Page
-              </button>
+          {/* Render SideBySideView with the full result and selected index */}
+          {comparisonResultData ? (
+            <SideBySideView 
+              comparisonId={comparisonId} 
+              result={comparisonResultData} // Pass the full result object
+              selectedPairIndexProp={selectedPairIndex} // Pass the selected index as a prop
+            />
+          ) : (
+            <div style={{ padding: '20px', textAlign: 'center' }}>
+              <Spinner size="large" />
+              <p>Loading comparison data...</p>
             </div>
-            
-            {/* Document viewers */}
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              gap: '16px', 
-              flexWrap: 'wrap'
-            }}>
-              {/* Base document */}
-              <div style={{ 
-                border: '1px solid #e0e0e0', 
-                borderRadius: '4px', 
-                padding: '8px',
-                backgroundColor: '#f5f5f5',
-                width: '45%',
-                minWidth: '300px',
-                maxWidth: '700px'
-              }}>
-                <div style={{ 
-                  borderBottom: '1px solid #e0e0e0', 
-                  padding: '8px 0', 
-                  marginBottom: '8px',
-                  fontWeight: 'bold',
-                  color: '#2c6dbd'
-                }}>
-                  Base Document
-                </div>
-                
-                {loadingImages && !baseImageUrl ? (
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center',
-                    height: '300px'
-                  }}>
-                    <Spinner size="large" />
-                  </div>
-                ) : baseImageUrl ? (
-                  <img 
-                    src={baseImageUrl} 
-                    alt="Base document page" 
-                    style={{ 
-                      maxWidth: '100%', 
-                      height: 'auto', 
-                      display: 'block',
-                      margin: '0 auto',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                    }} 
-                  />
-                ) : (
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center',
-                    height: '300px',
-                    backgroundColor: '#eeeeee',
-                    color: '#757575',
-                    fontStyle: 'italic'
-                  }}>
-                    Page not available
-                  </div>
-                )}
-              </div>
-              
-              {/* Compare document */}
-              <div style={{ 
-                border: '1px solid #e0e0e0', 
-                borderRadius: '4px', 
-                padding: '8px',
-                backgroundColor: '#f5f5f5',
-                width: '45%',
-                minWidth: '300px',
-                maxWidth: '700px'
-              }}>
-                <div style={{ 
-                  borderBottom: '1px solid #e0e0e0', 
-                  padding: '8px 0', 
-                  marginBottom: '8px',
-                  fontWeight: 'bold',
-                  color: '#f44336'
-                }}>
-                  Compare Document
-                </div>
-                
-                {loadingImages && !compareImageUrl ? (
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center',
-                    height: '300px'
-                  }}>
-                    <Spinner size="large" />
-                  </div>
-                ) : compareImageUrl ? (
-                  <img 
-                    src={compareImageUrl} 
-                    alt="Compare document page" 
-                    style={{ 
-                      maxWidth: '100%', 
-                      height: 'auto', 
-                      display: 'block',
-                      margin: '0 auto',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                    }} 
-                  />
-                ) : (
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center',
-                    height: '300px',
-                    backgroundColor: '#eeeeee',
-                    color: '#757575',
-                    fontStyle: 'italic'
-                  }}>
-                    Page not available
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>

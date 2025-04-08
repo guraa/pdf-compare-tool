@@ -301,8 +301,9 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
   
   {activeTab === 'sideBySide' && (
     state.comparisonResult.mode === 'smart' ? (
-      <SmartComparisonContainer 
+      <SideBySideView 
         comparisonId={comparisonId}
+        result={state.comparisonResult}
       />
     ) : (
       <SideBySideView 

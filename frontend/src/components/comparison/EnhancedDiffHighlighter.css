@@ -1,0 +1,188 @@
+.enhanced-diff-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    flex-wrap: wrap;
+    overflow: auto;
+  }
+  
+  .diff-document {
+    flex: 1;
+    min-width: 400px;
+    display: flex;
+    flex-direction: column;
+    margin: 0 5px;
+  }
+  
+  .image-container {
+    position: relative;
+    overflow: auto;
+    flex: 1;
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .document-image {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    background-color: #fff;
+  }
+  
+  .highlight-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  
+  /* Colors for different types of changes */
+  .add-highlight {
+    background-color: rgba(0, 255, 0, 0.2);
+    border: 1px solid rgba(0, 200, 0, 0.8);
+  }
+  
+  .delete-highlight {
+    background-color: rgba(255, 0, 0, 0.2);
+    border: 1px solid rgba(200, 0, 0, 0.8);
+  }
+  
+  .modify-highlight {
+    background-color: rgba(255, 165, 0, 0.2);
+    border: 1px solid rgba(255, 140, 0, 0.8);
+  }
+  
+  /* Legend styles */
+  .diff-legend {
+    display: flex;
+    justify-content: center;
+    padding: 8px;
+    background-color: #f8f8f8;
+    border-bottom: 1px solid #ddd;
+  }
+  
+  .legend-item {
+    display: flex;
+    align-items: center;
+    margin: 0 10px;
+    font-size: 12px;
+  }
+  
+  .legend-color {
+    width: 16px;
+    height: 16px;
+    margin-right: 5px;
+    border: 1px solid #999;
+  }
+  
+  .legend-color.added {
+    background-color: rgba(0, 255, 0, 0.2);
+    border-color: rgba(0, 200, 0, 0.8);
+  }
+  
+  .legend-color.deleted {
+    background-color: rgba(255, 0, 0, 0.2);
+    border-color: rgba(200, 0, 0, 0.8);
+  }
+  
+  .legend-color.modified {
+    background-color: rgba(255, 165, 0, 0.2);
+    border-color: rgba(255, 140, 0, 0.8);
+  }
+  
+  /* Document labels */
+  .document-label {
+    padding: 8px;
+    font-weight: bold;
+    text-align: center;
+    border-bottom: 1px solid #ddd;
+  }
+  
+  .base-document .document-label {
+    background-color: #e3f2fd;
+    color: #1565c0;
+  }
+  
+  .compare-document .document-label {
+    background-color: #ffebee;
+    color: #c62828;
+  }
+  
+  /* Enhanced tooltip for differences */
+  .diff-tooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    max-width: 200px;
+    z-index: 100;
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  /* Difference selector */
+  .diff-selector {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px;
+    background-color: #f0f0f0;
+    border-bottom: 1px solid #ddd;
+    align-items: center;
+  }
+  
+  .diff-count {
+    background-color: #2c6dbd;
+    color: white;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+  }
+  
+  .diff-navigation {
+    display: flex;
+    gap: 8px;
+  }
+  
+  .diff-navigation button {
+    background-color: #e0e0e0;
+    border: none;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+  }
+  
+  .diff-navigation button:hover {
+    background-color: #d0d0d0;
+  }
+  
+  .diff-navigation button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 900px) {
+    .enhanced-diff-container {
+      flex-direction: column;
+    }
+    
+    .diff-document {
+      min-width: 100%;
+      margin-bottom: 16px;
+    }
+  }

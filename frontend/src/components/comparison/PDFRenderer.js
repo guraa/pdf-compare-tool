@@ -100,7 +100,7 @@ const PDFRenderer = ({
         URL.revokeObjectURL(pdfData);
       }
     };
-  }, [fileId, page, pdfData, rendered]);
+  }, [fileId, page]); // Removed pdfData and rendered from dependencies
   
   // Memoized image load handler to prevent recreation on each render
   const handleImageLoad = useCallback(() => {
@@ -411,5 +411,3 @@ const PDFRenderer = ({
     </div>
   );
 };
-
-export default PDFRenderer;
