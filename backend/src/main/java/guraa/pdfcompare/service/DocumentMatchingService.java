@@ -26,6 +26,22 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DocumentMatchingService {
 
+    /**
+     * Logs current memory usage for debugging purposes.
+     * 
+     * @param point Description of the point in code where memory is being checked
+     */
+    private void logMemoryUsage(String point) {
+        Runtime runtime = Runtime.getRuntime();
+        long totalMemory = runtime.totalMemory() / (1024 * 1024);
+        long freeMemory = runtime.freeMemory() / (1024 * 1024);
+        long usedMemory = totalMemory - freeMemory;
+        long maxMemory = runtime.maxMemory() / (1024 * 1024);
+        
+        log.info("Memory at {}: Used={}MB, Free={}MB, Total={}MB, Max={}MB", 
+                point, usedMemory, freeMemory, totalMemory, maxMemory);
+    }
+
     private final TextExtractor textExtractor;
     private final DocumentDetector documentDetector;
     private final DocumentMatcher documentMatcher;
@@ -46,13 +62,21 @@ public class DocumentMatchingService {
             throws IOException {
         log.info("Starting document matching between {} and {}",
                 baseDocument.getFileName(), compareDocument.getFileName());
+        
+        // Log memory usage at start
+        logMemoryUsage("START of matchDocuments");
 
         // Load PDF documents
         PDDocument basePdf = PDDocument.load(new File(baseDocument.getFilePath()));
         PDDocument comparePdf = PDDocument.load(new File(compareDocument.getFilePath()));
+        
+        // Log memory usage after loading PDFs
+        logMemoryUsage("AFTER loading PDFs");
 
         try {
             List<DocumentPair> documentPairs = new ArrayList<>();
+
+            log.debug("Extract text contents for each page to use in matching");
 
             // Extract text contents for each page to use in matching
             List<String> baseTexts = extractPageTexts(basePdf);
@@ -60,6 +84,9 @@ public class DocumentMatchingService {
 
             log.debug("Extracted text from {} base pages and {} compare pages",
                     baseTexts.size(), compareTexts.size());
+                    
+            // Log memory usage after text extraction
+            logMemoryUsage("AFTER text extraction");
 
             // Create page renderers for visual matching
             PDFRenderer baseRenderer = new PDFRenderer(basePdf);
@@ -171,12 +198,21 @@ public class DocumentMatchingService {
                     log.error("Error processing unmatched compare document: {}", e.getMessage());
                 }
             }
-
+            log.debug("documentPairs");
+            
+            // Log memory usage before returning document pairs
+            logMemoryUsage("BEFORE returning document pairs");
+            
             return documentPairs;
         } finally {
             // Close PDFs
+            log.debug("Close PDFs");
             basePdf.close();
             comparePdf.close();
+            log.debug("Closed PDFs");
+            
+            // Log memory usage after closing PDFs
+            logMemoryUsage("AFTER closing PDFs");
         }
     }
 
@@ -247,6 +283,7 @@ public class DocumentMatchingService {
 
         for (int i = 0; i < document.getNumberOfPages(); i++) {
             String text = textExtractor.extractTextFromPage(document, i);
+            log.debug("Extract pageTexts: {}", text);
             pageTexts.add(text);
         }
 

@@ -3,6 +3,7 @@ package guraa.pdfcompare.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
@@ -59,6 +60,7 @@ public class ExecutorConfig {
      * @return The thread pool executor
      */
     @Bean(name = "pdfPageProcessingExecutor")
+    @Primary
     public ExecutorService pdfPageProcessingExecutor() {
         // Use the number of available processors, but limit to a reasonable number
         // to avoid excessive resource usage

@@ -1,3 +1,4 @@
+
 package guraa.pdfcompare.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +37,22 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class DifferenceDetectionService {
+
+    /**
+     * Logs current memory usage for debugging purposes.
+     * 
+     * @param point Description of the point in code where memory is being checked
+     */
+    private void logMemoryUsage(String point) {
+        Runtime runtime = Runtime.getRuntime();
+        long totalMemory = runtime.totalMemory() / (1024 * 1024);
+        long freeMemory = runtime.freeMemory() / (1024 * 1024);
+        long usedMemory = totalMemory - freeMemory;
+        long maxMemory = runtime.maxMemory() / (1024 * 1024);
+        
+        log.info("Memory at {}: Used={}MB, Free={}MB, Total={}MB, Max={}MB", 
+                point, usedMemory, freeMemory, totalMemory, maxMemory);
+    }
 
     private final TextExtractor textExtractor;
     private final ImageExtractor imageExtractor;
@@ -182,10 +199,19 @@ public class DifferenceDetectionService {
             }
 
             return pageDifferences;
+            // Log memory before closing PDFs
+          
         } finally {
             // Close PDFs
             basePdf.close();
             comparePdf.close();
+            
+            // Log memory after closing PDFs
+
+            
+            // Force garbage collection to free memory
+            System.gc();
+
         }
     }
 
@@ -1087,9 +1113,15 @@ public class DifferenceDetectionService {
             int compareEndPage,
             int pairIndex) throws IOException {
 
+        // Log memory at start
+        logMemoryUsage("START of comparePages for pair " + pairIndex);
+
         // Load PDF documents
         PDDocument basePdf = PDDocument.load(new File(baseDocument.getFilePath()));
         PDDocument comparePdf = PDDocument.load(new File(compareDocument.getFilePath()));
+        
+        // Log memory after loading PDFs
+        logMemoryUsage("AFTER loading PDFs for pair " + pairIndex);
 
         try {
             // Create directory for comparison results

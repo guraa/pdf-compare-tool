@@ -15,8 +15,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
 /**
  * Responsible for matching individual pages between documents
@@ -26,6 +24,22 @@ import java.util.concurrent.Executors;
 @Component
 @RequiredArgsConstructor
 public class PageMatcher {
+
+    /**
+     * Logs current memory usage for debugging purposes.
+     * 
+     * @param point Description of the point in code where memory is being checked
+     */
+    private void logMemoryUsage(String point) {
+        Runtime runtime = Runtime.getRuntime();
+        long totalMemory = runtime.totalMemory() / (1024 * 1024);
+        long freeMemory = runtime.freeMemory() / (1024 * 1024);
+        long usedMemory = totalMemory - freeMemory;
+        long maxMemory = runtime.maxMemory() / (1024 * 1024);
+        
+        log.info("Memory at {}: Used={}MB, Free={}MB, Total={}MB, Max={}MB", 
+                point, usedMemory, freeMemory, totalMemory, maxMemory);
+    }
 
     private final SSIMCalculator ssimCalculator;
 
@@ -132,18 +146,23 @@ public class PageMatcher {
             PDFRenderer baseRenderer,
             PDFRenderer compareRenderer) throws IOException {
         log.debug("createOptimalPageMappings");
+        
+        // Log memory at start of page mapping
+        logMemoryUsage("START of createOptimalPageMappings");
         int basePageCount = baseBoundary.getEndPage() - baseBoundary.getStartPage() + 1;
+        log.debug("basePageCount");
         int comparePageCount = compareBoundary.getEndPage() - compareBoundary.getStartPage() + 1;
+        log.debug("comparePageCount");
 
         // Calculate similarity matrix
         double[][] similarityMatrix = new double[basePageCount][comparePageCount];
-
+        log.debug("similarityMatrix");
         for (int i = 0; i < basePageCount; i++) {
             int baseIndex = baseBoundary.getStartPage() + i;
 
             for (int j = 0; j < comparePageCount; j++) {
                 int compareIndex = compareBoundary.getStartPage() + j;
-
+                log.debug("calculatePageSimilarity");
                 similarityMatrix[i][j] = calculatePageSimilarity(
                         baseIndex, compareIndex, baseTexts, compareTexts,
                         basePdf, comparePdf, baseRenderer, compareRenderer);
@@ -187,7 +206,7 @@ public class PageMatcher {
                     }
                 }
             }
-
+            log.debug("textSimilarityThreshold");
             // No more good matches or all matches below threshold
             if (maxSim < textSimilarityThreshold || maxBaseIdx == -1) {
                 break;
@@ -202,14 +221,14 @@ public class PageMatcher {
                     .build();
 
             mappings.add(mapping);
-
+            log.debug(" mappings.add(mapping)");
             // Mark these pages as mapped
             mappedBasePages[maxBaseIdx] = true;
             mappedComparePages[maxCompareIdx] = true;
             mappedPages++;
 
             // Set the similarity to -1 to exclude this cell
-            workMatrix[maxBaseIdx][maxCompareIdx] = -1;
+            //workMatrix[maxBaseIdx][maxCompareIdx] = -1;
         }
 
         // Add unmapped base pages
@@ -241,7 +260,11 @@ public class PageMatcher {
         }
 
         // Set the mappings on the document pair
+        log.debug("Set the mappings on the document pair");
         pair.setPageMappings(mappings);
+        
+        // Log memory at end of page mapping
+        logMemoryUsage("END of createOptimalPageMappings");
     }
 
     /**

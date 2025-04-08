@@ -191,8 +191,8 @@ public class PdfRenderer {
         PDRectangle cropBox = page.getCropBox();
 
         // Create a blank image with the right dimensions
-        int width = Math.round(cropBox.getWidth() * fallbackDPI / 72f);
-        int height = Math.round(cropBox.getHeight() * fallbackDPI / 72f);
+        int width = Math.round(cropBox.getWidth() );
+        int height = Math.round(cropBox.getHeight());
 
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = image.createGraphics();
@@ -209,7 +209,7 @@ public class PdfRenderer {
             hints.put(RenderDestination.EXPORT.toString(), Boolean.TRUE);
 
             // Use standard rendering via drawPage (safer than reflection)
-            renderer.renderPageToGraphics(pageIndex, g, fallbackDPI / 72f);
+            renderer.renderPageToGraphics(pageIndex, g);
 
         } catch (Exception e) {
             log.warn("Content rendering failed during background trick for page {}: {}",
@@ -238,8 +238,8 @@ public class PdfRenderer {
             PDRectangle cropBox = page.getCropBox();
 
             // Create a blank image with the right dimensions
-            int width = Math.round(cropBox.getWidth() * fallbackDPI / 72f);
-            int height = Math.round(cropBox.getHeight() * fallbackDPI / 72f);
+            int width = Math.round(cropBox.getWidth() );
+            int height = Math.round(cropBox.getHeight() );
 
             BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
             Graphics2D g = image.createGraphics();

@@ -226,8 +226,6 @@ public class PdfService {
 
             // Create an extremely robust renderer with minimal settings
             PdfRenderer renderer = new PdfRenderer(pdfDocument)
-                    .setDefaultDPI(72) // Use a lower DPI for better reliability
-                    .setFallbackDPI(36) // Very low DPI for extreme fallback
                     .setImageType(ImageType.RGB);
 
             // Try to render with all fallbacks enabled
