@@ -1,6 +1,7 @@
 package guraa.pdfcompare.service;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -63,8 +64,8 @@ public class TextSimilarityUtils {
 
         // Create a set of all unique words
         Set<String> uniqueWords = new HashSet<>();
-        for (String word : words1) uniqueWords.add(word);
-        for (String word : words2) uniqueWords.add(word);
+        Collections.addAll(uniqueWords, words1);
+        Collections.addAll(uniqueWords, words2);
 
         // Create term frequency vectors
         double[] vector1 = new double[uniqueWords.size()];

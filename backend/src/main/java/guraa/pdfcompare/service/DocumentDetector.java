@@ -172,9 +172,7 @@ public class DocumentDetector {
                 }
 
                 // If there's a radical shift in content style or structure
-                if (hasStyleBreak(currentText, prevText)) {
-                    return true;
-                }
+                return hasStyleBreak(currentText, prevText);
             }
         }
 

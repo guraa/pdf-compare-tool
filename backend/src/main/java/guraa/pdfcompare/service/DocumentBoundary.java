@@ -63,19 +63,6 @@ public class DocumentBoundary {
         return pageIndex >= startPage && pageIndex <= endPage;
     }
 
-    /**
-     * Convert a relative page index (within this document) to an absolute page index.
-     *
-     * @param relativePageIndex The relative page index (0-based)
-     * @return The absolute page index
-     * @throws IllegalArgumentException If the relative page index is out of bounds
-     */
-    public int toAbsolutePageIndex(int relativePageIndex) {
-        if (relativePageIndex < 0 || relativePageIndex >= getPageCount()) {
-            throw new IllegalArgumentException("Relative page index out of bounds: " + relativePageIndex);
-        }
-        return startPage + relativePageIndex;
-    }
 
     /**
      * Convert an absolute page index to a relative page index (within this document).

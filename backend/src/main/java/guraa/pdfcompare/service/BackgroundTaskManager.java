@@ -152,46 +152,5 @@ public class BackgroundTaskManager {
         }
     }
 
-    /**
-     * Get the number of pending comparisons.
-     *
-     * @return Number of pending comparisons
-     */
-    public int getPendingComparisonsCount() {
-        try {
-            return comparisonRepository.findByStatus(Comparison.ComparisonStatus.PENDING).size();
-        } catch (Exception e) {
-            log.error("Error getting pending comparisons count", e);
-            return 0;
-        }
-    }
 
-    /**
-     * Get the number of active comparisons.
-     *
-     * @return Number of active comparisons
-     */
-    public int getActiveComparisonsCount() {
-        synchronized (activeComparisons) {
-            return activeComparisons.size();
-        }
-    }
-
-    /**
-     * Check if the system is busy.
-     *
-     * @return True if the system is busy
-     */
-    public boolean isSystemBusy() {
-        synchronized (activeComparisons) {
-            // System is busy if we're at max capacity
-            if (activeComparisons.size() >= maxConcurrentComparisons) {
-                return true;
-            }
-
-            // Or if there are too many pending comparisons
-            int pendingCount = getPendingComparisonsCount();
-            return pendingCount > maxConcurrentComparisons * 5;
-        }
-    }
 }

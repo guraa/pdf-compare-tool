@@ -134,7 +134,7 @@ public class SystemMonitorService {
                                 Map<String, Object> storageInfo, Map<String, Object> resourceInfo) {
         // Check if disk space is getting low
         long totalUploadsSize = (Long) storageInfo.get("uploadsSize");
-        if (totalUploadsSize > 1024 * 1024 * 1024 * 5) { // 5 GB
+        if (totalUploadsSize > 1024L * 1024 * 1024 * 5) { // 5 GB
             log.warn("Uploads directory is very large: {}", formatSize(totalUploadsSize));
         }
 

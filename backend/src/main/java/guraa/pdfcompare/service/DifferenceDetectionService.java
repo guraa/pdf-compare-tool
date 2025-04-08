@@ -1447,9 +1447,9 @@ public class DifferenceDetectionService {
                     return new int[]{ r, g, b };
                 } else {
                     // Short form #rgb
-                    int r = Integer.parseInt(color.substring(1, 2) + color.substring(1, 2), 16);
-                    int g = Integer.parseInt(color.substring(2, 3) + color.substring(2, 3), 16);
-                    int b = Integer.parseInt(color.substring(3, 4) + color.substring(3, 4), 16);
+                    int r = Integer.parseInt(color.charAt(1) + color.charAt(1), 16);
+                    int g = Integer.parseInt(color.charAt(2) + color.charAt(2), 16);
+                    int b = Integer.parseInt(color.charAt(3) + color.charAt(3), 16);
                     return new int[]{ r, g, b };
                 }
             } catch (NumberFormatException e) {

@@ -298,7 +298,7 @@ public class TextExtractor extends PDFStreamEngine {
                 currentParagraph.getLineIds().add(lineId);
             } else {
                 // Add to existing paragraph
-                currentParagraph.setText(currentParagraph.getText() + " " + lineText.toString());
+                currentParagraph.setText(currentParagraph.getText() + " " + lineText);
                 currentParagraph.getLineIds().add(lineId);
                 currentParagraph.setMaxX(Math.max(currentParagraph.getMaxX(), maxX));
                 currentParagraph.setMaxY(maxY);
@@ -325,7 +325,7 @@ public class TextExtractor extends PDFStreamEngine {
         private float minY;
         private float maxX;
         private float maxY;
-        private List<String> lineIds = new ArrayList<>();
+        private final List<String> lineIds = new ArrayList<>();
 
         // Getters and setters
         public String getId() { return id; }

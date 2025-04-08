@@ -62,14 +62,14 @@ public class CharacterExtractor extends PDFStreamEngine {
             }
 
             if (hadErrors) {
-                return "[Partial text extraction due to PDF errors]\n" + textBuilder.toString();
+                return "[Partial text extraction due to PDF errors]\n" + textBuilder;
             }
 
             return textBuilder.toString();
         } catch (Exception e) {
             log.error("Error in basic text extraction: {}", e.getMessage());
             if (textBuilder.length() > 0) {
-                return "[Partial text extraction before error]\n" + textBuilder.toString();
+                return "[Partial text extraction before error]\n" + textBuilder;
             }
             return "[Text extraction failed: " + e.getMessage() + "]";
         }

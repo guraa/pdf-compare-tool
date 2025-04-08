@@ -700,11 +700,7 @@ public class PdfProcessor {
         }
 
         // Check for other PDFBox rendering issues
-        if (isPdfBoxRenderingError(e)) {
-            return true;
-        }
-
-        return false;
+        return isPdfBoxRenderingError(e);
     }
 
     /**
