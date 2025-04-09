@@ -19847,3 +19847,847 @@ java.lang.NullPointerException: Cannot invoke "guraa.pdfcompare.util.TextElement
 2025-04-09 15:43:32 [http-nio-3010-exec-6] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 5 in comparison 7cda99f0-b319-4aaa-990e-150f4c29f7ca with filters: {severity=null, types=text,font,image,style,metadata, search=null}
 2025-04-09 15:43:36 [http-nio-3010-exec-5] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
 2025-04-09 15:43:36 [http-nio-3010-exec-5] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 5 in comparison 7cda99f0-b319-4aaa-990e-150f4c29f7ca with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:10:35 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-09 16:10:35
+2025-04-09 16:10:35 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 6 documents, 8 comparisons
+2025-04-09 16:10:35 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 500,08 MB, documents: 316,34 MB, comparisons: 183,74 MB, temp: 0 B
+2025-04-09 16:10:35 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 552,47 MB, max memory: 7,91 GB, processors: 16
+2025-04-09 16:20:33 [http-nio-3010-exec-1] INFO  guraa.pdfcompare.util.PdfProcessor - Processing PDF with 7 pages using parallel execution
+2025-04-09 16:20:33 [pool-1-thread-5] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 1 in thread pool-1-thread-5
+2025-04-09 16:20:33 [pool-1-thread-6] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 2 in thread pool-1-thread-6
+2025-04-09 16:20:33 [pool-1-thread-4] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 3 in thread pool-1-thread-4
+2025-04-09 16:20:33 [pool-1-thread-7] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 4 in thread pool-1-thread-7
+2025-04-09 16:20:33 [pool-1-thread-2] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 6 in thread pool-1-thread-2
+2025-04-09 16:20:33 [pool-1-thread-8] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 7 in thread pool-1-thread-8
+2025-04-09 16:20:33 [pool-1-thread-1] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 5 in thread pool-1-thread-1
+2025-04-09 16:20:33 [pool-1-thread-5] WARN  org.apache.fontbox.ttf.TTFParser - Skip table 'glyf' which goes past the file size; offset: 4780, size: 5220, font size: 5207
+2025-04-09 16:20:33 [pool-1-thread-5] WARN  org.apache.fontbox.ttf.TTFParser - Skip table 'loca' which goes past the file size; offset: 10000, size: 3348, font size: 5207
+2025-04-09 16:20:33 [pool-1-thread-5] WARN  o.a.p.pdmodel.font.PDCIDFontType2 - Could not read embedded OTF for font OKDFSH+MyriadPro-Regular
+java.io.IOException: 'loca' table is mandatory
+	at org.apache.fontbox.ttf.TTFParser.parseTables(TTFParser.java:230)
+	at org.apache.fontbox.ttf.TTFParser.parse(TTFParser.java:165)
+	at org.apache.fontbox.ttf.OTFParser.parse(OTFParser.java:79)
+	at org.apache.fontbox.ttf.OTFParser.parse(OTFParser.java:27)
+	at org.apache.fontbox.ttf.TTFParser.parse(TTFParser.java:110)
+	at org.apache.fontbox.ttf.OTFParser.parse(OTFParser.java:73)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:112)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:65)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createDescendantFont(PDFontFactory.java:139)
+	at org.apache.pdfbox.pdmodel.font.PDType0Font.<init>(PDType0Font.java:203)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createFont(PDFontFactory.java:97)
+	at org.apache.pdfbox.pdmodel.PDResources.getFont(PDResources.java:146)
+	at org.apache.pdfbox.contentstream.operator.text.SetFontAndSize.process(SetFontAndSize.java:66)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processOperator(PDFStreamEngine.java:966)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStreamOperators(PDFStreamEngine.java:541)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStream(PDFStreamEngine.java:516)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processPage(PDFStreamEngine.java:155)
+	at org.apache.pdfbox.rendering.PageDrawer.drawPage(PageDrawer.java:284)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:355)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:272)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImageWithDPI(PDFRenderer.java:258)
+	at guraa.pdfcompare.util.PdfRenderer.renderPage(PdfRenderer.java:65)
+	at guraa.pdfcompare.util.PdfProcessor.processPageWithRobustHandling(PdfProcessor.java:258)
+	at guraa.pdfcompare.util.PdfProcessor.lambda$3(PdfProcessor.java:133)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+2025-04-09 16:20:33 [pool-1-thread-8] WARN  o.a.p.pdmodel.font.PDCIDFontType2 - Could not read embedded OTF for font OKDFSH+MyriadPro-Regular
+java.io.IOException: Invalid data in Ascii85 stream
+	at org.apache.pdfbox.filter.ASCII85InputStream.read(ASCII85InputStream.java:154)
+	at org.apache.pdfbox.filter.ASCII85InputStream.read(ASCII85InputStream.java:194)
+	at java.base/java.io.FilterInputStream.read(FilterInputStream.java:106)
+	at org.apache.pdfbox.io.IOUtils.copy(IOUtils.java:68)
+	at org.apache.pdfbox.filter.ASCII85Filter.decode(ASCII85Filter.java:40)
+	at org.apache.pdfbox.filter.Filter.decode(Filter.java:87)
+	at org.apache.pdfbox.cos.COSInputStream.create(COSInputStream.java:87)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:175)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:163)
+	at org.apache.pdfbox.pdmodel.common.PDStream.createInputStream(PDStream.java:238)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:112)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:65)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createDescendantFont(PDFontFactory.java:139)
+	at org.apache.pdfbox.pdmodel.font.PDType0Font.<init>(PDType0Font.java:203)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createFont(PDFontFactory.java:97)
+	at org.apache.pdfbox.pdmodel.PDResources.getFont(PDResources.java:146)
+	at org.apache.pdfbox.contentstream.operator.text.SetFontAndSize.process(SetFontAndSize.java:66)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processOperator(PDFStreamEngine.java:966)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStreamOperators(PDFStreamEngine.java:541)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStream(PDFStreamEngine.java:516)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processPage(PDFStreamEngine.java:155)
+	at org.apache.pdfbox.rendering.PageDrawer.drawPage(PageDrawer.java:284)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:355)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:272)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImageWithDPI(PDFRenderer.java:258)
+	at guraa.pdfcompare.util.PdfRenderer.renderPage(PdfRenderer.java:65)
+	at guraa.pdfcompare.util.PdfProcessor.processPageWithRobustHandling(PdfProcessor.java:258)
+	at guraa.pdfcompare.util.PdfProcessor.lambda$3(PdfProcessor.java:133)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+2025-04-09 16:20:33 [pool-1-thread-7] WARN  guraa.pdfcompare.util.PdfRenderer - Standard rendering failed for page 4, trying fallback: Index 4096 out of bounds for length 4096
+2025-04-09 16:20:33 [pool-1-thread-2] WARN  guraa.pdfcompare.util.PdfRenderer - Standard rendering failed for page 6, trying fallback: Index 4096 out of bounds for length 4096
+2025-04-09 16:20:33 [pool-1-thread-1] WARN  guraa.pdfcompare.util.PdfRenderer - Standard rendering failed for page 5, trying fallback: Index 4096 out of bounds for length 4096
+2025-04-09 16:20:33 [pool-1-thread-8] ERROR org.apache.pdfbox.filter.FlateFilter - FlateFilter: stop reading corrupt stream due to a DataFormatException
+2025-04-09 16:20:33 [pool-1-thread-8] WARN  o.a.p.contentstream.PDFStreamEngine - java.util.zip.DataFormatException: invalid block type
+2025-04-09 16:20:33 [pool-1-thread-7] WARN  guraa.pdfcompare.util.PdfRenderer - Fallback rendering failed for page 4, trying emergency rendering: Index 4096 out of bounds for length 4096
+2025-04-09 16:20:33 [pool-1-thread-1] WARN  guraa.pdfcompare.util.PdfRenderer - Fallback rendering failed for page 5, trying emergency rendering: Index 4096 out of bounds for length 4096
+2025-04-09 16:20:33 [pool-1-thread-2] ERROR org.apache.pdfbox.filter.FlateFilter - FlateFilter: stop reading corrupt stream due to a DataFormatException
+2025-04-09 16:20:33 [pool-1-thread-2] WARN  o.a.p.contentstream.PDFStreamEngine - java.util.zip.DataFormatException: invalid stored block lengths
+2025-04-09 16:20:33 [pool-1-thread-1] WARN  org.apache.pdfbox.filter.FlateFilter - FlateFilter: premature end of stream due to a DataFormatException
+2025-04-09 16:20:33 [pool-1-thread-1] WARN  o.a.p.contentstream.PDFStreamEngine - Cannot execute restore, the graphics stack is empty
+2025-04-09 16:20:33 [pool-1-thread-7] WARN  o.a.p.contentstream.PDFStreamEngine - Cannot execute restore, the graphics stack is empty
+2025-04-09 16:20:33 [pool-1-thread-1] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 2 images from page 5
+2025-04-09 16:20:33 [pool-1-thread-1] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 5 to uploads\documents\0c975204-23b8-4ae2-96df-55244b3416c6\fonts\page_5_fonts.json
+2025-04-09 16:20:33 [pool-1-thread-2] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 4 images from page 6
+2025-04-09 16:20:33 [pool-1-thread-2] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 6 to uploads\documents\0c975204-23b8-4ae2-96df-55244b3416c6\fonts\page_6_fonts.json
+2025-04-09 16:20:33 [pool-1-thread-7] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 6 images from page 4
+2025-04-09 16:20:33 [pool-1-thread-7] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 4 to uploads\documents\0c975204-23b8-4ae2-96df-55244b3416c6\fonts\page_4_fonts.json
+2025-04-09 16:20:33 [pool-1-thread-8] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 8 images from page 7
+2025-04-09 16:20:33 [pool-1-thread-8] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 7 to uploads\documents\0c975204-23b8-4ae2-96df-55244b3416c6\fonts\page_7_fonts.json
+2025-04-09 16:20:34 [pool-1-thread-5] WARN  o.a.p.contentstream.PDFStreamEngine - Cannot execute restore, the graphics stack is empty
+2025-04-09 16:20:34 [pool-1-thread-4] WARN  o.a.p.contentstream.PDFStreamEngine - Cannot execute restore, the graphics stack is empty
+2025-04-09 16:20:34 [pool-1-thread-6] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 2 images from page 2
+2025-04-09 16:20:34 [pool-1-thread-6] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 2 to uploads\documents\0c975204-23b8-4ae2-96df-55244b3416c6\fonts\page_2_fonts.json
+2025-04-09 16:20:34 [pool-1-thread-5] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 4 images from page 1
+2025-04-09 16:20:34 [pool-1-thread-5] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 1 to uploads\documents\0c975204-23b8-4ae2-96df-55244b3416c6\fonts\page_1_fonts.json
+2025-04-09 16:20:34 [pool-1-thread-4] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 6 images from page 3
+2025-04-09 16:20:34 [pool-1-thread-4] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 3 to uploads\documents\0c975204-23b8-4ae2-96df-55244b3416c6\fonts\page_3_fonts.json
+2025-04-09 16:20:34 [http-nio-3010-exec-1] INFO  guraa.pdfcompare.util.PdfProcessor - PDF processing completed: 7 pages processed successfully, 0 pages failed
+2025-04-09 16:20:34 [http-nio-3010-exec-1] INFO  guraa.pdfcompare.service.PdfService - Document with same content hash already exists, reusing: 63b57720-a27d-4cfa-b879-a5191fa3f42e
+2025-04-09 16:20:36 [http-nio-3010-exec-4] INFO  guraa.pdfcompare.util.PdfProcessor - Processing PDF with 7 pages using parallel execution
+2025-04-09 16:20:36 [pool-1-thread-3] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 1 in thread pool-1-thread-3
+2025-04-09 16:20:36 [pool-1-thread-8] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 5 in thread pool-1-thread-8
+2025-04-09 16:20:36 [pool-1-thread-2] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 3 in thread pool-1-thread-2
+2025-04-09 16:20:36 [pool-1-thread-7] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 4 in thread pool-1-thread-7
+2025-04-09 16:20:36 [pool-1-thread-5] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 7 in thread pool-1-thread-5
+2025-04-09 16:20:36 [pool-1-thread-6] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 6 in thread pool-1-thread-6
+2025-04-09 16:20:36 [pool-1-thread-1] DEBUG guraa.pdfcompare.util.PdfProcessor - Processing page 2 in thread pool-1-thread-1
+2025-04-09 16:20:36 [pool-1-thread-6] ERROR org.apache.pdfbox.filter.FlateFilter - FlateFilter: stop reading corrupt stream due to a DataFormatException
+2025-04-09 16:20:36 [pool-1-thread-1] ERROR org.apache.pdfbox.filter.FlateFilter - FlateFilter: stop reading corrupt stream due to a DataFormatException
+2025-04-09 16:20:36 [pool-1-thread-2] ERROR org.apache.pdfbox.filter.FlateFilter - FlateFilter: stop reading corrupt stream due to a DataFormatException
+2025-04-09 16:20:36 [pool-1-thread-6] ERROR o.apache.pdfbox.pdmodel.font.PDFont - Could not read ToUnicode CMap in font FPCLZC+MyriadPro-Regular
+java.io.IOException: java.util.zip.DataFormatException: invalid bit length repeat
+	at org.apache.pdfbox.filter.FlateFilter.decode(FlateFilter.java:58)
+	at org.apache.pdfbox.filter.Filter.decode(Filter.java:87)
+	at org.apache.pdfbox.cos.COSInputStream.create(COSInputStream.java:87)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:175)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:163)
+	at org.apache.pdfbox.pdmodel.font.PDFont.readCMap(PDFont.java:213)
+	at org.apache.pdfbox.pdmodel.font.PDFont.loadUnicodeCmap(PDFont.java:147)
+	at org.apache.pdfbox.pdmodel.font.PDFont.<init>(PDFont.java:115)
+	at org.apache.pdfbox.pdmodel.font.PDType0Font.<init>(PDType0Font.java:182)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createFont(PDFontFactory.java:97)
+	at org.apache.pdfbox.pdmodel.PDResources.getFont(PDResources.java:146)
+	at org.apache.pdfbox.contentstream.operator.text.SetFontAndSize.process(SetFontAndSize.java:66)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processOperator(PDFStreamEngine.java:966)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStreamOperators(PDFStreamEngine.java:541)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStream(PDFStreamEngine.java:516)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processPage(PDFStreamEngine.java:155)
+	at org.apache.pdfbox.rendering.PageDrawer.drawPage(PageDrawer.java:284)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:355)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:272)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImageWithDPI(PDFRenderer.java:258)
+	at guraa.pdfcompare.util.PdfRenderer.renderPage(PdfRenderer.java:65)
+	at guraa.pdfcompare.util.PdfProcessor.processPageWithRobustHandling(PdfProcessor.java:258)
+	at guraa.pdfcompare.util.PdfProcessor.lambda$3(PdfProcessor.java:133)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.util.zip.DataFormatException: invalid bit length repeat
+	at java.base/java.util.zip.Inflater.inflateBytesBytes(Native Method)
+	at java.base/java.util.zip.Inflater.inflate(Inflater.java:378)
+	at java.base/java.util.zip.Inflater.inflate(Inflater.java:464)
+	at org.apache.pdfbox.filter.FlateFilter.decompress(FlateFilter.java:86)
+	at org.apache.pdfbox.filter.FlateFilter.decode(FlateFilter.java:50)
+	... 26 common frames omitted
+2025-04-09 16:20:36 [pool-1-thread-5] ERROR org.apache.pdfbox.filter.FlateFilter - FlateFilter: stop reading corrupt stream due to a DataFormatException
+2025-04-09 16:20:36 [pool-1-thread-7] WARN  org.apache.fontbox.ttf.TTFParser - Skip table 'glyf' which goes past the file size; offset: 4780, size: 5195, font size: 7636
+2025-04-09 16:20:36 [pool-1-thread-7] WARN  org.apache.fontbox.ttf.TTFParser - Skip table 'loca' which goes past the file size; offset: 9976, size: 3348, font size: 7636
+2025-04-09 16:20:36 [pool-1-thread-6] ERROR org.apache.pdfbox.filter.FlateFilter - FlateFilter: stop reading corrupt stream due to a DataFormatException
+2025-04-09 16:20:36 [pool-1-thread-1] ERROR o.apache.pdfbox.pdmodel.font.PDFont - Could not read ToUnicode CMap in font FPCLZC+MyriadPro-Regular
+java.io.IOException: java.util.zip.DataFormatException: invalid literal/lengths set
+	at org.apache.pdfbox.filter.FlateFilter.decode(FlateFilter.java:58)
+	at org.apache.pdfbox.filter.Filter.decode(Filter.java:87)
+	at org.apache.pdfbox.cos.COSInputStream.create(COSInputStream.java:87)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:175)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:163)
+	at org.apache.pdfbox.pdmodel.font.PDFont.readCMap(PDFont.java:213)
+	at org.apache.pdfbox.pdmodel.font.PDFont.loadUnicodeCmap(PDFont.java:147)
+	at org.apache.pdfbox.pdmodel.font.PDFont.<init>(PDFont.java:115)
+	at org.apache.pdfbox.pdmodel.font.PDType0Font.<init>(PDType0Font.java:182)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createFont(PDFontFactory.java:97)
+	at org.apache.pdfbox.pdmodel.PDResources.getFont(PDResources.java:146)
+	at org.apache.pdfbox.contentstream.operator.text.SetFontAndSize.process(SetFontAndSize.java:66)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processOperator(PDFStreamEngine.java:966)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStreamOperators(PDFStreamEngine.java:541)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStream(PDFStreamEngine.java:516)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processPage(PDFStreamEngine.java:155)
+	at org.apache.pdfbox.rendering.PageDrawer.drawPage(PageDrawer.java:284)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:355)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:272)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImageWithDPI(PDFRenderer.java:258)
+	at guraa.pdfcompare.util.PdfRenderer.renderPage(PdfRenderer.java:65)
+	at guraa.pdfcompare.util.PdfProcessor.processPageWithRobustHandling(PdfProcessor.java:258)
+	at guraa.pdfcompare.util.PdfProcessor.lambda$3(PdfProcessor.java:133)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.util.zip.DataFormatException: invalid literal/lengths set
+	at java.base/java.util.zip.Inflater.inflateBytesBytes(Native Method)
+	at java.base/java.util.zip.Inflater.inflate(Inflater.java:378)
+	at java.base/java.util.zip.Inflater.inflate(Inflater.java:464)
+	at org.apache.pdfbox.filter.FlateFilter.decompress(FlateFilter.java:86)
+	at org.apache.pdfbox.filter.FlateFilter.decode(FlateFilter.java:50)
+	... 26 common frames omitted
+2025-04-09 16:20:36 [pool-1-thread-2] ERROR o.apache.pdfbox.pdmodel.font.PDFont - Could not read ToUnicode CMap in font FPCLZC+MyriadPro-Regular
+java.io.IOException: java.util.zip.DataFormatException: invalid literal/lengths set
+	at org.apache.pdfbox.filter.FlateFilter.decode(FlateFilter.java:58)
+	at org.apache.pdfbox.filter.Filter.decode(Filter.java:87)
+	at org.apache.pdfbox.cos.COSInputStream.create(COSInputStream.java:87)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:175)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:163)
+	at org.apache.pdfbox.pdmodel.font.PDFont.readCMap(PDFont.java:213)
+	at org.apache.pdfbox.pdmodel.font.PDFont.loadUnicodeCmap(PDFont.java:147)
+	at org.apache.pdfbox.pdmodel.font.PDFont.<init>(PDFont.java:115)
+	at org.apache.pdfbox.pdmodel.font.PDType0Font.<init>(PDType0Font.java:182)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createFont(PDFontFactory.java:97)
+	at org.apache.pdfbox.pdmodel.PDResources.getFont(PDResources.java:146)
+	at org.apache.pdfbox.contentstream.operator.text.SetFontAndSize.process(SetFontAndSize.java:66)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processOperator(PDFStreamEngine.java:966)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStreamOperators(PDFStreamEngine.java:541)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStream(PDFStreamEngine.java:516)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processPage(PDFStreamEngine.java:155)
+	at org.apache.pdfbox.rendering.PageDrawer.drawPage(PageDrawer.java:284)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:355)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:272)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImageWithDPI(PDFRenderer.java:258)
+	at guraa.pdfcompare.util.PdfRenderer.renderPage(PdfRenderer.java:65)
+	at guraa.pdfcompare.util.PdfProcessor.processPageWithRobustHandling(PdfProcessor.java:258)
+	at guraa.pdfcompare.util.PdfProcessor.lambda$3(PdfProcessor.java:133)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.util.zip.DataFormatException: invalid literal/lengths set
+	at java.base/java.util.zip.Inflater.inflateBytesBytes(Native Method)
+	at java.base/java.util.zip.Inflater.inflate(Inflater.java:378)
+	at java.base/java.util.zip.Inflater.inflate(Inflater.java:464)
+	at org.apache.pdfbox.filter.FlateFilter.decompress(FlateFilter.java:86)
+	at org.apache.pdfbox.filter.FlateFilter.decode(FlateFilter.java:50)
+	... 26 common frames omitted
+2025-04-09 16:20:36 [pool-1-thread-5] WARN  o.a.p.pdmodel.font.PDCIDFontType2 - Could not read embedded OTF for font FPCLZC+MyriadPro-Regular
+java.io.IOException: java.util.zip.DataFormatException: too many length or distance symbols
+	at org.apache.pdfbox.filter.FlateFilter.decode(FlateFilter.java:58)
+	at org.apache.pdfbox.filter.Filter.decode(Filter.java:87)
+	at org.apache.pdfbox.cos.COSInputStream.create(COSInputStream.java:87)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:175)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:163)
+	at org.apache.pdfbox.pdmodel.common.PDStream.createInputStream(PDStream.java:238)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:112)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:65)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createDescendantFont(PDFontFactory.java:139)
+	at org.apache.pdfbox.pdmodel.font.PDType0Font.<init>(PDType0Font.java:203)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createFont(PDFontFactory.java:97)
+	at org.apache.pdfbox.pdmodel.PDResources.getFont(PDResources.java:146)
+	at org.apache.pdfbox.contentstream.operator.text.SetFontAndSize.process(SetFontAndSize.java:66)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processOperator(PDFStreamEngine.java:966)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStreamOperators(PDFStreamEngine.java:541)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStream(PDFStreamEngine.java:516)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processPage(PDFStreamEngine.java:155)
+	at org.apache.pdfbox.rendering.PageDrawer.drawPage(PageDrawer.java:284)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:355)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:272)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImageWithDPI(PDFRenderer.java:258)
+	at guraa.pdfcompare.util.PdfRenderer.renderPage(PdfRenderer.java:65)
+	at guraa.pdfcompare.util.PdfProcessor.processPageWithRobustHandling(PdfProcessor.java:258)
+	at guraa.pdfcompare.util.PdfProcessor.lambda$3(PdfProcessor.java:133)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.util.zip.DataFormatException: too many length or distance symbols
+	at java.base/java.util.zip.Inflater.inflateBytesBytes(Native Method)
+	at java.base/java.util.zip.Inflater.inflate(Inflater.java:378)
+	at java.base/java.util.zip.Inflater.inflate(Inflater.java:464)
+	at org.apache.pdfbox.filter.FlateFilter.decompress(FlateFilter.java:86)
+	at org.apache.pdfbox.filter.FlateFilter.decode(FlateFilter.java:50)
+	... 27 common frames omitted
+2025-04-09 16:20:36 [pool-1-thread-7] WARN  o.a.p.pdmodel.font.PDCIDFontType2 - Could not read embedded OTF for font FPCLZC+MyriadPro-Regular
+java.io.IOException: Unexpected end of TTF stream reached
+	at org.apache.fontbox.ttf.TTFDataStream.read(TTFDataStream.java:264)
+	at org.apache.fontbox.ttf.TTFDataStream.readString(TTFDataStream.java:89)
+	at org.apache.fontbox.ttf.NamingTable.read(NamingTable.java:113)
+	at org.apache.fontbox.ttf.TrueTypeFont.readTable(TrueTypeFont.java:361)
+	at org.apache.fontbox.ttf.TrueTypeFont.getTable(TrueTypeFont.java:150)
+	at org.apache.fontbox.ttf.TrueTypeFont.getNaming(TrueTypeFont.java:163)
+	at org.apache.fontbox.ttf.TrueTypeFont.getName(TrueTypeFont.java:460)
+	at org.apache.fontbox.ttf.PostScriptTable.read(PostScriptTable.java:170)
+	at org.apache.fontbox.ttf.TrueTypeFont.readTable(TrueTypeFont.java:361)
+	at org.apache.fontbox.ttf.TTFParser.parseTables(TTFParser.java:188)
+	at org.apache.fontbox.ttf.TTFParser.parse(TTFParser.java:165)
+	at org.apache.fontbox.ttf.OTFParser.parse(OTFParser.java:79)
+	at org.apache.fontbox.ttf.OTFParser.parse(OTFParser.java:27)
+	at org.apache.fontbox.ttf.TTFParser.parse(TTFParser.java:110)
+	at org.apache.fontbox.ttf.OTFParser.parse(OTFParser.java:73)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:112)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:65)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createDescendantFont(PDFontFactory.java:139)
+	at org.apache.pdfbox.pdmodel.font.PDType0Font.<init>(PDType0Font.java:203)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createFont(PDFontFactory.java:97)
+	at org.apache.pdfbox.pdmodel.PDResources.getFont(PDResources.java:146)
+	at org.apache.pdfbox.contentstream.operator.text.SetFontAndSize.process(SetFontAndSize.java:66)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processOperator(PDFStreamEngine.java:966)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStreamOperators(PDFStreamEngine.java:541)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStream(PDFStreamEngine.java:516)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processPage(PDFStreamEngine.java:155)
+	at org.apache.pdfbox.rendering.PageDrawer.drawPage(PageDrawer.java:284)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:355)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:272)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImageWithDPI(PDFRenderer.java:258)
+	at guraa.pdfcompare.util.PdfRenderer.renderPage(PdfRenderer.java:65)
+	at guraa.pdfcompare.util.PdfProcessor.processPageWithRobustHandling(PdfProcessor.java:258)
+	at guraa.pdfcompare.util.PdfProcessor.lambda$3(PdfProcessor.java:133)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+2025-04-09 16:20:36 [pool-1-thread-6] WARN  o.a.p.pdmodel.font.PDCIDFontType2 - Could not read embedded OTF for font FPCLZC+MyriadPro-Regular
+java.io.IOException: java.util.zip.DataFormatException: invalid distance too far back
+	at org.apache.pdfbox.filter.FlateFilter.decode(FlateFilter.java:58)
+	at org.apache.pdfbox.filter.Filter.decode(Filter.java:87)
+	at org.apache.pdfbox.cos.COSInputStream.create(COSInputStream.java:87)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:175)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:163)
+	at org.apache.pdfbox.pdmodel.common.PDStream.createInputStream(PDStream.java:238)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:112)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:65)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createDescendantFont(PDFontFactory.java:139)
+	at org.apache.pdfbox.pdmodel.font.PDType0Font.<init>(PDType0Font.java:203)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createFont(PDFontFactory.java:97)
+	at org.apache.pdfbox.pdmodel.PDResources.getFont(PDResources.java:146)
+	at org.apache.pdfbox.contentstream.operator.text.SetFontAndSize.process(SetFontAndSize.java:66)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processOperator(PDFStreamEngine.java:966)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStreamOperators(PDFStreamEngine.java:541)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStream(PDFStreamEngine.java:516)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processPage(PDFStreamEngine.java:155)
+	at org.apache.pdfbox.rendering.PageDrawer.drawPage(PageDrawer.java:284)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:355)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:272)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImageWithDPI(PDFRenderer.java:258)
+	at guraa.pdfcompare.util.PdfRenderer.renderPage(PdfRenderer.java:65)
+	at guraa.pdfcompare.util.PdfProcessor.processPageWithRobustHandling(PdfProcessor.java:258)
+	at guraa.pdfcompare.util.PdfProcessor.lambda$3(PdfProcessor.java:133)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.util.zip.DataFormatException: invalid distance too far back
+	at java.base/java.util.zip.Inflater.inflateBytesBytes(Native Method)
+	at java.base/java.util.zip.Inflater.inflate(Inflater.java:378)
+	at java.base/java.util.zip.Inflater.inflate(Inflater.java:464)
+	at org.apache.pdfbox.filter.FlateFilter.decompress(FlateFilter.java:86)
+	at org.apache.pdfbox.filter.FlateFilter.decode(FlateFilter.java:50)
+	... 27 common frames omitted
+2025-04-09 16:20:36 [pool-1-thread-2] ERROR org.apache.pdfbox.filter.FlateFilter - FlateFilter: stop reading corrupt stream due to a DataFormatException
+2025-04-09 16:20:36 [pool-1-thread-1] WARN  o.a.p.pdmodel.font.PDCIDFontType2 - Could not read embedded OTF for font FPCLZC+MyriadPro-Regular
+java.io.IOException: Invalid data in Ascii85 stream
+	at org.apache.pdfbox.filter.ASCII85InputStream.read(ASCII85InputStream.java:154)
+	at org.apache.pdfbox.filter.ASCII85InputStream.read(ASCII85InputStream.java:194)
+	at java.base/java.io.FilterInputStream.read(FilterInputStream.java:106)
+	at org.apache.pdfbox.io.IOUtils.copy(IOUtils.java:68)
+	at org.apache.pdfbox.filter.ASCII85Filter.decode(ASCII85Filter.java:40)
+	at org.apache.pdfbox.filter.Filter.decode(Filter.java:87)
+	at org.apache.pdfbox.cos.COSInputStream.create(COSInputStream.java:87)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:175)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:163)
+	at org.apache.pdfbox.pdmodel.common.PDStream.createInputStream(PDStream.java:238)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:112)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:65)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createDescendantFont(PDFontFactory.java:139)
+	at org.apache.pdfbox.pdmodel.font.PDType0Font.<init>(PDType0Font.java:203)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createFont(PDFontFactory.java:97)
+	at org.apache.pdfbox.pdmodel.PDResources.getFont(PDResources.java:146)
+	at org.apache.pdfbox.contentstream.operator.text.SetFontAndSize.process(SetFontAndSize.java:66)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processOperator(PDFStreamEngine.java:966)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStreamOperators(PDFStreamEngine.java:541)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStream(PDFStreamEngine.java:516)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processPage(PDFStreamEngine.java:155)
+	at org.apache.pdfbox.rendering.PageDrawer.drawPage(PageDrawer.java:284)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:355)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:272)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImageWithDPI(PDFRenderer.java:258)
+	at guraa.pdfcompare.util.PdfRenderer.renderPage(PdfRenderer.java:65)
+	at guraa.pdfcompare.util.PdfProcessor.processPageWithRobustHandling(PdfProcessor.java:258)
+	at guraa.pdfcompare.util.PdfProcessor.lambda$3(PdfProcessor.java:133)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+2025-04-09 16:20:36 [pool-1-thread-2] WARN  o.a.p.pdmodel.font.PDCIDFontType2 - Could not read embedded OTF for font FPCLZC+MyriadPro-Regular
+java.io.IOException: java.util.zip.DataFormatException: invalid stored block lengths
+	at org.apache.pdfbox.filter.FlateFilter.decode(FlateFilter.java:58)
+	at org.apache.pdfbox.filter.Filter.decode(Filter.java:87)
+	at org.apache.pdfbox.cos.COSInputStream.create(COSInputStream.java:87)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:175)
+	at org.apache.pdfbox.cos.COSStream.createInputStream(COSStream.java:163)
+	at org.apache.pdfbox.pdmodel.common.PDStream.createInputStream(PDStream.java:238)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:112)
+	at org.apache.pdfbox.pdmodel.font.PDCIDFontType2.<init>(PDCIDFontType2.java:65)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createDescendantFont(PDFontFactory.java:139)
+	at org.apache.pdfbox.pdmodel.font.PDType0Font.<init>(PDType0Font.java:203)
+	at org.apache.pdfbox.pdmodel.font.PDFontFactory.createFont(PDFontFactory.java:97)
+	at org.apache.pdfbox.pdmodel.PDResources.getFont(PDResources.java:146)
+	at org.apache.pdfbox.contentstream.operator.text.SetFontAndSize.process(SetFontAndSize.java:66)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processOperator(PDFStreamEngine.java:966)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStreamOperators(PDFStreamEngine.java:541)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processStream(PDFStreamEngine.java:516)
+	at org.apache.pdfbox.contentstream.PDFStreamEngine.processPage(PDFStreamEngine.java:155)
+	at org.apache.pdfbox.rendering.PageDrawer.drawPage(PageDrawer.java:284)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:355)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImage(PDFRenderer.java:272)
+	at org.apache.pdfbox.rendering.PDFRenderer.renderImageWithDPI(PDFRenderer.java:258)
+	at guraa.pdfcompare.util.PdfRenderer.renderPage(PdfRenderer.java:65)
+	at guraa.pdfcompare.util.PdfProcessor.processPageWithRobustHandling(PdfProcessor.java:258)
+	at guraa.pdfcompare.util.PdfProcessor.lambda$3(PdfProcessor.java:133)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.util.zip.DataFormatException: invalid stored block lengths
+	at java.base/java.util.zip.Inflater.inflateBytesBytes(Native Method)
+	at java.base/java.util.zip.Inflater.inflate(Inflater.java:378)
+	at java.base/java.util.zip.Inflater.inflate(Inflater.java:464)
+	at org.apache.pdfbox.filter.FlateFilter.decompress(FlateFilter.java:86)
+	at org.apache.pdfbox.filter.FlateFilter.decode(FlateFilter.java:50)
+	... 27 common frames omitted
+2025-04-09 16:20:36 [pool-1-thread-5] WARN  guraa.pdfcompare.util.PdfRenderer - Standard rendering failed for page 7, trying fallback: Index 4096 out of bounds for length 4096
+2025-04-09 16:20:36 [pool-1-thread-8] ERROR org.apache.pdfbox.filter.FlateFilter - FlateFilter: stop reading corrupt stream due to a DataFormatException
+2025-04-09 16:20:36 [pool-1-thread-8] WARN  o.a.p.contentstream.PDFStreamEngine - java.util.zip.DataFormatException: invalid block type
+2025-04-09 16:20:36 [pool-1-thread-6] WARN  o.a.p.contentstream.PDFStreamEngine - Invalid data in Ascii85 stream
+2025-04-09 16:20:36 [pool-1-thread-7] WARN  o.a.p.contentstream.PDFStreamEngine - Invalid data in Ascii85 stream
+2025-04-09 16:20:36 [pool-1-thread-5] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 2 images from page 7
+2025-04-09 16:20:36 [pool-1-thread-7] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 4 images from page 4
+2025-04-09 16:20:36 [pool-1-thread-7] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 4 to uploads\documents\7459b774-f854-4f2f-9ff6-f1f0271f30c2\fonts\page_4_fonts.json
+2025-04-09 16:20:36 [pool-1-thread-5] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 7 to uploads\documents\7459b774-f854-4f2f-9ff6-f1f0271f30c2\fonts\page_7_fonts.json
+2025-04-09 16:20:36 [pool-1-thread-8] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 6 images from page 5
+2025-04-09 16:20:36 [pool-1-thread-8] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 5 to uploads\documents\7459b774-f854-4f2f-9ff6-f1f0271f30c2\fonts\page_5_fonts.json
+2025-04-09 16:20:36 [pool-1-thread-6] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 8 images from page 6
+2025-04-09 16:20:36 [pool-1-thread-6] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 6 to uploads\documents\7459b774-f854-4f2f-9ff6-f1f0271f30c2\fonts\page_6_fonts.json
+2025-04-09 16:20:37 [pool-1-thread-1] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 2 images from page 2
+2025-04-09 16:20:37 [pool-1-thread-1] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 2 to uploads\documents\7459b774-f854-4f2f-9ff6-f1f0271f30c2\fonts\page_2_fonts.json
+2025-04-09 16:20:37 [pool-1-thread-3] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 4 images from page 1
+2025-04-09 16:20:37 [pool-1-thread-3] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 1 to uploads\documents\7459b774-f854-4f2f-9ff6-f1f0271f30c2\fonts\page_1_fonts.json
+2025-04-09 16:20:37 [pool-1-thread-2] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 6 images from page 3
+2025-04-09 16:20:37 [pool-1-thread-2] DEBUG guraa.pdfcompare.util.PdfProcessor - Saved font information for page 3 to uploads\documents\7459b774-f854-4f2f-9ff6-f1f0271f30c2\fonts\page_3_fonts.json
+2025-04-09 16:20:37 [http-nio-3010-exec-4] INFO  guraa.pdfcompare.util.PdfProcessor - PDF processing completed: 7 pages processed successfully, 0 pages failed
+2025-04-09 16:20:37 [http-nio-3010-exec-4] INFO  guraa.pdfcompare.service.PdfService - Document with same content hash already exists, reusing: 1553f522-9f9d-48b7-8076-0915842037a7
+2025-04-09 16:20:38 [task-exec-2] WARN  g.p.service.ComparisonService - Requested comparison not found, skipping processing: ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f
+2025-04-09 16:21:05 [scheduling-1] INFO  g.p.service.BackgroundTaskManager - Found 1 pending comparisons
+2025-04-09 16:21:05 [scheduling-1] INFO  g.p.service.BackgroundTaskManager - Submitted comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f for processing
+2025-04-09 16:21:05 [pool-1-thread-4] INFO  g.p.service.BackgroundTaskManager - Starting processing of comparison: ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f
+2025-04-09 16:21:05 [pool-1-thread-4] INFO  g.p.service.BackgroundTaskManager - Completed processing of comparison: ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f
+2025-04-09 16:21:05 [task-exec-3] INFO  g.p.service.DocumentMatchingService - Starting document matching between win_a_lot 2).pdf and win_a_lot 3).pdf
+2025-04-09 16:21:05 [task-exec-3] INFO  g.p.service.DocumentMatchingService - Memory at START of matchDocuments: Used=752MB, Free=556MB, Total=1308MB, Max=8096MB
+2025-04-09 16:21:05 [task-exec-3] INFO  g.p.service.DocumentMatchingService - Memory at AFTER loading PDFs: Used=757MB, Free=551MB, Total=1308MB, Max=8096MB
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Extract text contents for each page to use in matching
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Extracted text from 7 base pages and 7 compare pages
+2025-04-09 16:21:05 [task-exec-3] INFO  g.p.service.DocumentMatchingService - Memory at AFTER text extraction: Used=777MB, Free=531MB, Total=1308MB, Max=8096MB
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Identified 7 document boundaries within PDF with 7 pages
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 1: pages 1-1 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 2: pages 2-2 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 3: pages 3-3 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 4: pages 4-4 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 5: pages 5-5 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 6: pages 6-6 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 7: pages 7-7 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Identified 7 document boundaries within PDF with 7 pages
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 1: pages 1-1 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 2: pages 2-2 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 3: pages 3-3 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 4: pages 4-4 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 5: pages 5-5 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 6: pages 6-6 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentDetector - Document 7: pages 7-7 (1 pages)
+2025-04-09 16:21:05 [task-exec-3] INFO  g.p.service.DocumentMatchingService - Identified 7 documents in base PDF and 7 in comparison PDF
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Base Document #1: Pages 1-1 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Base Document #2: Pages 2-2 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Base Document #3: Pages 3-3 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Base Document #4: Pages 4-4 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Base Document #5: Pages 5-5 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Base Document #6: Pages 6-6 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Base Document #7: Pages 7-7 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Compare Document #1: Pages 1-1 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Compare Document #2: Pages 2-2 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Compare Document #3: Pages 3-3 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Compare Document #4: Pages 4-4 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Compare Document #5: Pages 5-5 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Compare Document #6: Pages 6-6 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Compare Document #7: Pages 7-7 (1 pages), Title hint: "Kundnr: 9999999"
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8279
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8279
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 0 and Compare doc 0, similarity: 0,8279
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7984
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7984
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 0 and Compare doc 1, similarity: 0,7984
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7920
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7920
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 0 and Compare doc 2, similarity: 0,7920
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7615
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7615
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 0 and Compare doc 3, similarity: 0,7615
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 0 and Compare doc 4, similarity: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 0 and Compare doc 5, similarity: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 0 and Compare doc 6, similarity: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7984
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7984
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 1 and Compare doc 0, similarity: 0,7984
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8279
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8279
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 1 and Compare doc 1, similarity: 0,8279
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8065
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8065
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 1 and Compare doc 2, similarity: 0,8065
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7752
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7752
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 1 and Compare doc 3, similarity: 0,7752
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 1 and Compare doc 4, similarity: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 1 and Compare doc 5, similarity: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7769
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7769
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 1 and Compare doc 6, similarity: 0,7769
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7920
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7920
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 2 and Compare doc 0, similarity: 0,7920
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8065
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8065
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 2 and Compare doc 1, similarity: 0,8065
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8293
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8293
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 2 and Compare doc 2, similarity: 0,8293
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 2 and Compare doc 3, similarity: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 2 and Compare doc 4, similarity: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 2 and Compare doc 5, similarity: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7710
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7710
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 2 and Compare doc 6, similarity: 0,7710
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7615
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7615
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 3 and Compare doc 0, similarity: 0,7615
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7752
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7752
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 3 and Compare doc 1, similarity: 0,7752
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 3 and Compare doc 2, similarity: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8359
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8359
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 3 and Compare doc 3, similarity: 0,8359
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 3 and Compare doc 4, similarity: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 3 and Compare doc 5, similarity: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 3 and Compare doc 6, similarity: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 4 and Compare doc 0, similarity: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 4 and Compare doc 1, similarity: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 4 and Compare doc 2, similarity: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 4 and Compare doc 3, similarity: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8372
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8372
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 4 and Compare doc 4, similarity: 0,8372
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 4 and Compare doc 5, similarity: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8308
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8308
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 4 and Compare doc 6, similarity: 0,8308
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 5 and Compare doc 0, similarity: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 5 and Compare doc 1, similarity: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 5 and Compare doc 2, similarity: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 5 and Compare doc 3, similarity: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 5 and Compare doc 4, similarity: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8372
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8372
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 5 and Compare doc 5, similarity: 0,8372
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8308
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8308
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 5 and Compare doc 6, similarity: 0,8308
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 6 and Compare doc 0, similarity: 0,7557
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 6 and Compare doc 1, similarity: 0,7692
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 6 and Compare doc 2, similarity: 0,7634
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 6 and Compare doc 3, similarity: 0,8154
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 6 and Compare doc 4, similarity: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 6 and Compare doc 5, similarity: 0,8231
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - similarity: Base doc null and Compare doc null
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Text similarity between documents: 0,8450
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - textSimilarity < textSimilarityThreshold: 0,8450
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.pdfcompare.service.DocumentMatcher - Potential match: Base doc 6 and Compare doc 6, similarity: 0,8450
+2025-04-09 16:21:05 [task-exec-3] INFO  g.pdfcompare.service.DocumentMatcher - Matched: Base doc 6 and Compare doc 6, similarity: 0,8450
+2025-04-09 16:21:05 [task-exec-3] INFO  g.pdfcompare.service.DocumentMatcher - Matched: Base doc 4 and Compare doc 4, similarity: 0,8372
+2025-04-09 16:21:05 [task-exec-3] INFO  g.pdfcompare.service.DocumentMatcher - Matched: Base doc 5 and Compare doc 5, similarity: 0,8372
+2025-04-09 16:21:05 [task-exec-3] INFO  g.pdfcompare.service.DocumentMatcher - Matched: Base doc 3 and Compare doc 3, similarity: 0,8359
+2025-04-09 16:21:05 [task-exec-3] INFO  g.pdfcompare.service.DocumentMatcher - Matched: Base doc 2 and Compare doc 2, similarity: 0,8293
+2025-04-09 16:21:05 [task-exec-3] INFO  g.pdfcompare.service.DocumentMatcher - Matched: Base doc 0 and Compare doc 0, similarity: 0,8279
+2025-04-09 16:21:05 [task-exec-3] INFO  g.pdfcompare.service.DocumentMatcher - Matched: Base doc 1 and Compare doc 1, similarity: 0,8279
+2025-04-09 16:21:05 [task-exec-3] INFO  g.p.service.DocumentMatchingService - Found 7 document matches
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Simple case: equal number of pages
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Create one-to-one mappings
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - similarity
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - calculatePageSimilarity: 0.8817156253604133
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Created document pair 0: Base pages 7-7, Compare pages 7-7, Similarity 0,8450
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Simple case: equal number of pages
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Create one-to-one mappings
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - similarity
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - calculatePageSimilarity: 0.8767441623412113
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Created document pair 1: Base pages 5-5, Compare pages 5-5, Similarity 0,8372
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Simple case: equal number of pages
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Create one-to-one mappings
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - similarity
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - calculatePageSimilarity: 0.8767441623412113
+2025-04-09 16:21:05 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Created document pair 2: Base pages 6-6, Compare pages 6-6, Similarity 0,8372
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Simple case: equal number of pages
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Create one-to-one mappings
+2025-04-09 16:21:05 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - similarity
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - calculatePageSimilarity: 0.8758539007133044
+2025-04-09 16:21:06 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Created document pair 3: Base pages 4-4, Compare pages 4-4, Similarity 0,8359
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Simple case: equal number of pages
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Create one-to-one mappings
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - similarity
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - calculatePageSimilarity: 0.872591705591353
+2025-04-09 16:21:06 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Created document pair 4: Base pages 3-3, Compare pages 3-3, Similarity 0,8293
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Simple case: equal number of pages
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Create one-to-one mappings
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - similarity
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - calculatePageSimilarity: 0.8716098973237499
+2025-04-09 16:21:06 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Created document pair 5: Base pages 1-1, Compare pages 1-1, Similarity 0,8279
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Simple case: equal number of pages
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - Create one-to-one mappings
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - similarity
+2025-04-09 16:21:06 [task-exec-3] DEBUG guraa.pdfcompare.service.PageMatcher - calculatePageSimilarity: 0.8716120974346158
+2025-04-09 16:21:06 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Created document pair 6: Base pages 2-2, Compare pages 2-2, Similarity 0,8279
+2025-04-09 16:21:06 [task-exec-3] INFO  g.p.service.DocumentMatchingService - Memory at BEFORE returning document pairs: Used=544MB, Free=392MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Close PDFs
+2025-04-09 16:21:06 [task-exec-3] DEBUG g.p.service.DocumentMatchingService - Closed PDFs
+2025-04-09 16:21:06 [task-exec-3] INFO  g.p.service.DocumentMatchingService - Memory at AFTER closing PDFs: Used=544MB, Free=392MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [task-exec-3] INFO  g.p.service.ComparisonService - Processing document pairs in batches of 8
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-27] INFO  g.p.service.ComparisonService - Processing document pair 0: Base pages 7-7, Compare pages 7-7
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-27] INFO  g.p.s.DifferenceDetectionService - Memory at START of comparePages for pair 0: Used=544MB, Free=392MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-28] INFO  g.p.service.ComparisonService - Processing document pair 1: Base pages 5-5, Compare pages 5-5
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-28] INFO  g.p.s.DifferenceDetectionService - Memory at START of comparePages for pair 1: Used=545MB, Free=391MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-29] INFO  g.p.service.ComparisonService - Processing document pair 2: Base pages 6-6, Compare pages 6-6
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-29] INFO  g.p.s.DifferenceDetectionService - Memory at START of comparePages for pair 2: Used=547MB, Free=389MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-30] INFO  g.p.service.ComparisonService - Processing document pair 3: Base pages 4-4, Compare pages 4-4
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-30] INFO  g.p.s.DifferenceDetectionService - Memory at START of comparePages for pair 3: Used=548MB, Free=388MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-31] INFO  g.p.service.ComparisonService - Processing document pair 4: Base pages 3-3, Compare pages 3-3
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-31] INFO  g.p.s.DifferenceDetectionService - Memory at START of comparePages for pair 4: Used=550MB, Free=386MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-32] INFO  g.p.service.ComparisonService - Processing document pair 5: Base pages 1-1, Compare pages 1-1
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-32] INFO  g.p.s.DifferenceDetectionService - Memory at START of comparePages for pair 5: Used=551MB, Free=385MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-33] INFO  g.p.service.ComparisonService - Processing document pair 6: Base pages 2-2, Compare pages 2-2
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-33] INFO  g.p.s.DifferenceDetectionService - Memory at START of comparePages for pair 6: Used=552MB, Free=384MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-29] INFO  g.p.s.DifferenceDetectionService - Memory at AFTER loading PDFs for pair 2: Used=579MB, Free=357MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-32] INFO  g.p.s.DifferenceDetectionService - Memory at AFTER loading PDFs for pair 5: Used=581MB, Free=355MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-31] INFO  g.p.s.DifferenceDetectionService - Memory at AFTER loading PDFs for pair 4: Used=582MB, Free=354MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-33] INFO  g.p.s.DifferenceDetectionService - Memory at AFTER loading PDFs for pair 6: Used=585MB, Free=351MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-27] INFO  g.p.s.DifferenceDetectionService - Memory at AFTER loading PDFs for pair 0: Used=585MB, Free=351MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-28] INFO  g.p.s.DifferenceDetectionService - Memory at AFTER loading PDFs for pair 1: Used=589MB, Free=347MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-30] INFO  g.p.s.DifferenceDetectionService - Memory at AFTER loading PDFs for pair 3: Used=593MB, Free=343MB, Total=936MB, Max=8096MB
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-32] ERROR g.p.service.ComparisonService - Error processing document pair 5: Cannot invoke "guraa.pdfcompare.util.TextElement.getY()" because "current" is null
+java.lang.NullPointerException: Cannot invoke "guraa.pdfcompare.util.TextElement.getY()" because "current" is null
+	at guraa.pdfcompare.util.TextExtractor.groupTextElements(TextExtractor.java:161)
+	at guraa.pdfcompare.util.TextExtractor.extractTextElementsFromPage(TextExtractor.java:113)
+	at guraa.pdfcompare.service.DifferenceDetectionService.comparePages(DifferenceDetectionService.java:1181)
+	at guraa.pdfcompare.service.ComparisonService.processDocumentPair(ComparisonService.java:215)
+	at guraa.pdfcompare.service.ComparisonService.lambda$0(ComparisonService.java:176)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.exec(CompletableFuture.java:1796)
+	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:373)
+	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1182)
+	at java.base/java.util.concurrent.ForkJoinPool.scan(ForkJoinPool.java:1655)
+	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:1622)
+	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:165)
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-29] ERROR g.p.service.ComparisonService - Error processing document pair 2: Cannot invoke "guraa.pdfcompare.util.TextElement.getY()" because "current" is null
+java.lang.NullPointerException: Cannot invoke "guraa.pdfcompare.util.TextElement.getY()" because "current" is null
+	at guraa.pdfcompare.util.TextExtractor.groupTextElements(TextExtractor.java:161)
+	at guraa.pdfcompare.util.TextExtractor.extractTextElementsFromPage(TextExtractor.java:113)
+	at guraa.pdfcompare.service.DifferenceDetectionService.comparePages(DifferenceDetectionService.java:1181)
+	at guraa.pdfcompare.service.ComparisonService.processDocumentPair(ComparisonService.java:215)
+	at guraa.pdfcompare.service.ComparisonService.lambda$0(ComparisonService.java:176)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.exec(CompletableFuture.java:1796)
+	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:373)
+	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1182)
+	at java.base/java.util.concurrent.ForkJoinPool.scan(ForkJoinPool.java:1655)
+	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:1622)
+	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:165)
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-31] ERROR g.p.service.ComparisonService - Error processing document pair 4: Cannot invoke "guraa.pdfcompare.util.TextElement.getY()" because "a" is null
+java.lang.NullPointerException: Cannot invoke "guraa.pdfcompare.util.TextElement.getY()" because "a" is null
+	at guraa.pdfcompare.util.TextExtractor.lambda$0(TextExtractor.java:132)
+	at java.base/java.util.TimSort.countRunAndMakeAscending(TimSort.java:355)
+	at java.base/java.util.TimSort.sort(TimSort.java:234)
+	at java.base/java.util.Arrays.sort(Arrays.java:1307)
+	at java.base/java.util.ArrayList.sort(ArrayList.java:1721)
+	at guraa.pdfcompare.util.TextExtractor.groupTextElements(TextExtractor.java:130)
+	at guraa.pdfcompare.util.TextExtractor.extractTextElementsFromPage(TextExtractor.java:113)
+	at guraa.pdfcompare.service.DifferenceDetectionService.comparePages(DifferenceDetectionService.java:1181)
+	at guraa.pdfcompare.service.ComparisonService.processDocumentPair(ComparisonService.java:215)
+	at guraa.pdfcompare.service.ComparisonService.lambda$0(ComparisonService.java:176)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.exec(CompletableFuture.java:1796)
+	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:373)
+	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1182)
+	at java.base/java.util.concurrent.ForkJoinPool.scan(ForkJoinPool.java:1655)
+	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:1622)
+	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:165)
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-28] WARN  o.a.p.contentstream.PDFStreamEngine - Cannot execute restore, the graphics stack is empty
+2025-04-09 16:21:06 [ForkJoinPool-2-worker-33] WARN  o.a.p.contentstream.PDFStreamEngine - Cannot execute restore, the graphics stack is empty
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-27] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 2 images from page 7
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-28] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 3 images from page 5
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-33] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 1 images from page 2
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-28] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 1 images from page 5
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-28] INFO  g.p.service.ComparisonService - Successfully processed document pair 1
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-27] WARN  o.a.p.contentstream.PDFStreamEngine - Cannot execute restore, the graphics stack is empty
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-33] WARN  o.a.p.contentstream.PDFStreamEngine - Cannot execute restore, the graphics stack is empty
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-30] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 3 images from page 4
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-27] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 2 images from page 7
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-33] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 4 images from page 2
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-30] DEBUG guraa.pdfcompare.util.ImageExtractor - Extracted 6 images from page 4
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-27] INFO  g.p.service.ComparisonService - Successfully processed document pair 0
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-33] INFO  g.p.service.ComparisonService - Successfully processed document pair 6
+2025-04-09 16:21:07 [ForkJoinPool-2-worker-30] INFO  g.p.service.ComparisonService - Successfully processed document pair 3
+2025-04-09 16:21:32 [http-nio-3010-exec-2] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:21:32 [http-nio-3010-exec-2] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:21:36 [http-nio-3010-exec-10] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:21:36 [http-nio-3010-exec-10] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:21:54 [http-nio-3010-exec-6] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:21:54 [http-nio-3010-exec-6] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:21:57 [http-nio-3010-exec-5] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:21:57 [http-nio-3010-exec-5] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:21:59 [http-nio-3010-exec-7] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:21:59 [http-nio-3010-exec-7] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:22:01 [http-nio-3010-exec-4] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:22:01 [http-nio-3010-exec-4] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:22:03 [http-nio-3010-exec-3] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:22:03 [http-nio-3010-exec-3] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:22:04 [http-nio-3010-exec-9] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:22:04 [http-nio-3010-exec-9] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:22:07 [http-nio-3010-exec-1] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:22:07 [http-nio-3010-exec-1] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:22:16 [http-nio-3010-exec-2] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:22:16 [http-nio-3010-exec-2] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 1 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:22:24 [http-nio-3010-exec-1] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:22:24 [http-nio-3010-exec-1] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 2 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:22:24 [http-nio-3010-exec-1] WARN  g.p.controller.ComparisonController - Page details not found for page 1 of document pair 2 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f
+2025-04-09 16:22:30 [http-nio-3010-exec-2] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:22:30 [http-nio-3010-exec-2] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 3 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:22:56 [http-nio-3010-exec-1] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:22:56 [http-nio-3010-exec-1] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 4 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:22:56 [http-nio-3010-exec-1] WARN  g.p.controller.ComparisonController - Page details not found for page 1 of document pair 4 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f
+2025-04-09 16:23:06 [http-nio-3010-exec-2] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:23:06 [http-nio-3010-exec-2] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 4 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:23:06 [http-nio-3010-exec-2] WARN  g.p.controller.ComparisonController - Page details not found for page 1 of document pair 4 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f
+2025-04-09 16:24:28 [http-nio-3010-exec-1] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:24:28 [http-nio-3010-exec-1] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 6 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:24:33 [http-nio-3010-exec-2] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:24:33 [http-nio-3010-exec-2] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-09 16:24:38 [http-nio-3010-exec-7] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-09 16:24:38 [http-nio-3010-exec-7] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison ff3f13ef-ce6c-4205-9fa3-371d7ea02b6f with filters: {severity=null, types=text,font,image,style,metadata, search=null}

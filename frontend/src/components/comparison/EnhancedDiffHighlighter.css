@@ -1,3 +1,4 @@
+/* EnhancedDiffHighlighter.css */
 .enhanced-diff-container {
   display: flex;
   width: 100%;
@@ -5,6 +6,12 @@
   flex-wrap: wrap;
   overflow: auto;
   flex-direction: column;
+}
+
+@media (min-width: 1200px) {
+  .enhanced-diff-container {
+    flex-direction: row;
+  }
 }
 
 .diff-document {
@@ -32,66 +39,15 @@
   background-color: #fff;
 }
 
-.document-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 300px;
-  background-color: #f8f8f8;
-  border: 1px dashed #ccc;
-  color: #666;
-  font-style: italic;
-}
-
 .highlight-layer {
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: auto;
-  cursor: default;
-  z-index: 10; /* Ensure it's above the image */
   width: 100%;
   height: 100%;
-}
-
-/* Colors for different types of changes */
-.add-highlight {
-  background-color: rgba(0, 255, 0, 0.6);
-  border: 3px solid rgba(0, 200, 0, 1.0);
-}
-
-.delete-highlight {
-  background-color: rgba(255, 0, 0, 0.6);
-  border: 3px solid rgba(200, 0, 0, 1.0);
-}
-
-.modify-highlight {
-  background-color: rgba(255, 165, 0, 0.6);
-  border: 3px solid rgba(255, 140, 0, 1.0);
-}
-
-/* Annotation styles */
-.annotation-circle {
-  position: absolute;
-  border-radius: 50%;
-  background-color: rgba(128, 0, 128, 0.3);
-  border: 3px solid rgba(128, 0, 128, 0.8);
-  pointer-events: none;
-}
-
-.annotation-text {
-  position: absolute;
-  background-color: rgba(255, 255, 255, 0.9);
-  border: 2px solid rgba(128, 0, 128, 0.8);
-  padding: 12px;
-  font-size: 14px;
-  color: rgba(128, 0, 128, 1);
-  pointer-events: none;
-  max-width: 300px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  z-index: 20;
+  pointer-events: auto;
+  cursor: default;
+  z-index: 10;
 }
 
 /* Legend styles */
@@ -121,18 +77,18 @@
 }
 
 .legend-color.added {
-  background-color: rgba(0, 255, 0, 0.5);
-  border-color: rgba(0, 200, 0, 1.0);
+  background-color: rgba(76, 175, 80, 0.3);
+  border-color: rgba(76, 175, 80, 0.8);
 }
 
 .legend-color.deleted {
-  background-color: rgba(255, 0, 0, 0.5);
-  border-color: rgba(200, 0, 0, 1.0);
+  background-color: rgba(244, 67, 54, 0.3);
+  border-color: rgba(244, 67, 54, 0.8);
 }
 
 .legend-color.modified {
-  background-color: rgba(255, 165, 0, 0.5);
-  border-color: rgba(255, 140, 0, 1.0);
+  background-color: rgba(255, 152, 0, 0.3);
+  border-color: rgba(255, 152, 0, 0.8);
 }
 
 /* Document labels */
@@ -155,7 +111,7 @@
   color: #c62828;
 }
 
-/* Enhanced tooltip for differences */
+/* Tooltip for differences */
 .diff-tooltip {
   position: fixed;
   background-color: rgba(0, 0, 0, 0.85);
@@ -163,41 +119,31 @@
   padding: 8px 12px;
   border-radius: 4px;
   font-size: 14px;
-  max-width: 300px;
   z-index: 100;
   pointer-events: none;
   white-space: normal;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-/* Responsive adjustments */
-@media (min-width: 1200px) {
-  .enhanced-diff-container {
-    flex-direction: row;
-  }
-  
-  .diff-legend {
-    width: 100%;
-  }
+.diff-tooltip:after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px 5px 0;
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.85) transparent transparent;
 }
 
-@media (max-width: 900px) {
-  .enhanced-diff-container {
-    flex-direction: column;
-  }
-  
-  .diff-document {
-    min-width: 100%;
-    margin-bottom: 16px;
-  }
-}
-
-/* Animation for tooltips and annotations */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.diff-tooltip, .annotation-text {
-  animation: fadeIn 0.2s ease-in-out;
+/* Placeholder for missing documents */
+.document-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  background-color: #f8f8f8;
+  border: 1px dashed #ccc;
+  color: #666;
+  font-style: italic;
 }
