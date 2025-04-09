@@ -119,65 +119,42 @@ const EnhancedDiffHighlighter = ({
    
    // Function to extract or calculate position and bounds for differences
    const calculatePositionAndBounds = (diff, index, totalDiffs, dimensions) => {
-    // If the difference has position and bounds, extract them correctly
-    if (diff.position && diff.bounds) {
-      // Handle nested position structure (with x, y inside position object)
-      if (typeof diff.position.x === 'number' && typeof diff.position.y === 'number') {
-        return {
-          position: {
-            x: diff.position.x,
-            y: diff.position.y
-          },
-          bounds: diff.bounds
-        };
-      }
-      
-      // Handle flat position structure (x, y directly in position)
-      if (diff.position.pageNumber !== undefined) {
-        return {
-          position: {
-            x: diff.position.x || 0,
-            y: diff.position.y || 0
-          },
-          bounds: diff.bounds
-        };
-      }
+    // First, check if position and bounds are already correctly defined
+    if (diff.position && diff.bounds && 
+        typeof diff.position.x === 'number' && 
+        typeof diff.position.y === 'number') {
+      // Scale coordinates based on actual image dimensions
+      return {
+        position: {
+          x: (diff.position.x / dimensions.originalWidth) * dimensions.width,
+          y: (diff.position.y / dimensions.originalHeight) * dimensions.height
+        },
+        bounds: {
+          width: (diff.bounds.width / dimensions.originalWidth) * dimensions.width,
+          height: (diff.bounds.height / dimensions.originalHeight) * dimensions.height
+        }
+      };
     }
-    
-    // Default width and height
-    const defaultWidth = 100;
-    const defaultHeight = 20;
-    
-    // Calculate position based on index
-    // Distribute differences evenly across the page
+  
+    // Fallback positioning if coordinates are not precise
     const rows = Math.ceil(Math.sqrt(totalDiffs));
     const cols = Math.ceil(totalDiffs / rows);
-    
-    const row = Math.floor(index / cols);
-    const col = index % cols;
-    
+  
     const xSpacing = dimensions.width / cols;
     const ySpacing = dimensions.height / rows;
-    
-    // Add some randomness to make it look more natural
-    const randomOffsetX = Math.random() * 20 - 10;
-    const randomOffsetY = Math.random() * 20 - 10;
-    
-    const x = col * xSpacing + xSpacing / 4 + randomOffsetX;
-    const y = row * ySpacing + ySpacing / 4 + randomOffsetY;
-    
-    // For text differences, try to use the text content to determine size
-    let width = defaultWidth;
-    let height = defaultHeight;
-    
-    if (diff.type === 'text' && (diff.baseText || diff.compareText)) {
-      const text = diff.baseText || diff.compareText;
-      width = Math.min(text.length * 8, dimensions.width / 2);
-    }
-    
+  
+    const row = Math.floor(index / cols);
+    const col = index % cols;
+  
     return {
-      position: { x, y },
-      bounds: { width, height }
+      position: { 
+        x: col * xSpacing, 
+        y: row * ySpacing 
+      },
+      bounds: { 
+        width: xSpacing * 0.8, 
+        height: ySpacing * 0.8 
+      }
     };
   };
  
