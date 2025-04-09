@@ -94,15 +94,7 @@ api.interceptors.response.use(
       error.circuitBreakerInfo = breaker.getStatus();
     }
     
-    // Handle retry logic for specific error types
-    if (isNetworkError && error.config && error.config.retryCount < 2) {
-      console.log(`Retrying request (${error.config.retryCount + 1}/2)...`);
-      
-      const retryConfig = { ...error.config, retryCount: error.config.retryCount + 1 };
-      return new Promise(resolve => {
-        setTimeout(() => resolve(api(retryConfig)), 1000 * (error.config.retryCount + 1));
-      });
-    }
+    // No retry logic - removed as requested
     
     // For all other errors, reject the promise
     return Promise.reject(error);

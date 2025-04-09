@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -58,9 +59,15 @@ public class ComparisonService {
     @Async
     @Transactional
     public void processComparison(String comparisonId) throws Exception {
-        Comparison comparison = comparisonRepository.findByComparisonId(comparisonId)
-                .orElseThrow(() -> new IllegalArgumentException("Comparison not found: " + comparisonId));
+        // Check if comparison exists before trying to process it
+        Optional<Comparison> comparisonOpt = comparisonRepository.findByComparisonId(comparisonId);
 
+        if (!comparisonOpt.isPresent()) {
+            log.warn("Requested comparison not found, skipping processing: {}", comparisonId);
+            return; // Early return instead of throwing exception
+        }
+
+        Comparison comparison = comparisonOpt.get();
         PdfDocument baseDocument = comparison.getBaseDocument();
         PdfDocument compareDocument = comparison.getCompareDocument();
 

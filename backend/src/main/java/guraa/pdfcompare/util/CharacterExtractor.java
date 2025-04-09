@@ -3,142 +3,320 @@ package guraa.pdfcompare.util;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.contentstream.PDFStreamEngine;
 import org.apache.pdfbox.contentstream.operator.DrawObject;
-import org.apache.pdfbox.contentstream.operator.Operator;
+import org.apache.pdfbox.contentstream.operator.state.Concatenate;
 import org.apache.pdfbox.contentstream.operator.state.Restore;
 import org.apache.pdfbox.contentstream.operator.state.Save;
 import org.apache.pdfbox.contentstream.operator.state.SetGraphicsStateParameters;
 import org.apache.pdfbox.contentstream.operator.state.SetMatrix;
-import org.apache.pdfbox.contentstream.operator.text.BeginText;
-import org.apache.pdfbox.contentstream.operator.text.EndText;
-import org.apache.pdfbox.contentstream.operator.text.SetFontAndSize;
-import org.apache.pdfbox.contentstream.operator.text.ShowText;
-import org.apache.pdfbox.cos.COSBase;
-import org.apache.pdfbox.cos.COSString;
+import org.apache.pdfbox.contentstream.operator.text.*;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.graphics.state.PDTextState;
+import org.apache.pdfbox.util.Matrix;
+import org.apache.pdfbox.util.Vector;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
- * A minimal character extractor that can handle problematic PDF streams.
- * Uses direct character extraction with minimal stream processing to
- * avoid common PDF parsing issues.
+ * A very basic character extractor for PDFs that have issues with standard text extraction.
+ * This class extracts individual characters and their positions from a PDF page.
  */
 @Slf4j
 public class CharacterExtractor extends PDFStreamEngine {
-
-    private final StringBuilder textBuilder = new StringBuilder();
-    private boolean hadErrors = false;
-
-    public CharacterExtractor() {
-        // Register only essential operators
-        addOperator(new BeginText());
-        addOperator(new EndText());
-        addOperator(new SetGraphicsStateParameters());
-        addOperator(new Save());
-        addOperator(new Restore());
-        addOperator(new SetFontAndSize());
-        addOperator(new ShowText());
-        addOperator(new DrawObject());
-        addOperator(new SetMatrix());
-    }
-
+    
+    private final List<CharacterInfo> characters = new ArrayList<>();
+    
     /**
-     * Extract basic text from a page with minimal processing.
+     * Constructor.
+     */
+    public CharacterExtractor() {
+        // Add the supported operators
+        addOperator(new BeginText());
+        addOperator(new Concatenate());
+        addOperator(new DrawObject());
+        addOperator(new EndText());
+        addOperator(new MoveText());
+        addOperator(new MoveTextSetLeading());
+        addOperator(new NextLine());
+        addOperator(new Restore());
+        addOperator(new Save());
+        addOperator(new SetFontAndSize());
+        addOperator(new SetGraphicsStateParameters());
+        addOperator(new SetMatrix());
+        addOperator(new SetTextLeading());
+        addOperator(new SetTextRenderingMode());
+        addOperator(new SetTextRise());
+        addOperator(new SetWordSpacing());
+        addOperator(new SetCharSpacing());
+        addOperator(new SetTextHorizontalScaling());
+        addOperator(new ShowText());
+        addOperator(new ShowTextAdjusted());
+    }
+    
+    /**
+     * Extract basic text from a PDF page.
      *
      * @param page The PDF page
-     * @return Extracted text or error message
+     * @return The extracted text
+     * @throws IOException If there's an error processing the page
      */
-    public String extractBasicText(PDPage page) {
-        textBuilder.setLength(0);
-        hadErrors = false;
-
+    public String extractBasicText(PDPage page) throws IOException {
+        characters.clear();
+        
         try {
+            // Process the page content
             processPage(page);
-
-            if (textBuilder.length() == 0) {
-                return "[No text content found]";
-            }
-
-            if (hadErrors) {
-                return "[Partial text extraction due to PDF errors]\n" + textBuilder.toString();
-            }
-
-            return textBuilder.toString();
+            
+            // Sort characters by position
+            sortCharacters();
+            
+            // Combine characters into text
+            return combineCharacters();
         } catch (Exception e) {
-            log.error("Error in basic text extraction: {}", e.getMessage());
-            if (textBuilder.length() > 0) {
-                return "[Partial text extraction before error]\n" + textBuilder.toString();
-            }
-            return "[Text extraction failed: " + e.getMessage() + "]";
+            log.error("Error extracting basic text", e);
+            return "";
         }
     }
-
+    
     @Override
-    protected void processOperator(Operator operator, List<COSBase> operands) throws IOException {
+    protected void showText(byte[] string) throws IOException {
         try {
-            String operation = operator.getName();
-
-            // Handle text showing operators with direct extraction to avoid stream parsing issues
-            if ("Tj".equals(operation) || "TJ".equals(operation) || "'".equals(operation) || "\"".equals(operation)) {
-                extractTextFromOperands(operands);
-            }
-
-            // Continue normal processing
-            super.processOperator(operator, operands);
-        } catch (Exception e) {
-            hadErrors = true;
-            log.debug("Error processing PDF operator {}: {}", operator.getName(), e.getMessage());
-            // Don't rethrow - continue processing to get as much text as possible
-        }
-    }
-
-    /**
-     * Extract text directly from operands.
-     */
-    private void extractTextFromOperands(List<COSBase> operands) {
-        try {
-            if (operands == null || operands.isEmpty()) {
-                return;
-            }
-
-            // Get current font if possible
-            PDFont font = getGraphicsState().getTextState().getFont();
+            PDTextState textState = getGraphicsState().getTextState();
+            PDFont font = textState.getFont();
+            
             if (font == null) {
                 return;
             }
-
-            // Extract text from string operands
-            for (COSBase operand : operands) {
-                if (operand instanceof COSString) {
-                    COSString string = (COSString) operand;
+            
+            // Get current transformation matrix
+            Matrix ctm = getGraphicsState().getCurrentTransformationMatrix();
+            Matrix textMatrix = getTextMatrix();
+            
+            // Process each character
+            float fontSize = textState.getFontSize();
+            float horizontalScaling = textState.getHorizontalScaling() / 100f;
+            float charSpacing = textState.getCharacterSpacing();
+            
+            float spaceWidth = 0;
+            try {
+                spaceWidth = font.getSpaceWidth() * fontSize * horizontalScaling;
+            } catch (Exception e) {
+                spaceWidth = fontSize / 3;
+            }
+            
+            int codeLength = 1;
+            for (int i = 0; i < string.length; i += codeLength) {
+                try {
+                    // Get the character code
+                    codeLength = 1;
+                    int code = string[i] & 0xff;
+                    String unicode;
+                    
                     try {
-                        // Get the Unicode string representation
-                        String text = string.getString();
-                        if (text != null && !text.isEmpty()) {
-                            textBuilder.append(text);
+                        // Try to convert to Unicode
+                        unicode = font.toUnicode(code);
+                        
+                        // If we couldn't map to Unicode, try to use the character code as-is
+                        if (unicode == null) {
+                            unicode = String.format("[%02X]", code);
                         }
                     } catch (Exception e) {
-                        // Fallback to basic character extraction
-                        byte[] bytes = string.getBytes();
-                        for (byte b : bytes) {
-                            // Only append printable ASCII characters
-                            if (b >= 32 && b < 127) {
-                                textBuilder.append((char) b);
-                            }
-                        }
-                        hadErrors = true;
+                        unicode = String.format("[%02X]", code);
                     }
+                    
+                    // Get character width
+                    float charWidth;
+                    try {
+                        charWidth = font.getWidth(code) / 1000 * fontSize * horizontalScaling;
+                    } catch (Exception e) {
+                        charWidth = fontSize / 2;
+                    }
+                    
+                    // Calculate position - simplified for compatibility
+                    float tx = charWidth;
+                    float ty = 0;
+                    
+                    // Create character info
+                    Matrix textRenderingMatrix = textMatrix.multiply(ctm);
+                    float x = textRenderingMatrix.getTranslateX();
+                    float y = textRenderingMatrix.getTranslateY();
+                    
+                    CharacterInfo charInfo = new CharacterInfo();
+                    charInfo.setCharacter(unicode);
+                    charInfo.setX(x);
+                    charInfo.setY(y);
+                    charInfo.setWidth(charWidth);
+                    charInfo.setHeight(fontSize);
+                    
+                    characters.add(charInfo);
+                    
+                    // Move text position
+                    textMatrix.translate(tx, ty);
+                } catch (Exception e) {
+                    // Skip this character if there's an error
+                    log.debug("Error processing character at index {}: {}", i, e.getMessage());
                 }
             }
-
-            // Add space after text elements
-            textBuilder.append(" ");
-
         } catch (Exception e) {
-            log.debug("Error extracting text from operands: {}", e.getMessage());
-            hadErrors = true;
+            log.warn("Error in showText method", e);
+        }
+    }
+    
+    /**
+     * Sort characters by position.
+     */
+    private void sortCharacters() {
+        // Group characters by line
+        float lineHeight = getAverageLineHeight();
+        List<List<CharacterInfo>> lines = new ArrayList<>();
+        List<CharacterInfo> currentLine = new ArrayList<>();
+        
+        // Sort by Y position first
+        Collections.sort(characters, Comparator.comparing(CharacterInfo::getY));
+        
+        if (!characters.isEmpty()) {
+            float lastY = characters.get(0).getY();
+            currentLine.add(characters.get(0));
+            
+            for (int i = 1; i < characters.size(); i++) {
+                CharacterInfo charInfo = characters.get(i);
+                
+                // Check if this is a new line
+                if (Math.abs(charInfo.getY() - lastY) > lineHeight * 0.5) {
+                    // Sort current line by X position
+                    Collections.sort(currentLine, Comparator.comparing(CharacterInfo::getX));
+                    lines.add(currentLine);
+                    
+                    // Start a new line
+                    currentLine = new ArrayList<>();
+                    lastY = charInfo.getY();
+                }
+                
+                currentLine.add(charInfo);
+            }
+            
+            // Add the last line
+            if (!currentLine.isEmpty()) {
+                Collections.sort(currentLine, Comparator.comparing(CharacterInfo::getX));
+                lines.add(currentLine);
+            }
+        }
+        
+        // Clear and rebuild the characters list
+        characters.clear();
+        for (List<CharacterInfo> line : lines) {
+            characters.addAll(line);
+        }
+    }
+    
+    /**
+     * Calculate the average line height.
+     *
+     * @return The average line height
+     */
+    private float getAverageLineHeight() {
+        if (characters.isEmpty()) {
+            return 12; // Default
+        }
+        
+        float totalHeight = 0;
+        for (CharacterInfo charInfo : characters) {
+            totalHeight += charInfo.getHeight();
+        }
+        
+        return totalHeight / characters.size();
+    }
+    
+    /**
+     * Combine characters into text.
+     *
+     * @return The combined text
+     */
+    private String combineCharacters() {
+        if (characters.isEmpty()) {
+            return "";
+        }
+        
+        StringBuilder text = new StringBuilder();
+        float lineHeight = getAverageLineHeight();
+        float lastY = characters.get(0).getY();
+        float lastX = characters.get(0).getX() + characters.get(0).getWidth();
+        
+        text.append(characters.get(0).getCharacter());
+        
+        for (int i = 1; i < characters.size(); i++) {
+            CharacterInfo charInfo = characters.get(i);
+            
+            // Check if this is a new line
+            if (Math.abs(charInfo.getY() - lastY) > lineHeight * 0.5) {
+                text.append("\n");
+                lastX = 0;
+            }
+            // Check if this is a new word
+            else if (charInfo.getX() - lastX > charInfo.getWidth() * 0.5) {
+                text.append(" ");
+            }
+            
+            text.append(charInfo.getCharacter());
+            lastY = charInfo.getY();
+            lastX = charInfo.getX() + charInfo.getWidth();
+        }
+        
+        return text.toString();
+    }
+    
+    /**
+     * Class to store character information.
+     */
+    private static class CharacterInfo {
+        private String character;
+        private float x;
+        private float y;
+        private float width;
+        private float height;
+        
+        public String getCharacter() {
+            return character;
+        }
+        
+        public void setCharacter(String character) {
+            this.character = character;
+        }
+        
+        public float getX() {
+            return x;
+        }
+        
+        public void setX(float x) {
+            this.x = x;
+        }
+        
+        public float getY() {
+            return y;
+        }
+        
+        public void setY(float y) {
+            this.y = y;
+        }
+        
+        public float getWidth() {
+            return width;
+        }
+        
+        public void setWidth(float width) {
+            this.width = width;
+        }
+        
+        public float getHeight() {
+            return height;
+        }
+        
+        public void setHeight(float height) {
+            this.height = height;
         }
     }
 }

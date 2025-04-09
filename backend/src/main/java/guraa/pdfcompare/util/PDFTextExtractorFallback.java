@@ -2,150 +2,120 @@ package guraa.pdfcompare.util;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.pdfbox.text.TextPosition;
+import org.apache.pdfbox.text.PDFTextStripperByArea;
 
+import java.awt.*;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A fallback text extractor that handles problematic PDFs.
- * This class is simplified to be compatible with older PDFBox versions.
+ * Fallback text extractor for PDFs that have issues with the standard extractor.
+ * This class provides alternative methods for extracting text from problematic PDFs.
  */
 @Slf4j
 public class PDFTextExtractorFallback {
 
     /**
-     * Extract text from a specific page with error handling for problematic PDFs.
+     * Extract text from a page using fallback methods.
      *
      * @param document The PDF document
-     * @param pageIndex The 0-based page index
-     * @return The extracted text or an error message
+     * @param pageIndex The zero-based page index
+     * @return The extracted text
+     * @throws IOException If there's an error extracting text
      */
-    public String extractTextFromPage(PDDocument document, int pageIndex) {
+    public String extractTextFromPage(PDDocument document, int pageIndex) throws IOException {
+        // Try different approaches in sequence
+        
+        // Approach 1: Use PDFTextStripper with different settings
         try {
-            // Try with more robust settings
-            RobustTextStripper stripper = new RobustTextStripper();
+            PDFTextStripper stripper = new PDFTextStripper();
             stripper.setSortByPosition(true);
             stripper.setStartPage(pageIndex + 1);
             stripper.setEndPage(pageIndex + 1);
-
-            // Set stripper to suppress most errors
-            stripper.setSuppressDuplicateOverlappingText(true);
             stripper.setAddMoreFormatting(false);
-            stripper.setLineSeparator("\n");
-
-            return stripper.getText(document);
+            stripper.setSpacingTolerance(0.5f);
+            String text = stripper.getText(document);
+            
+            if (text != null && !text.trim().isEmpty()) {
+                return text;
+            }
         } catch (Exception e) {
-            log.warn("Error in fallback text extraction: {}", e.getMessage());
-
-            try {
-                // Try with most basic approach - just get any text without worrying about format
-                SimpleTextStripper simpleStripper = new SimpleTextStripper();
-                simpleStripper.setStartPage(pageIndex + 1);
-                simpleStripper.setEndPage(pageIndex + 1);
-
-                String basicText = simpleStripper.getText(document);
-                if (basicText != null && !basicText.trim().isEmpty()) {
-                    return "[Partial text extraction - document has problematic content]\n\n" + basicText;
-                }
-
-                return "[Text extraction failed - no text content could be extracted]";
-            } catch (Exception e2) {
-                log.error("Complete failure in text extraction: {}", e2.getMessage());
-                return "[Text extraction failed]";
-            }
+            log.warn("First fallback approach failed: {}", e.getMessage());
         }
+        
+        // Approach 2: Extract text by dividing the page into regions
+        try {
+            return extractTextByRegions(document, pageIndex);
+        } catch (Exception e) {
+            log.warn("Region-based extraction failed: {}", e.getMessage());
+        }
+        
+        // Approach 3: Use a very basic character extraction approach
+        try {
+            CharacterExtractor extractor = new CharacterExtractor();
+            PDPage page = document.getPage(pageIndex);
+            return extractor.extractBasicText(page);
+        } catch (Exception e) {
+            log.warn("Basic character extraction failed: {}", e.getMessage());
+        }
+        
+        // If all approaches fail, return empty string
+        return "";
     }
-
+    
     /**
-     * A more robust text stripper that handles problematic PDFs.
+     * Extract text by dividing the page into grid regions.
+     * This can help with PDFs that have complex layouts or formatting issues.
+     *
+     * @param document The PDF document
+     * @param pageIndex The zero-based page index
+     * @return The extracted text
+     * @throws IOException If there's an error extracting text
      */
-    private static class RobustTextStripper extends PDFTextStripper {
-
-        public RobustTextStripper() throws IOException {
-            super();
-        }
-
-        @Override
-        protected void writeString(String text, List<TextPosition> textPositions) throws IOException {
-            try {
-                super.writeString(text, textPositions);
-            } catch (Exception e) {
-                // Log but continue
-                log.debug("Error writing text: {}", e.getMessage());
-
-                // Try to write directly to the output
-                try {
-                    getOutput().write(text);
-                } catch (Exception ignored) {
-                    // Can't even write directly - ignore
+    private String extractTextByRegions(PDDocument document, int pageIndex) throws IOException {
+        PDPage page = document.getPage(pageIndex);
+        PDFTextStripperByArea stripper = new PDFTextStripperByArea();
+        stripper.setSortByPosition(true);
+        
+        // Get page dimensions
+        float width = page.getMediaBox().getWidth();
+        float height = page.getMediaBox().getHeight();
+        
+        // Create a grid of regions
+        int gridSize = 3; // 3x3 grid
+        float regionWidth = width / gridSize;
+        float regionHeight = height / gridSize;
+        
+        List<String> textParts = new ArrayList<>();
+        
+        // Process each region
+        for (int x = 0; x < gridSize; x++) {
+            for (int y = 0; y < gridSize; y++) {
+                String regionName = "region_" + x + "_" + y;
+                Rectangle rect = new Rectangle(
+                        (int)(x * regionWidth),
+                        (int)(y * regionHeight),
+                        (int)regionWidth,
+                        (int)regionHeight
+                );
+                
+                stripper.addRegion(regionName, rect);
+                stripper.extractRegions(page);
+                
+                String regionText = stripper.getTextForRegion(regionName);
+                if (regionText != null && !regionText.trim().isEmpty()) {
+                    textParts.add(regionText);
                 }
+                
+                // Clear regions for next iteration
+                stripper.removeRegion(regionName);
             }
         }
-
-        @Override
-        protected void writeLineSeparator() throws IOException {
-            try {
-                super.writeLineSeparator();
-            } catch (Exception e) {
-                // Try to write directly
-                try {
-                    getOutput().write('\n');
-                } catch (Exception ignored) {
-                    // Ignore
-                }
-            }
-        }
-
-        @Override
-        public void processTextPosition(TextPosition text) {
-            try {
-                super.processTextPosition(text);
-            } catch (Exception e) {
-                // Log but continue
-                log.debug("Error processing text position: {}", e.getMessage());
-            }
-        }
-    }
-
-    /**
-     * A very simple text stripper that focuses only on getting text content.
-     */
-    private static class SimpleTextStripper extends PDFTextStripper {
-
-        public SimpleTextStripper() throws IOException {
-            super();
-            // Configure for maximum robustness
-            this.setSuppressDuplicateOverlappingText(true);
-            this.setSortByPosition(false);
-            this.setAddMoreFormatting(false);
-            this.setLineSeparator("\n");
-        }
-
-        @Override
-        protected void writeString(String text, List<TextPosition> textPositions) throws IOException {
-            try {
-                // Remove control characters that might cause problems
-                text = text.replaceAll("[\\p{Cntrl}&&[^\r\n\t]]", "");
-                super.writeString(text, textPositions);
-            } catch (Exception e) {
-                // Ignore errors and just try to write the text directly
-                try {
-                    getOutput().write(text);
-                } catch (Exception ignored) {
-                    // Ignore nested exceptions
-                }
-            }
-        }
-
-        @Override
-        public void processTextPosition(TextPosition text) {
-            try {
-                super.processTextPosition(text);
-            } catch (Exception e) {
-                // Silently ignore errors
-            }
-        }
+        
+        // Combine all text parts
+        return String.join("\n", textParts);
     }
 }

@@ -31,9 +31,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Component
 public class ImageExtractor extends PDFStreamEngine {
 
+    // ThreadLocal to store images for each thread
     private final ThreadLocal<List<ImageInfo>> threadLocalImages = ThreadLocal.withInitial(CopyOnWriteArrayList::new);
     private PDPage currentPage;
     private PDResources currentResources;
+    private int pageIndex;
+    private int imageCounter = 0;
+    private Path outputDir;
 
     public ImageExtractor() {
         // Register operators for handling images
@@ -61,6 +65,9 @@ public class ImageExtractor extends PDFStreamEngine {
         // Set current page and its resources
         currentPage = document.getPage(pageIndex);
         currentResources = currentPage.getResources();
+        this.pageIndex = pageIndex;
+        this.outputDir = outputDir;
+        this.imageCounter = 0;
 
         // Create output directory if it doesn't exist
         File outDir = outputDir.toFile();
@@ -106,11 +113,13 @@ public class ImageExtractor extends PDFStreamEngine {
                 imageInfo.setImageHash(sb.toString());
 
                 savedImages.add(imageInfo);
+                imageCounter++;
             } catch (NoSuchAlgorithmException | IOException e) {
                 log.error("Failed to process image", e);
             }
         }
 
+        log.debug("Extracted {} images from page {}", imageCounter, pageIndex + 1);
         return savedImages;
     }
 
@@ -202,8 +211,6 @@ public class ImageExtractor extends PDFStreamEngine {
                 getGraphicsState().getCurrentTransformationMatrix().getTranslateY()
         );
     }
-
-
 
     /**
      * Contains information about an extracted image.

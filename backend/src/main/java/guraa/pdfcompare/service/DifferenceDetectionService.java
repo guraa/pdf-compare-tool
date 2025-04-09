@@ -12,6 +12,7 @@ import guraa.pdfcompare.model.difference.ImageDifference;
 import guraa.pdfcompare.model.difference.TextDifference;
 import guraa.pdfcompare.util.DifferenceCalculator;
 import guraa.pdfcompare.util.FontAnalyzer;
+
 import guraa.pdfcompare.util.ImageExtractor;
 import guraa.pdfcompare.util.TextElement;
 import guraa.pdfcompare.util.TextExtractor;

@@ -14,14 +14,27 @@ const EnhancedDifferenceList = ({ differences, onDifferenceSelect, selectedDiffe
   useEffect(() => {
     if (!differences) return;
     
+    // Log differences for debugging
+    console.log('Differences in EnhancedDifferenceList:', differences);
+    
     // Combine all differences from base and compare into one array
     const combinedDiffs = [...(differences.baseDifferences || []), ...(differences.compareDifferences || [])];
+    
+    // Log combined differences
+    console.log('Combined differences:', combinedDiffs);
+    
+    // Filter differences to only show those for the current page
+    const filteredDiffs = combinedDiffs.filter(diff => 
+      !diff.pageNumber || diff.pageNumber === 0 || diff.pageNumber === differences.pageNumber
+    );
+    
+    console.log(`Filtered from ${combinedDiffs.length} to ${filteredDiffs.length} differences for page ${differences.pageNumber}`);
     
     // Remove duplicates by ID
     const uniqueDiffs = [];
     const seenIds = new Set();
     
-    combinedDiffs.forEach(diff => {
+    filteredDiffs.forEach(diff => {
       if (!seenIds.has(diff.id)) {
         seenIds.add(diff.id);
         uniqueDiffs.push(diff);
@@ -151,11 +164,19 @@ const EnhancedDifferenceList = ({ differences, onDifferenceSelect, selectedDiffe
       case 'image':
         return diff.imageName || 'Image changed';
       case 'font':
-        return diff.fontName || 'Font changed';
+        return diff.fontName ? `Font: ${diff.fontName}` : 'Font changed';
       case 'style':
+        if (diff.styleProperties) {
+          return `Style: ${diff.styleProperties.join(', ')}`;
+        }
         return 'Style properties changed';
       default:
-        return 'Difference detected';
+        // If we have no specific description, try to use any available properties
+        const props = [];
+        if (diff.id) props.push(`ID: ${diff.id}`);
+        if (diff.changeType) props.push(`Change: ${diff.changeType}`);
+        
+        return props.length > 0 ? props.join(', ') : 'Difference detected';
     }
   };
 

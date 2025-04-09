@@ -97,7 +97,7 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
       if (err.message.includes("still processing") && retryCountRef.current < maxRetries) {
         // Increase the delay with each retry (exponential backoff)
         const delay = Math.min(2000 * Math.pow(1.5, retryCountRef.current), 15000);
-        console.log(`Retrying in ${Math.round(delay/1000)} seconds...`);
+      
         
         setError(`Comparison result not available yet. Retrying in ${Math.round(delay/1000)} seconds...`);
         setLoading(false);
