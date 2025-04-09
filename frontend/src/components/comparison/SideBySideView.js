@@ -39,7 +39,9 @@ const SideBySideView = ({ comparisonId }) => {
   useEffect(() => {
     return () => {
       isMounted.current = false;
-      
+      console.log("baseImageUrl:", baseImageUrl);
+      console.log("compareImageUrl:", compareImageUrl);
+
       if (baseImageUrl) URL.revokeObjectURL(baseImageUrl);
       if (compareImageUrl) URL.revokeObjectURL(compareImageUrl);
     };
@@ -93,81 +95,123 @@ const SideBySideView = ({ comparisonId }) => {
     fetchDocumentPairs();
   }, [comparisonId]);
 
-  // Fetch page details when page or pair changes
+  // Fetch page details and images when page or pair changes
   useEffect(() => {
-    const fetchPageDetails = async () => {
-      if (!comparisonId || !selectedPair) return;
-      
+    let isComponentMounted = true;
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    const fetchPageData = async () => {
+      if (!comparisonId || !selectedPair || !state.baseFile?.fileId || !state.compareFile?.fileId) {
+        console.log("Missing required data for fetching page details/images.");
+        return;
+      }
+
+      setLoadingImages(true);
+      setPageDetails(null); // Reset details
+
+      // Clean up previous blob URLs before fetching new ones
+      if (baseImageUrl) URL.revokeObjectURL(baseImageUrl);
+      if (compareImageUrl) URL.revokeObjectURL(compareImageUrl);
+      setBaseImageUrl(null);
+      setCompareImageUrl(null);
+
       try {
-        setLoadingImages(true);
-        
-        // Calculate actual page numbers based on the document pair
+        // 1. Fetch Page Details
+        const details = await getDocumentPageDetails(
+          comparisonId,
+          state.selectedDocumentPairIndex,
+          currentPage,
+          state.filters,
+          signal // Use the same signal
+        );
+
+        if (!isComponentMounted) return;
+        console.log('Page details from API:', details);
+        setPageDetails(details); // Update page details state
+
+        // 2. Fetch Images Concurrently
         const basePage = selectedPair.baseStartPage + currentPage - 1;
         const comparePage = selectedPair.compareStartPage + currentPage - 1;
-        
-        // Clean up previous blob URLs
-        if (baseImageUrl) URL.revokeObjectURL(baseImageUrl);
-        if (compareImageUrl) URL.revokeObjectURL(compareImageUrl);
-        
-        // Reset URLs
-        setBaseImageUrl(null);
-        setCompareImageUrl(null);
-        
-        // Fetch page details with a 2-minute timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes
-        
-        try {
-          const details = await getDocumentPageDetails(
-            comparisonId, 
-            state.selectedDocumentPairIndex, 
-            currentPage,
-            state.filters
-          );
-          
-          clearTimeout(timeoutId);
-          
-          // Log page details for debugging
-          console.log('Page details from API:', details);
-          
- 
-          // Load base document page with a 2-minute timeout
-          if (basePage <= selectedPair.baseEndPage) {
-            const baseResponse = await fetch(`/api/pdfs/document/${state.baseFile?.fileId}/page/${basePage}`, {
-              signal: controller.signal
-            });
-            if (baseResponse.ok) {
-              const baseBlob = await baseResponse.blob();
-              const baseUrl = URL.createObjectURL(baseBlob);
-              setBaseImageUrl(baseUrl);
+
+        const fetchImage = async (fileId, pageNum, docType) => {
+          if (!fileId || pageNum < 1) return null; // Check for valid fileId and pageNum
+
+          try {
+            const response = await fetch(`/api/pdfs/document/${fileId}/page/${pageNum}`, { signal });
+            if (!response.ok) {
+              throw new Error(`Failed to fetch ${docType} page ${pageNum}: ${response.statusText}`);
             }
-          }
-          
-          // Load compare document page with a 2-minute timeout
-          if (comparePage <= selectedPair.compareEndPage) {
-            const compareResponse = await fetch(`/api/pdfs/document/${state.compareFile?.fileId}/page/${comparePage}`, {
-              signal: controller.signal
-            });
-            if (compareResponse.ok) {
-              const compareBlob = await compareResponse.blob();
-              const compareUrl = URL.createObjectURL(compareBlob);
-              setCompareImageUrl(compareUrl);
+            const blob = await response.blob();
+            return URL.createObjectURL(blob);
+          } catch (error) {
+            if (error.name !== 'AbortError') {
+              console.error(`Error fetching ${docType} image (page ${pageNum}):`, error);
             }
+            return null; // Return null on error
           }
-        } catch (error) {
-          clearTimeout(timeoutId);
-          throw error;
+        };
+
+        const [baseResult, compareResult] = await Promise.allSettled([
+          basePage <= selectedPair.baseEndPage ? fetchImage(state.baseFile.fileId, basePage, 'base') : Promise.resolve(null),
+          comparePage <= selectedPair.compareEndPage ? fetchImage(state.compareFile.fileId, comparePage, 'compare') : Promise.resolve(null)
+        ]);
+
+        if (!isComponentMounted) {
+          // Revoke URLs if component unmounted during fetch
+          if (baseResult.status === 'fulfilled' && baseResult.value) URL.revokeObjectURL(baseResult.value);
+          if (compareResult.status === 'fulfilled' && compareResult.value) URL.revokeObjectURL(compareResult.value);
+          return;
         }
-        
-        setLoadingImages(false);
+
+        // 3. Update Image States
+        const newBaseUrl = baseResult.status === 'fulfilled' ? baseResult.value : null;
+        const newCompareUrl = compareResult.status === 'fulfilled' ? compareResult.value : null;
+
+        console.log('Setting Base URL:', newBaseUrl);
+        console.log('Setting Compare URL:', newCompareUrl);
+        setBaseImageUrl(newBaseUrl);
+        setCompareImageUrl(newCompareUrl);
+
+        if (baseResult.status === 'rejected') setError(`Failed to load base image: ${baseResult.reason?.message || 'Unknown error'}`);
+        if (compareResult.status === 'rejected') setError(`Failed to load compare image: ${compareResult.reason?.message || 'Unknown error'}`);
+
       } catch (error) {
-        console.error("Error loading page data:", error);
-        setLoadingImages(false);
+        if (error.name !== 'AbortError' && isComponentMounted) {
+          console.error("Error loading page data:", error);
+          setError(`Failed to load page data: ${error.message}`);
+          setPageDetails(null); // Clear details on error
+          setBaseImageUrl(null); // Ensure URLs are cleared
+          setCompareImageUrl(null);
+        }
+      } finally {
+        if (isComponentMounted) {
+          setLoadingImages(false);
+        }
       }
     };
-    
-    fetchPageDetails();
-  }, [comparisonId, selectedPair, currentPage, state.selectedDocumentPairIndex]);
+
+    fetchPageData();
+
+    // Cleanup function
+    return () => {
+      isComponentMounted = false;
+      controller.abort(); // Abort ongoing fetches
+      // Revoke URLs on cleanup *if they haven't been updated* by a subsequent render
+      // This check is tricky, relying on the state values at the time of cleanup
+      // The main cleanup is now handled at the start of the effect and in the component unmount effect
+    };
+  }, [
+    comparisonId, 
+    selectedPair, 
+    currentPage, 
+    state.selectedDocumentPairIndex, 
+    state.filters, 
+    state.baseFile?.fileId, // Add file IDs as dependencies
+    state.compareFile?.fileId,
+    setError // Add setError to dependency array
+    // baseImageUrl and compareImageUrl are removed as dependencies to prevent loops
+  ]);
 
   // Navigation and UI handlers
   const handleSelectDocumentPair = (pairIndex, pair) => {

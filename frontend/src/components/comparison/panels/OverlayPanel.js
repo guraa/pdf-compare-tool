@@ -159,11 +159,11 @@ const OverlayPanel = ({
                     className="difference-highlight"
                     style={{
                       position: 'absolute',
-                      top: diff.position?.y || 0,
-                      left: diff.position?.x || 0,
-                      width: diff.bounds?.width || 100,
-                      height: diff.bounds?.height || 30,
-                      backgroundColor: 'rgba(255, 0, 0, 0.3)',
+                      top: `${(diff.position?.y || 0) * (state.viewSettings?.zoom ?? 1)}px`,
+                      left: `${(diff.position?.x || 0) * (state.viewSettings?.zoom ?? 1)}px`,
+                      width: `${(diff.bounds?.width || 100) * (state.viewSettings?.zoom ?? 1)}px`,
+                      height: `${(diff.bounds?.height || 30) * (state.viewSettings?.zoom ?? 1)}px`,
+                      backgroundColor: 'rgba(255, 0, 0, 0.3)', // Consider using a dynamic color based on diff type
                       border: '2px solid rgba(255, 0, 0, 0.5)',
                       borderRadius: '4px',
                       cursor: 'pointer',
