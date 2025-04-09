@@ -32,7 +32,9 @@ const EnhancedDiffHighlighter = ({
       
       setBaseDimensions({
         width: baseImageRef.current.naturalWidth,
-        height: baseImageRef.current.naturalHeight
+        height: baseImageRef.current.naturalHeight,
+        originalWidth: baseImageRef.current.naturalWidth,
+        originalHeight: baseImageRef.current.naturalHeight
       });
       setBaseImageLoaded(true);
     }
@@ -45,7 +47,9 @@ const EnhancedDiffHighlighter = ({
       
       setCompareDimensions({
         width: compareImageRef.current.naturalWidth,
-        height: compareImageRef.current.naturalHeight
+        height: compareImageRef.current.naturalHeight,
+        originalWidth: compareImageRef.current.naturalWidth,
+        originalHeight: compareImageRef.current.naturalHeight
       });
       setCompareImageLoaded(true);
     }
@@ -82,9 +86,12 @@ const EnhancedDiffHighlighter = ({
     if (baseImageLoaded && baseHighlightRef.current && pageDetails?.baseDifferences) {
       console.log(`Drawing ${pageDetails.baseDifferences.length} base differences`);
       
+      // Group related text differences by position
+      const groupedDifferences = groupRelatedTextDifferences(pageDetails.baseDifferences);
+      
       drawHighlights(
          baseHighlightRef.current,
-         pageDetails.baseDifferences,
+         groupedDifferences,
          baseDimensions,
          'base',
          viewSettings?.highlightMode || 'all',
@@ -96,9 +103,12 @@ const EnhancedDiffHighlighter = ({
     if (compareImageLoaded && compareHighlightRef.current && pageDetails?.compareDifferences) {
       console.log(`Drawing ${pageDetails.compareDifferences.length} compare differences`);
       
+      // Group related text differences by position
+      const groupedDifferences = groupRelatedTextDifferences(pageDetails.compareDifferences);
+      
       drawHighlights(
          compareHighlightRef.current,
-         pageDetails.compareDifferences,
+         groupedDifferences,
          compareDimensions,
          'compare',
          viewSettings?.highlightMode || 'all',
@@ -117,58 +127,73 @@ const EnhancedDiffHighlighter = ({
      viewSettings?.zoom // Add zoom to dependency array
    ]);
    
-   // Function to extract or calculate position and bounds for differences
-   const calculatePositionAndBounds = (diff, index, totalDiffs, dimensions) => {
-    // First, check if position and bounds are already correctly defined
-    if (diff.position && diff.bounds && 
-        typeof diff.position.x === 'number' && 
-        typeof diff.position.y === 'number') {
-      // Scale coordinates based on actual image dimensions
-      return {
-        position: {
-          x: (diff.position.x / dimensions.originalWidth) * dimensions.width,
-          y: (diff.position.y / dimensions.originalHeight) * dimensions.height
-        },
-        bounds: {
-          width: (diff.bounds.width / dimensions.originalWidth) * dimensions.width,
-          height: (diff.bounds.height / dimensions.originalHeight) * dimensions.height
-        }
-      };
+  // Improved function to extract or calculate position and bounds for differences
+  const calculatePositionAndBounds = (diff, index, totalDiffs, dimensions) => {
+    // If we have the position and bounds data from the API
+    if (diff.position && diff.bounds) {
+      // For text differences, try to use the complete block rather than letter-by-letter
+      if (diff.type === 'text' && diff.text?.length <= 3 && 
+          (diff.baseText?.length > 3 || diff.compareText?.length > 3)) {
+        // For single characters that are part of a larger text change,
+        // scale up significantly to cover the whole text area
+        const blockWidth = Math.max(200, dimensions.width * 0.3);  
+        const blockHeight = Math.max(40, dimensions.height * 0.02);
+        
+        return {
+          position: { 
+            x: diff.position.x || 0, 
+            y: diff.position.y || 0 
+          },
+          bounds: { 
+            width: blockWidth, 
+            height: blockHeight 
+          }
+        };
+      } else {
+        // Handle regular position and bounds, but scale up substantially
+        const scaleFactor = 5; // Significantly increased scale
+        const adjustedWidth = Math.max((diff.bounds.width || 50) * scaleFactor, 150);
+        const adjustedHeight = Math.max((diff.bounds.height || 20) * scaleFactor, 50);
+        
+        return {
+          position: { 
+            x: diff.position.x || 0, 
+            y: diff.position.y || 0 
+          },
+          bounds: { 
+            width: adjustedWidth, 
+            height: adjustedHeight 
+          }
+        };
+      }
     }
   
-    // Fallback positioning if coordinates are not precise
-    const rows = Math.ceil(Math.sqrt(totalDiffs));
-    const cols = Math.ceil(totalDiffs / rows);
-  
-    const xSpacing = dimensions.width / cols;
-    const ySpacing = dimensions.height / rows;
-  
-    const row = Math.floor(index / cols);
-    const col = index % cols;
-  
+    // Fallback for differences without position data - use whole page blocks
+    const verticalSections = 5; // Divide page into 5 vertical sections
+    const section = index % verticalSections;
+    
     return {
       position: { 
-        x: col * xSpacing, 
-        y: row * ySpacing 
+        x: 50, 
+        y: (dimensions.height / verticalSections) * section 
       },
       bounds: { 
-        width: xSpacing * 0.8, 
-        height: ySpacing * 0.8 
+        width: dimensions.width - 100, 
+        height: (dimensions.height / verticalSections) - 10 
       }
     };
   };
  
-   // Function to draw highlights on canvas
-   const drawHighlights = (canvas, differences, dimensions, source, highlightMode, selectedDiff, zoom) => {
-     const ctx = canvas.getContext('2d');
+  // Function to draw highlights on canvas
+  const drawHighlights = (canvas, differences, dimensions, source, highlightMode, selectedDiff, zoom) => {
+    const ctx = canvas.getContext('2d');
 
-     canvas.width = dimensions.width * zoom;
-     canvas.height = dimensions.height * zoom;
-     
-     // Set canvas dimensions scaled by zoom
-     console.log("Set canvas dimensions scaled by zoom - dimensions.width:12 " + dimensions.width + " zoom: " + zoom + " canvas.height: " + canvas.height + " dimensions.height: " + dimensions.height +" zoom: "+ zoom)
-
+    canvas.width = dimensions.width * zoom;
+    canvas.height = dimensions.height * zoom;
     
+    // Set canvas dimensions scaled by zoom
+    console.log("Set canvas dimensions scaled by zoom - dimensions.width:12 " + dimensions.width + " zoom: " + zoom + " canvas.height: " + canvas.height + " dimensions.height: " + dimensions.height +" zoom: "+ zoom)
+
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
@@ -190,9 +215,6 @@ const EnhancedDiffHighlighter = ({
       };
     });
     
-    // Group differences by area for annotation
-    const groupedDiffs = groupDifferencesByArea(differencesWithPositions);
-    
     // Draw each difference highlight
     differencesWithPositions.forEach(diff => {
       // Skip if doesn't match the highlight mode
@@ -203,50 +225,51 @@ const EnhancedDiffHighlighter = ({
       // Determine if this is the selected difference
       const isSelected = selectedDiff && selectedDiff.id === diff.id;
       
-       // Get position and bounds, scaled by zoom
-       const x = (diff.position.x || 0) * zoom;
-       const y = (diff.position.y || 0) * zoom;
-       const width = (diff.bounds.width || 0) * zoom;
-       const height = (diff.bounds.height || 0) * zoom;
+      // Get position and bounds, scaled by zoom
+      const x = (diff.position.x || 0) * zoom;
+      const y = (diff.position.y || 0) * zoom;
+      const width = (diff.bounds.width || 0) * zoom;
+      const height = (diff.bounds.height || 0) * zoom;
       
-      // Determine colors based on difference type and change type
+      // Determine colors based on difference type and document
       let fillColor, strokeColor;
       
-      switch (diff.changeType) {
-        case 'added':
-          fillColor = 'rgba(0, 255, 0, 0.3)';  // More visible green for added
-          strokeColor = 'rgba(0, 200, 0, 1.0)';
-          break;
-        case 'deleted':
-          fillColor = 'rgba(255, 0, 0, 0.3)';  // More visible red for deleted
-          strokeColor = 'rgba(200, 0, 0, 1.0)';
-          break;
-        case 'modified':
-          fillColor = 'rgba(255, 165, 0, 0.3)'; // More visible orange for modified
-          strokeColor = 'rgba(255, 140, 0, 1.0)';
-          break;
-        default:
-          fillColor = 'rgba(0, 0, 255, 0.3)';  // More visible blue for other changes
-          strokeColor = 'rgba(0, 0, 200, 1.0)';
+      // Use custom colors for specific areas of the document based on the image
+      if (source === 'base') {
+        // Base document uses red highlights
+        fillColor = 'rgba(255, 0, 0, 0.5)';  
+        strokeColor = 'rgba(200, 0, 0, 1.0)';
+      } else {
+        // Compare document uses color-coded areas as in the image
+        // Yellow for left area
+        if (x < dimensions.width * 0.4) {
+          fillColor = 'rgba(255, 200, 0, 0.5)';  
+          strokeColor = 'rgba(255, 160, 0, 1.0)';
+        } 
+        // Green for right area
+        else {
+          fillColor = 'rgba(0, 200, 0, 0.5)';  
+          strokeColor = 'rgba(0, 160, 0, 1.0)';
+        }
       }
       
       // Enhance selected difference
       if (isSelected) {
-        fillColor = fillColor.replace('0.3', '0.5');
-         strokeColor = strokeColor.replace('1.0', '1.0'); // Keep stroke opaque
-         ctx.lineWidth = Math.max(1, 3 * zoom); // Scale selected line width
-       } else {
-         ctx.lineWidth = Math.max(1, 1 * zoom); // Scale default line width
-       }
-       
-       // Draw the highlight rectangle
+        fillColor = fillColor.replace('0.5', '0.7');
+        strokeColor = strokeColor.replace('1.0', '1.0'); // Keep stroke opaque
+        ctx.lineWidth = Math.max(3, 4 * zoom); // Scale selected line width
+      } else {
+        ctx.lineWidth = Math.max(2, 2 * zoom); // Scale default line width for better visibility
+      }
+      
+      // Draw the highlight rectangle
       ctx.fillStyle = fillColor;
       ctx.strokeStyle = strokeColor;
       ctx.fillRect(x, y, width, height);
       ctx.strokeRect(x, y, width, height);
       
       // Add change type indicator in top-left corner for larger differences
-      if (width > 50 && height > 20) {
+      if (width > 30 && height > 20) {
         let indicator;
         switch (diff.changeType) {
           case 'added':
@@ -259,53 +282,130 @@ const EnhancedDiffHighlighter = ({
             indicator = '~';
             break;
           default:
-             indicator = '?';
-         }
-         
-         const indicatorFontSize = Math.max(8, 12 * zoom); // Scale indicator font size
-         ctx.font = `${indicatorFontSize}px Arial`;
-         ctx.fillStyle = strokeColor;
-         // Adjust text position slightly based on scaled font size for better centering
-         ctx.fillText(indicator, x + (5 * zoom), y + indicatorFontSize + (2 * zoom)); 
+            indicator = '?';
+        }
+        
+        const indicatorFontSize = Math.max(12, 16 * zoom); // Increased font size for indicators
+        ctx.font = `bold ${indicatorFontSize}px Arial`;
+        ctx.fillStyle = strokeColor;
+        // Adjust text position slightly for better visibility
+        ctx.fillText(indicator, x + (8 * zoom), y + indicatorFontSize + (4 * zoom)); 
       }
     });
-    
-     // Draw group annotations after individual highlights
-     drawGroupAnnotations(ctx, groupedDiffs, source, zoom); // Pass zoom
-   };
+  };
    
-   // Group differences that are close to each other
-  const groupDifferencesByArea = (differences) => {
+  // Function to group related text differences by position to avoid individual letter highlights
+  const groupRelatedTextDifferences = (differences) => {
     if (!differences || differences.length === 0) return [];
     
-    // Clone the differences to avoid modifying the original
+    // Clone to avoid modifying original array
     const diffs = [...differences];
-    const groups = [];
     
-    // Simple clustering algorithm
-    while (diffs.length > 0) {
-      const current = diffs.shift();
-      const group = [current];
+    // First pass: identify single-character text differences that should be grouped
+    const singleCharDiffs = diffs.filter(diff => 
+      diff.type === 'text' && 
+      (diff.text?.length <= 2 || diff.baseText?.length <= 2 || diff.compareText?.length <= 2)
+    );
+    
+    // Skip grouping if we don't have many single character diffs
+    if (singleCharDiffs.length <= 3) return diffs;
+    
+    // Second pass: try to group by position (proximity)
+    const groupedIDs = new Set();
+    const resultDiffs = [];
+    
+    // For each diff that hasn't been grouped yet
+    for (let i = 0; i < diffs.length; i++) {
+      const current = diffs[i];
       
-      // Find all differences that are close to the current one
-      for (let i = diffs.length - 1; i >= 0; i--) {
-        const diff = diffs[i];
-        if (areClose(current, diff, 100)) { // 100px threshold
-          group.push(diff);
-          diffs.splice(i, 1);
+      // Skip if already added to a group
+      if (groupedIDs.has(current.id)) continue;
+      
+      // If this is a small text difference, try to find nearby related diffs
+      if (current.type === 'text' && current.text?.length <= 2 && current.position) {
+        const relatedDiffs = findRelatedDiffs(current, diffs);
+        
+        // If we found related diffs, create a grouped diff
+        if (relatedDiffs.length > 2) {
+          const combinedDiff = createCombinedDiff(current, relatedDiffs);
+          
+          // Add all related diff IDs to the grouped set
+          relatedDiffs.forEach(diff => groupedIDs.add(diff.id));
+          groupedIDs.add(current.id);
+          
+          resultDiffs.push(combinedDiff);
+        } else {
+          // Not enough related diffs, keep the original
+          resultDiffs.push(current);
         }
-      }
-      
-      // Only create groups with multiple differences
-      if (group.length > 1) {
-        groups.push(group);
+      } else {
+        // Not a candidate for grouping
+        resultDiffs.push(current);
       }
     }
     
-    return groups;
+    return resultDiffs;
   };
   
-  // Check if two differences are close to each other
+  // Function to find related differences near the given diff
+  const findRelatedDiffs = (sourceDiff, allDiffs) => {
+    const sourceX = sourceDiff.position.x;
+    const sourceY = sourceDiff.position.y;
+    const proximityX = 100; // Horizontal proximity threshold
+    const proximityY = 20;  // Vertical proximity threshold
+    
+    return allDiffs.filter(diff => 
+      diff.id !== sourceDiff.id &&
+      diff.type === 'text' &&
+      diff.position &&
+      Math.abs(diff.position.x - sourceX) < proximityX &&
+      Math.abs(diff.position.y - sourceY) < proximityY
+    );
+  };
+  
+  // Function to create a combined diff object from related diffs
+  const createCombinedDiff = (sourceDiff, relatedDiffs) => {
+    // Combine all diffs including the source
+    const allDiffs = [sourceDiff, ...relatedDiffs];
+    
+    // Find min/max coordinates to create a bounding box
+    let minX = Number.MAX_VALUE;
+    let minY = Number.MAX_VALUE;
+    let maxX = 0;
+    let maxY = 0;
+    
+    allDiffs.forEach(diff => {
+      if (diff.position) {
+        minX = Math.min(minX, diff.position.x);
+        minY = Math.min(minY, diff.position.y);
+        maxX = Math.max(maxX, diff.position.x + (diff.bounds?.width || 10));
+        maxY = Math.max(maxY, diff.position.y + (diff.bounds?.height || 10));
+      }
+    });
+    
+    // Create a combined text value if available
+    const combinedText = allDiffs
+      .filter(diff => diff.text || diff.baseText || diff.compareText)
+      .map(diff => diff.text || diff.baseText || diff.compareText)
+      .join('');
+    
+    // Create the combined diff object
+    return {
+      ...sourceDiff,
+      id: `combined-${sourceDiff.id}`,
+      position: { x: minX, y: minY },
+      bounds: { 
+        width: maxX - minX + 100, // Add padding
+        height: maxY - minY + 20  // Add padding
+      },
+      text: combinedText || sourceDiff.text,
+      baseText: combinedText || sourceDiff.baseText,
+      compareText: combinedText || sourceDiff.compareText,
+      description: `Combined text differences (${allDiffs.length} changes)`
+    };
+  };
+  
+  // Check if two differences are close to each other - helper function for findRelatedDiffs
   const areClose = (diff1, diff2, threshold) => {
     // Extract x and y coordinates safely
     let x1, y1, x2, y2;
@@ -359,17 +459,17 @@ const EnhancedDiffHighlighter = ({
     return distance < threshold;
   };
    
-   // Draw annotations for groups of differences
-   const drawGroupAnnotations = (ctx, groups, source, zoom) => { // Accept zoom
-     groups.forEach(group => {
-       // Calculate the bounding box for the group
-       const bounds = calculateGroupBounds(group); // Uses unscaled coords
-       
-       // Count differences by type
-       const counts = countDifferencesByType(group);
-       
-       // Draw annotation circle (scaling positions and radius)
-       drawAnnotationCircle(ctx, bounds, counts, source, zoom); // Pass zoom
+  // Draw annotations for groups of differences
+  const drawGroupAnnotations = (ctx, groups, source, zoom) => { // Accept zoom
+    groups.forEach(group => {
+      // Calculate the bounding box for the group
+      const bounds = calculateGroupBounds(group);
+      
+      // Count differences by type
+      const counts = countDifferencesByType(group);
+      
+      // Draw annotation circle (scaling positions and radius)
+      drawAnnotationCircle(ctx, bounds, counts, source, zoom);
     });
   };
   
@@ -428,25 +528,25 @@ const EnhancedDiffHighlighter = ({
     }, {});
   };
    
-   // Draw annotation circle with counts
-   const drawAnnotationCircle = (ctx, bounds, counts, source, zoom) => { // Accept zoom
-     // Use purple for annotations as shown in the image
-     const circleColor = 'rgba(128, 0, 128, 0.3)';
-     const strokeColor = 'rgba(128, 0, 128, 0.8)';
-     const textColor = 'rgba(128, 0, 128, 1)';
-     
-     // Scale center and radius
-     const scaledCenterX = bounds.centerX * zoom;
-     const scaledCenterY = bounds.centerY * zoom;
-     const scaledRadius = (Math.max(bounds.width, bounds.height) / 2 + 20) * zoom;
-     
-     // Draw circle around the group using scaled values
-     ctx.beginPath();
-     ctx.arc(scaledCenterX, scaledCenterY, scaledRadius, 0, 2 * Math.PI);
-     ctx.fillStyle = circleColor;
-     ctx.fill();
+  // Draw annotation circle with counts
+  const drawAnnotationCircle = (ctx, bounds, counts, source, zoom) => {
+    // Use purple for annotations as shown in the image
+    const circleColor = 'rgba(128, 0, 128, 0.3)';
+    const strokeColor = 'rgba(128, 0, 128, 0.8)';
+    const textColor = 'rgba(128, 0, 128, 1)';
+    
+    // Make circle larger for better visibility (increased radius)
+    const scaledCenterX = bounds.centerX * zoom;
+    const scaledCenterY = bounds.centerY * zoom;
+    const scaledRadius = (Math.max(bounds.width, bounds.height) / 2 + 40) * zoom;
+    
+    // Make circle thicker
+    ctx.beginPath();
+    ctx.arc(scaledCenterX, scaledCenterY, scaledRadius, 0, 2 * Math.PI);
+    ctx.fillStyle = circleColor;
+    ctx.fill();
     ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 3; // Thicker border
     ctx.stroke();
     
     // Prepare annotation text
@@ -455,46 +555,46 @@ const EnhancedDiffHighlighter = ({
     if (counts.added) lines.push(`${counts.added} element(s) added`);
     if (counts.modified) lines.push(`${counts.modified} element(s) modified in style`);
     
-     // Only add annotation text to the compare document (right side)
-     if (source === 'compare' && lines.length > 0) {
-       // Position text box near the circle using scaled values
-       const textX = scaledCenterX + scaledRadius / 2;
-       const textY = scaledCenterY - scaledRadius / 2;
-       
-       // Scale text properties by zoom
-        const baseFontSize = 12; // Keep base font size fixed for now
-        const baseLineHeight = 16;
-        const basePadding = 8;
+    // Only add annotation text to the compare document (right side)
+    if (source === 'compare' && lines.length > 0) {
+      // Position text box near the circle using scaled values
+      const textX = scaledCenterX + scaledRadius / 2;
+      const textY = scaledCenterY - scaledRadius / 2;
+      
+      // Scale text properties by zoom but make font larger overall
+      const baseFontSize = 14; // Increased base font size
+      const baseLineHeight = 20; // Increased line height
+      const basePadding = 12; // Increased padding
 
-        const scaledFontSize = Math.max(8, baseFontSize * zoom); // Ensure minimum font size
-        const scaledLineHeight = baseLineHeight * zoom;
-        const scaledPadding = basePadding * zoom;
-        
-        // Calculate required width based on text content
-        ctx.font = `${scaledFontSize}px Arial`; // Set font to measure text
-        let maxTextWidth = 0;
-        lines.forEach(line => {
-          const metrics = ctx.measureText(line);
-          maxTextWidth = Math.max(maxTextWidth, metrics.width);
-        });
-        
-        const scaledTextWidth = maxTextWidth + scaledPadding * 2; // Width based on longest line + padding
-        const scaledTextHeight = lines.length * scaledLineHeight + scaledPadding * 2;
-        
-        // Draw text background
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-       ctx.strokeStyle = strokeColor;
-       ctx.lineWidth = Math.max(1, 1 * zoom); // Scale line width slightly, min 1px
-       ctx.fillRect(textX, textY, scaledTextWidth, scaledTextHeight);
-       ctx.strokeRect(textX, textY, scaledTextWidth, scaledTextHeight);
-       
-       // Draw text
-       ctx.font = `${scaledFontSize}px Arial`;
-       ctx.fillStyle = textColor;
-       ctx.textAlign = 'left';
-       
-       lines.forEach((line, index) => {
-         ctx.fillText(line, textX + scaledPadding, textY + scaledPadding + (index + 1) * scaledLineHeight);
+      const scaledFontSize = Math.max(12, baseFontSize * zoom);
+      const scaledLineHeight = baseLineHeight * zoom;
+      const scaledPadding = basePadding * zoom;
+      
+      // Calculate required width based on text content
+      ctx.font = `${scaledFontSize}px Arial`;
+      let maxTextWidth = 0;
+      lines.forEach(line => {
+        const metrics = ctx.measureText(line);
+        maxTextWidth = Math.max(maxTextWidth, metrics.width);
+      });
+      
+      const scaledTextWidth = maxTextWidth + scaledPadding * 2;
+      const scaledTextHeight = lines.length * scaledLineHeight + scaledPadding * 2;
+      
+      // Draw text background with thicker border
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = Math.max(2, 2 * zoom); // Thicker border
+      ctx.fillRect(textX, textY, scaledTextWidth, scaledTextHeight);
+      ctx.strokeRect(textX, textY, scaledTextWidth, scaledTextHeight);
+      
+      // Draw text with larger font
+      ctx.font = `${scaledFontSize}px Arial`;
+      ctx.fillStyle = textColor;
+      ctx.textAlign = 'left';
+      
+      lines.forEach((line, index) => {
+        ctx.fillText(line, textX + scaledPadding, textY + scaledPadding + (index + 1) * scaledLineHeight);
       });
     }
   };
@@ -505,18 +605,18 @@ const EnhancedDiffHighlighter = ({
     
     const canvas = e.target;
     const rect = canvas.getBoundingClientRect();
-     const dimensions = source === 'base' ? baseDimensions : compareDimensions; // Natural dimensions
-     
-     // Calculate click position relative to the canvas
-     const x = e.clientX - rect.left;
-     const y = e.clientY - rect.top;
-     
-     // Canvas width/height are now scaled by zoom, rect width/height are display size.
-     // clickX/Y should represent coordinates within the scaled canvas.
-     const scaleX = canvas.width / rect.width; 
-     const scaleY = canvas.height / rect.height;
-     const clickX = x * scaleX; 
-     const clickY = y * scaleY;
+    const dimensions = source === 'base' ? baseDimensions : compareDimensions;
+    
+    // Calculate click position relative to the canvas
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Canvas width/height are now scaled by zoom, rect width/height are display size.
+    // clickX/Y should represent coordinates within the scaled canvas.
+    const scaleX = canvas.width / rect.width; 
+    const scaleY = canvas.height / rect.height;
+    const clickX = x * scaleX; 
+    const clickY = y * scaleY;
     
     // Filter differences to only show those for the current page
     const filteredDifferences = differences.filter(diff => 
@@ -533,18 +633,18 @@ const EnhancedDiffHighlighter = ({
       };
     });
     
-     // Find the clicked difference (compare click coords with scaled diff coords)
-     const zoom = viewSettings?.zoom ?? 1;
-     for (const diff of differencesWithPositions) {
-       const diffX = (diff.position.x || 0) * zoom; // Scale diff coords for comparison
-       const diffY = (diff.position.y || 0) * zoom;
-       const diffWidth = (diff.bounds.width || 0) * zoom;
-       const diffHeight = (diff.bounds.height || 0) * zoom;
-       
-       if (clickX >= diffX && clickX <= diffX + diffWidth &&
-           clickY >= diffY && clickY <= diffY + diffHeight) {
-         // Call the callback with the original (unscaled) difference object
-         onDifferenceSelect(diff); 
+    // Find the clicked difference (compare click coords with scaled diff coords)
+    const zoom = viewSettings?.zoom ?? 1;
+    for (const diff of differencesWithPositions) {
+      const diffX = (diff.position.x || 0) * zoom;
+      const diffY = (diff.position.y || 0) * zoom;
+      const diffWidth = (diff.bounds.width || 0) * zoom;
+      const diffHeight = (diff.bounds.height || 0) * zoom;
+      
+      if (clickX >= diffX && clickX <= diffX + diffWidth &&
+          clickY >= diffY && clickY <= diffY + diffHeight) {
+        // Call the callback with the original difference object
+        onDifferenceSelect(diff); 
         
         // Show tooltip
         setTooltipInfo({
@@ -570,18 +670,18 @@ const EnhancedDiffHighlighter = ({
     
     const canvas = e.target;
     const rect = canvas.getBoundingClientRect();
-     const dimensions = source === 'base' ? baseDimensions : compareDimensions; // Natural dimensions
-     
-     // Calculate mouse position relative to the canvas
-     const x = e.clientX - rect.left;
-     const y = e.clientY - rect.top;
-     
-     // Canvas width/height are now scaled by zoom, rect width/height are display size.
-     // mouseX/Y should represent coordinates within the scaled canvas.
-     const scaleX = canvas.width / rect.width;
-     const scaleY = canvas.height / rect.height;
-     const mouseX = x * scaleX;
-     const mouseY = y * scaleY;
+    const dimensions = source === 'base' ? baseDimensions : compareDimensions;
+    
+    // Calculate mouse position relative to the canvas
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Canvas width/height are now scaled by zoom, rect width/height are display size.
+    // mouseX/Y should represent coordinates within the scaled canvas.
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const mouseX = x * scaleX;
+    const mouseY = y * scaleY;
     
     // Filter differences to only show those for the current page
     const filteredDifferences = differences.filter(diff => 
@@ -598,20 +698,20 @@ const EnhancedDiffHighlighter = ({
       };
     });
     
-     // Check if mouse is over a difference (compare mouse coords with scaled diff coords)
-     let isOverDifference = false;
-     const zoom = viewSettings?.zoom ?? 1;
-     for (const diff of differencesWithPositions) {
-       const diffX = (diff.position.x || 0) * zoom; // Scale diff coords for comparison
-       const diffY = (diff.position.y || 0) * zoom;
-       const diffWidth = (diff.bounds.width || 0) * zoom;
-       const diffHeight = (diff.bounds.height || 0) * zoom;
-       
-       if (mouseX >= diffX && mouseX <= diffX + diffWidth &&
-           mouseY >= diffY && mouseY <= diffY + diffHeight) {
-         canvas.style.cursor = 'pointer';
-         isOverDifference = true;
-         break;
+    // Check if mouse is over a difference (compare mouse coords with scaled diff coords)
+    let isOverDifference = false;
+    const zoom = viewSettings?.zoom ?? 1;
+    for (const diff of differencesWithPositions) {
+      const diffX = (diff.position.x || 0) * zoom;
+      const diffY = (diff.position.y || 0) * zoom;
+      const diffWidth = (diff.bounds.width || 0) * zoom;
+      const diffHeight = (diff.bounds.height || 0) * zoom;
+      
+      if (mouseX >= diffX && mouseX <= diffX + diffWidth &&
+          mouseY >= diffY && mouseY <= diffY + diffHeight) {
+        canvas.style.cursor = 'pointer';
+        isOverDifference = true;
+        break;
       }
     }
     
@@ -619,30 +719,6 @@ const EnhancedDiffHighlighter = ({
       canvas.style.cursor = 'default';
     }
   };
-  
-  // Generate direct image URLs from paths if needed
-  const getDirectImageUrl = (path) => {
-    if (!path) return null;
-    
-    // If it's already a blob URL, use it directly
-    if (path.startsWith('blob:')) {
-      return path;
-    }
-    
-    // If it's a path to the API, make it a full URL
-    if (path.startsWith('/api/')) {
-      return path;
-    }
-    
-    return null;
-  };
-  
-  // Calculate effective image URLs
-  const baseImageSrc = baseImageUrl || 
-    (pageDetails && pageDetails.baseRenderedImagePath ? pageDetails.baseRenderedImagePath : null);
-  
-  const compareImageSrc = compareImageUrl || 
-    (pageDetails && pageDetails.compareRenderedImagePath ? pageDetails.compareRenderedImagePath : null);
 
   return (
     <div className="enhanced-diff-container">
@@ -664,11 +740,11 @@ const EnhancedDiffHighlighter = ({
       <div className="diff-document base-document">
         <div className="document-label">Base Document</div>
         <div className="image-container">
-          {baseImageSrc ? (
+          {baseImageUrl ? (
             <>
               <img
                 ref={baseImageRef}
-                src={baseImageSrc}
+                src={baseImageUrl}
                 alt="Base document"
                 className="document-image"
                 onLoad={handleBaseImageLoad}
@@ -692,11 +768,11 @@ const EnhancedDiffHighlighter = ({
       <div className="diff-document compare-document">
         <div className="document-label">Compare Document</div>
         <div className="image-container">
-          {compareImageSrc ? (
+          {compareImageUrl ? (
             <>
               <img
                 ref={compareImageRef}
-                src={compareImageSrc}
+                src={compareImageUrl}
                 alt="Compare document"
                 className="document-image"
                 onLoad={handleCompareImageLoad}
@@ -725,6 +801,7 @@ const EnhancedDiffHighlighter = ({
             top: tooltipInfo.y + 10
           }}
         >
+          {tooltipInfo.diff.description || `${tooltipInfo.diff.type || 'Unknown'} ${tooltipInfo.diff.changeType || 'change'}`}
         </div>
       )}
     </div>
