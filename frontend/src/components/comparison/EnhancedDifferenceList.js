@@ -9,37 +9,33 @@ const EnhancedDifferenceList = ({ differences, onDifferenceSelect, selectedDiffe
   const [groupedDifferences, setGroupedDifferences] = useState({});
   const [expandedGroups, setExpandedGroups] = useState({});
   const [totalCount, setTotalCount] = useState(0);
+  const [diffsByPosition, setDiffsByPosition] = useState([]);
+  const [diffsByContent, setDiffsByContent] = useState([]);
 
   // Process and group differences when they change
   useEffect(() => {
     if (!differences) return;
     
-    // Log differences for debugging
-    console.log('Differences in EnhancedDifferenceList:', differences);
-    
     // Combine all differences from base and compare into one array
     const combinedDiffs = [...(differences.baseDifferences || []), ...(differences.compareDifferences || [])];
-    
-    // Log combined differences
-    console.log('Combined differences:', combinedDiffs);
-    
-    // Filter differences to only show those for the current page
-    const filteredDiffs = combinedDiffs.filter(diff => 
-      !diff.pageNumber || diff.pageNumber === 0 || diff.pageNumber === differences.pageNumber
-    );
-    
-    console.log(`Filtered from ${combinedDiffs.length} to ${filteredDiffs.length} differences for page ${differences.pageNumber}`);
     
     // Remove duplicates by ID
     const uniqueDiffs = [];
     const seenIds = new Set();
     
-    filteredDiffs.forEach(diff => {
+    combinedDiffs.forEach(diff => {
       if (!seenIds.has(diff.id)) {
         seenIds.add(diff.id);
         uniqueDiffs.push(diff);
       }
     });
+    
+    // Separate differences with position data from those without
+    const withPosition = uniqueDiffs.filter(diff => diff.position && diff.bounds);
+    const withoutPosition = uniqueDiffs.filter(diff => !diff.position || !diff.bounds);
+    
+    setDiffsByPosition(withPosition);
+    setDiffsByContent(withoutPosition);
     
     // Group differences by type
     const grouped = uniqueDiffs.reduce((acc, diff) => {
@@ -114,16 +110,17 @@ const EnhancedDifferenceList = ({ differences, onDifferenceSelect, selectedDiffe
 
   // Get change type indicator
   const getChangeTypeIndicator = (changeType) => {
-    switch (changeType) {
-      case 'added':
-        return <span className="change-type added">Added</span>;
-      case 'deleted':
-        return <span className="change-type deleted">Deleted</span>;
-      case 'modified':
-        return <span className="change-type modified">Modified</span>;
-      default:
-        return null;
-    }
+    const typeToLabel = {
+      'added': 'ADDED',
+      'deleted': 'DELETED',
+      'modified': 'MODIFIED'
+    };
+    
+    return (
+      <span className={`change-type ${changeType || 'unknown'}`}>
+        {typeToLabel[changeType] || 'CHANGED'}
+      </span>
+    );
   };
 
   // Get human-readable group name
@@ -153,11 +150,23 @@ const EnhancedDifferenceList = ({ differences, onDifferenceSelect, selectedDiffe
     switch (diff.type) {
       case 'text':
         if (diff.baseText && diff.compareText) {
-          return `"${diff.baseText.substring(0, 20)}${diff.baseText.length > 20 ? '...' : ''}" → "${diff.compareText.substring(0, 20)}${diff.compareText.length > 20 ? '...' : ''}"`;
+          // Truncate text if too long
+          const maxLength = 30;
+          const baseTextShort = diff.baseText.length > maxLength ? 
+            `${diff.baseText.substring(0, maxLength)}...` : diff.baseText;
+          const compareTextShort = diff.compareText.length > maxLength ? 
+            `${diff.compareText.substring(0, maxLength)}...` : diff.compareText;
+          return `"${baseTextShort}" → "${compareTextShort}"`;
         } else if (diff.baseText) {
-          return `"${diff.baseText.substring(0, 30)}${diff.baseText.length > 30 ? '...' : ''}"`;
+          const text = diff.baseText.length > 30 ? 
+            `${diff.baseText.substring(0, 30)}...` : diff.baseText;
+          return `"${text}"`;
         } else if (diff.compareText) {
-          return `"${diff.compareText.substring(0, 30)}${diff.compareText.length > 30 ? '...' : ''}"`;
+          const text = diff.compareText.length > 30 ? 
+            `${diff.compareText.substring(0, 30)}...` : diff.compareText;
+          return `"${text}"`;
+        } else if (diff.text) {
+          return `"${diff.text}"`;
         } else {
           return 'Text content changed';
         }
@@ -173,11 +182,21 @@ const EnhancedDifferenceList = ({ differences, onDifferenceSelect, selectedDiffe
       default:
         // If we have no specific description, try to use any available properties
         const props = [];
-        if (diff.id) props.push(`ID: ${diff.id}`);
+        if (diff.id) props.push(`ID: ${diff.id.substring(0, 8)}...`);
         if (diff.changeType) props.push(`Change: ${diff.changeType}`);
         
         return props.length > 0 ? props.join(', ') : 'Difference detected';
     }
+  };
+
+  // Group title that includes the count
+  const getGroupTitle = (group, diffs) => {
+    return (
+      <div className="group-title">
+        {getGroupName(group)}
+        <span className="group-count">{diffs.length}</span>
+      </div>
+    );
   };
 
   return (
@@ -193,6 +212,45 @@ const EnhancedDifferenceList = ({ differences, onDifferenceSelect, selectedDiffe
         </div>
       ) : (
         <div className="difference-groups">
+          {/* First show positioned differences if any */}
+          {diffsByPosition.length > 0 && (
+            <div className="difference-group highlighted-group">
+              <div className="group-header">
+                <div className="group-icon highlights">
+                  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                  </svg>
+                </div>
+                <div className="group-title">
+                  Highlighted Differences
+                  <span className="group-count">{diffsByPosition.length}</span>
+                </div>
+              </div>
+              <div className="group-items">
+                {diffsByPosition.map(diff => (
+                  <div 
+                    key={diff.id} 
+                    className={`difference-item ${selectedDifference && selectedDifference.id === diff.id ? 'selected' : ''}`}
+                    onClick={() => onDifferenceSelect(diff)}
+                  >
+                    <div className="item-content">
+                      <div className="item-header">
+                        <span className={`item-type ${diff.type || 'unknown'}`}>
+                          {diff.type || 'Unknown'}
+                        </span>
+                        {getChangeTypeIndicator(diff.changeType)}
+                      </div>
+                      <div className="item-description">
+                        {getDifferenceDescription(diff)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Show differences grouped by type */}
           {Object.entries(groupedDifferences).map(([group, diffs]) => (
             <div key={group} className="difference-group">
               <div 
@@ -205,10 +263,7 @@ const EnhancedDifferenceList = ({ differences, onDifferenceSelect, selectedDiffe
                 <div className={`group-icon ${group}`}>
                   {getDifferenceTypeIcon(group)}
                 </div>
-                <div className="group-title">
-                  {getGroupName(group)}
-                  <span className="group-count">{diffs.length}</span>
-                </div>
+                {getGroupTitle(group, diffs)}
               </div>
               
               {expandedGroups[group] && (
@@ -220,10 +275,12 @@ const EnhancedDifferenceList = ({ differences, onDifferenceSelect, selectedDiffe
                       onClick={() => onDifferenceSelect(diff)}
                     >
                       <div className="item-content">
+                        <div className="item-header">
+                          {getChangeTypeIndicator(diff.changeType)}
+                        </div>
                         <div className="item-description">
                           {getDifferenceDescription(diff)}
                         </div>
-                        {getChangeTypeIndicator(diff.changeType)}
                       </div>
                     </div>
                   ))}
@@ -231,6 +288,44 @@ const EnhancedDifferenceList = ({ differences, onDifferenceSelect, selectedDiffe
               )}
             </div>
           ))}
+          
+          {/* Show non-positioned differences if not already displayed in groups */}
+          {diffsByContent.length > 0 && diffsByPosition.length === 0 && (
+            <div className="difference-group content-group">
+              <div className="group-header">
+                <div className="group-icon content">
+                  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+                  </svg>
+                </div>
+                <div className="group-title">
+                  Content Differences
+                  <span className="group-count">{diffsByContent.length}</span>
+                </div>
+              </div>
+              <div className="group-items">
+                {diffsByContent.map(diff => (
+                  <div 
+                    key={diff.id} 
+                    className={`difference-item ${selectedDifference && selectedDifference.id === diff.id ? 'selected' : ''}`}
+                    onClick={() => onDifferenceSelect(diff)}
+                  >
+                    <div className="item-content">
+                      <div className="item-header">
+                        <span className={`item-type ${diff.type || 'unknown'}`}>
+                          {diff.type || 'Unknown'}
+                        </span>
+                        {getChangeTypeIndicator(diff.changeType)}
+                      </div>
+                      <div className="item-description">
+                        {getDifferenceDescription(diff)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
