@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import DocumentMatchingView from './DocumentMatchingView';
-import EnhancedDiffHighlighter from './EnhancedDiffHighlighter';
-import EnhancedDifferenceList from './EnhancedDifferenceList';
 import Spinner from '../common/Spinner';
 import { getDocumentPairs, getDocumentPageDetails } from '../../services/api';
 import './SideBySideView.css';
@@ -308,36 +306,10 @@ const SideBySideView = ({ comparisonId }) => {
       
       <div className="comparison-content">
         <div className={`documents-container ${showDifferencePanel ? 'with-panel' : ''}`}>
-          {loadingImages ? (
-            <div className="loading-container">
-              <Spinner size="large" />
-              <p>Loading comparison...</p>
-            </div>
-          ) : (
-            <EnhancedDiffHighlighter 
-              pageDetails={pageDetails}
-              baseImageUrl={baseImageUrl}
-              compareImageUrl={compareImageUrl}
-              viewSettings={{
-                highlightMode,
-                zoom: 1
-              }}
-              onDifferenceSelect={handleDifferenceSelect}
-              selectedDifference={state.selectedDifference}
-            />
-          )}
+
         </div>
         
-        {showDifferencePanel && (
-          <div className="difference-panel">
-            <EnhancedDifferenceList 
-              differences={pageDetails}
-              onDifferenceSelect={handleDifferenceSelect}
-              selectedDifference={state.selectedDifference}
-            />
-          </div>
-        )}
-        
+       
         <button 
           className={`toggle-panel-button ${!showDifferencePanel ? 'hidden' : ''}`}
           onClick={toggleDifferencePanel}
