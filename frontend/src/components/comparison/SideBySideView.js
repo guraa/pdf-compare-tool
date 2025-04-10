@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import DocumentMatchingView from './DocumentMatchingView';
+import PDFRenderer from './PDFRenderer';
+import SimplifiedDifferenceList from './DifferenceList';
 import Spinner from '../common/Spinner';
 import { getDocumentPairs, getDocumentPageDetails } from '../../services/api';
 import './SideBySideView.css';
@@ -27,23 +29,73 @@ const SideBySideView = ({ comparisonId }) => {
   const [localDocumentPairs, setLocalDocumentPairs] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageDetails, setPageDetails] = useState(null);
+  const [baseDifferences, setBaseDifferences] = useState([]);
+  const [compareDifferences, setCompareDifferences] = useState([]);
   const [baseImageUrl, setBaseImageUrl] = useState(null);
   const [compareImageUrl, setCompareImageUrl] = useState(null);
   const [loadingImages, setLoadingImages] = useState(false);
   const [highlightMode, setHighlightMode] = useState('all');
   const [showDifferencePanel, setShowDifferencePanel] = useState(true);
+  const [baseImageDimensions, setBaseImageDimensions] = useState({ width: 0, height: 0 });
+  const [compareImageDimensions, setCompareImageDimensions] = useState({ width: 0, height: 0 });
+  const [syncScroll, setSyncScroll] = useState(true);
+  const baseContainerRef = useRef(null);
+  const compareContainerRef = useRef(null);
 
   // Clean up blob URLs when unmounting
   useEffect(() => {
     return () => {
       isMounted.current = false;
-      console.log("baseImageUrl:", baseImageUrl);
-      console.log("compareImageUrl:", compareImageUrl);
-
       if (baseImageUrl) URL.revokeObjectURL(baseImageUrl);
       if (compareImageUrl) URL.revokeObjectURL(compareImageUrl);
     };
   }, [baseImageUrl, compareImageUrl]);
+
+  // Handle synchronized scrolling
+  useEffect(() => {
+    if (!syncScroll || !baseContainerRef.current || !compareContainerRef.current) return;
+
+    const baseContainer = baseContainerRef.current;
+    const compareContainer = compareContainerRef.current;
+
+    const handleBaseScroll = () => {
+      const { scrollTop, scrollLeft, scrollHeight, clientHeight, scrollWidth, clientWidth } = baseContainer;
+      
+      // Calculate percentage positions
+      const verticalPosition = scrollHeight <= clientHeight ? 0 : scrollTop / (scrollHeight - clientHeight);
+      const horizontalPosition = scrollWidth <= clientWidth ? 0 : scrollLeft / (scrollWidth - clientWidth);
+      
+      // Apply to compare container
+      const compareScrollHeight = compareContainer.scrollHeight - compareContainer.clientHeight;
+      const compareScrollWidth = compareContainer.scrollWidth - compareContainer.clientWidth;
+      
+      compareContainer.scrollTop = verticalPosition * compareScrollHeight;
+      compareContainer.scrollLeft = horizontalPosition * compareScrollWidth;
+    };
+
+    const handleCompareScroll = () => {
+      const { scrollTop, scrollLeft, scrollHeight, clientHeight, scrollWidth, clientWidth } = compareContainer;
+      
+      // Calculate percentage positions
+      const verticalPosition = scrollHeight <= clientHeight ? 0 : scrollTop / (scrollHeight - clientHeight);
+      const horizontalPosition = scrollWidth <= clientWidth ? 0 : scrollLeft / (scrollWidth - clientWidth);
+      
+      // Apply to base container
+      const baseScrollHeight = baseContainer.scrollHeight - baseContainer.clientHeight;
+      const baseScrollWidth = baseContainer.scrollWidth - baseContainer.clientWidth;
+      
+      baseContainer.scrollTop = verticalPosition * baseScrollHeight;
+      baseContainer.scrollLeft = horizontalPosition * baseScrollWidth;
+    };
+
+    baseContainer.addEventListener('scroll', handleBaseScroll);
+    compareContainer.addEventListener('scroll', handleCompareScroll);
+
+    return () => {
+      baseContainer.removeEventListener('scroll', handleBaseScroll);
+      compareContainer.removeEventListener('scroll', handleCompareScroll);
+    };
+  }, [syncScroll, baseImageDimensions, compareImageDimensions]);
 
   // Fetch document pairs and page details
   useEffect(() => {
@@ -91,7 +143,7 @@ const SideBySideView = ({ comparisonId }) => {
     };
     
     fetchDocumentPairs();
-  }, [comparisonId]);
+  }, [comparisonId, setLoading, setError, setDocumentPairs, setSelectedDocumentPairIndex]);
 
   // Fetch page details and images when page or pair changes
   useEffect(() => {
@@ -101,12 +153,13 @@ const SideBySideView = ({ comparisonId }) => {
 
     const fetchPageData = async () => {
       if (!comparisonId || !selectedPair || !state.baseFile?.fileId || !state.compareFile?.fileId) {
-        console.log("Missing required data for fetching page details/images.");
         return;
       }
 
       setLoadingImages(true);
-      setPageDetails(null); // Reset details
+      setPageDetails(null);
+      setBaseDifferences([]);
+      setCompareDifferences([]);
 
       // Clean up previous blob URLs before fetching new ones
       if (baseImageUrl) URL.revokeObjectURL(baseImageUrl);
@@ -121,19 +174,25 @@ const SideBySideView = ({ comparisonId }) => {
           state.selectedDocumentPairIndex,
           currentPage,
           state.filters,
-          signal // Use the same signal
+          signal
         );
 
         if (!isComponentMounted) return;
-        console.log('Page details from API:', details);
-        setPageDetails(details); // Update page details state
+        
+        setPageDetails(details);
+        
+        // Process differences
+        if (details) {
+          setBaseDifferences(details.baseDifferences || []);
+          setCompareDifferences(details.compareDifferences || []);
+        }
 
         // 2. Fetch Images Concurrently
         const basePage = selectedPair.baseStartPage + currentPage - 1;
         const comparePage = selectedPair.compareStartPage + currentPage - 1;
 
         const fetchImage = async (fileId, pageNum, docType) => {
-          if (!fileId || pageNum < 1) return null; // Check for valid fileId and pageNum
+          if (!fileId || pageNum < 1) return null;
 
           try {
             const response = await fetch(`/api/pdfs/document/${fileId}/page/${pageNum}`, { signal });
@@ -146,7 +205,7 @@ const SideBySideView = ({ comparisonId }) => {
             if (error.name !== 'AbortError') {
               console.error(`Error fetching ${docType} image (page ${pageNum}):`, error);
             }
-            return null; // Return null on error
+            return null;
           }
         };
 
@@ -166,8 +225,6 @@ const SideBySideView = ({ comparisonId }) => {
         const newBaseUrl = baseResult.status === 'fulfilled' ? baseResult.value : null;
         const newCompareUrl = compareResult.status === 'fulfilled' ? compareResult.value : null;
 
-        console.log('Setting Base URL:', newBaseUrl);
-        console.log('Setting Compare URL:', newCompareUrl);
         setBaseImageUrl(newBaseUrl);
         setCompareImageUrl(newCompareUrl);
 
@@ -178,8 +235,8 @@ const SideBySideView = ({ comparisonId }) => {
         if (error.name !== 'AbortError' && isComponentMounted) {
           console.error("Error loading page data:", error);
           setError(`Failed to load page data: ${error.message}`);
-          setPageDetails(null); // Clear details on error
-          setBaseImageUrl(null); // Ensure URLs are cleared
+          setPageDetails(null);
+          setBaseImageUrl(null);
           setCompareImageUrl(null);
         }
       } finally {
@@ -191,13 +248,9 @@ const SideBySideView = ({ comparisonId }) => {
 
     fetchPageData();
 
-    // Cleanup function
     return () => {
       isComponentMounted = false;
-      controller.abort(); // Abort ongoing fetches
-      // Revoke URLs on cleanup *if they haven't been updated* by a subsequent render
-      // This check is tricky, relying on the state values at the time of cleanup
-      // The main cleanup is now handled at the start of the effect and in the component unmount effect
+      controller.abort();
     };
   }, [
     comparisonId, 
@@ -205,10 +258,11 @@ const SideBySideView = ({ comparisonId }) => {
     currentPage, 
     state.selectedDocumentPairIndex, 
     state.filters, 
-    state.baseFile?.fileId, // Add file IDs as dependencies
+    state.baseFile?.fileId,
     state.compareFile?.fileId,
-    setError // Add setError to dependency array
-    // baseImageUrl and compareImageUrl are removed as dependencies to prevent loops
+    setError,
+    baseImageUrl,
+    compareImageUrl
   ]);
 
   // Navigation and UI handlers
@@ -264,6 +318,14 @@ const SideBySideView = ({ comparisonId }) => {
     setShowDifferencePanel(prev => !prev);
   }, []);
 
+  const handleBaseImageLoaded = (width, height) => {
+    setBaseImageDimensions({ width, height });
+  };
+
+  const handleCompareImageLoaded = (width, height) => {
+    setCompareImageDimensions({ width, height });
+  };
+
   // Render logic
   if (activeView === 'matching') {
     return (
@@ -306,10 +368,87 @@ const SideBySideView = ({ comparisonId }) => {
       
       <div className="comparison-content">
         <div className={`documents-container ${showDifferencePanel ? 'with-panel' : ''}`}>
-
+          <div className="document-view base-document" ref={baseContainerRef}>
+            <div className="document-header">
+              <h4>Base Document</h4>
+              {selectedPair && (
+                <span className="page-info">
+                  Page {currentPage} (Document page {selectedPair.baseStartPage + currentPage - 1})
+                </span>
+              )}
+            </div>
+            <div className="document-content">
+              {loadingImages ? (
+                <div className="loading-container">
+                  <Spinner size="medium" />
+                  <p>Loading base document...</p>
+                </div>
+              ) : baseImageUrl ? (
+                <PDFRenderer 
+                  fileId={state.baseFile?.fileId}
+                  page={selectedPair ? selectedPair.baseStartPage + currentPage - 1 : 1}
+                  zoom={1}
+                  highlightMode={highlightMode !== 'none' ? highlightMode : null}
+                  differences={baseDifferences}
+                  selectedDifference={state.selectedDifference}
+                  onDifferenceSelect={handleDifferenceSelect}
+                  onImageLoaded={handleBaseImageLoaded}
+                  interactive={true}
+                />
+              ) : (
+                <div className="no-content">
+                  <p>No base document page available</p>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="document-view compare-document" ref={compareContainerRef}>
+            <div className="document-header">
+              <h4>Compare Document</h4>
+              {selectedPair && (
+                <span className="page-info">
+                  Page {currentPage} (Document page {selectedPair.compareStartPage + currentPage - 1})
+                </span>
+              )}
+            </div>
+            <div className="document-content">
+              {loadingImages ? (
+                <div className="loading-container">
+                  <Spinner size="medium" />
+                  <p>Loading compare document...</p>
+                </div>
+              ) : compareImageUrl ? (
+                <PDFRenderer 
+                  fileId={state.compareFile?.fileId}
+                  page={selectedPair ? selectedPair.compareStartPage + currentPage - 1 : 1}
+                  zoom={1}
+                  highlightMode={highlightMode !== 'none' ? highlightMode : null}
+                  differences={compareDifferences}
+                  selectedDifference={state.selectedDifference}
+                  onDifferenceSelect={handleDifferenceSelect}
+                  onImageLoaded={handleCompareImageLoaded}
+                  interactive={true}
+                />
+              ) : (
+                <div className="no-content">
+                  <p>No compare document page available</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         
-       
+        {showDifferencePanel && (
+          <div className="difference-panel">
+            <SimplifiedDifferenceList 
+              result={pageDetails}
+              onDifferenceClick={handleDifferenceSelect}
+              selectedDifference={state.selectedDifference}
+            />
+          </div>
+        )}
+        
         <button 
           className={`toggle-panel-button ${!showDifferencePanel ? 'hidden' : ''}`}
           onClick={toggleDifferencePanel}
@@ -347,6 +486,17 @@ const SideBySideView = ({ comparisonId }) => {
         </div>
         
         <div className="view-controls">
+          <div className="sync-scroll-control">
+            <label>
+              <input 
+                type="checkbox" 
+                checked={syncScroll} 
+                onChange={() => setSyncScroll(!syncScroll)}
+              />
+              Sync Scroll
+            </label>
+          </div>
+          
           <div className="highlight-controls">
             <select 
               value={highlightMode}
