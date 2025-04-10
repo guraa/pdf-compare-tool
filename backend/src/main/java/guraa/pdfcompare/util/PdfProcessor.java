@@ -612,15 +612,20 @@ public class PdfProcessor {
             json.append("    \"height\": ").append(element.getHeight()).append(",\n");
             json.append("    \"fontSize\": ").append(element.getFontSize()).append(",\n");
             json.append("    \"fontName\": \"").append(escapeJson(element.getFontName())).append("\",\n");
-            if (element.getColor() != null) {
-                json.append("    \"color\": \"").append(escapeJson(element.getColor())).append("\",\n");
+            // Convert Color to hex string #RRGGBB
+            java.awt.Color color = element.getColor();
+            if (color != null) {
+                String hexColor = String.format("#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
+                json.append("    \"color\": \"").append(hexColor).append("\",\n");
             }
-            json.append("    \"rotation\": ").append(element.getRotation()).append(",\n");
-            json.append("    \"isBold\": ").append(element.isBold()).append(",\n");
-            json.append("    \"isItalic\": ").append(element.isItalic()).append(",\n");
-            json.append("    \"isEmbedded\": ").append(element.isEmbedded()).append(",\n");
-            json.append("    \"lineId\": \"").append(element.getLineId()).append("\",\n");
-            json.append("    \"wordId\": \"").append(element.getWordId()).append("\"\n");
+            // Removed fields not present in TextElement: rotation, isBold, isItalic, isEmbedded, lineId, wordId
+            // Ensure the last line doesn't have a trailing comma
+            // Find the last comma and remove it if it exists before the closing brace
+            int lastCommaIndex = json.lastIndexOf(",");
+            if (lastCommaIndex > json.lastIndexOf("{")) { // Ensure comma is within the current object
+                 json.setLength(lastCommaIndex); // Remove trailing comma
+                 json.append("\n"); // Add newline back
+            }
             json.append("  }").append(i < elements.size() - 1 ? ",\n" : "\n");
         }
         json.append("]");

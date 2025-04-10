@@ -1,360 +1,330 @@
 package guraa.pdfcompare.util;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.pdfbox.contentstream.PDFStreamEngine;
-import org.apache.pdfbox.contentstream.operator.DrawObject;
-import org.apache.pdfbox.contentstream.operator.state.Restore;
-import org.apache.pdfbox.contentstream.operator.state.Save;
-import org.apache.pdfbox.contentstream.operator.state.SetGraphicsStateParameters;
-import org.apache.pdfbox.contentstream.operator.state.SetMatrix;
-import org.apache.pdfbox.contentstream.operator.text.*;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.pdfbox.text.PDFTextStripperByArea;
 import org.apache.pdfbox.text.TextPosition;
 import org.springframework.stereotype.Component;
 
-import java.awt.*;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
-import java.util.*;
+import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 
+/**
+ * Utility class for extracting text from PDF documents with improved positioning information.
+ */
 @Slf4j
 @Component
-public class TextExtractor extends PDFStreamEngine {
+public class TextExtractor {
 
-    private final List<TextElement> textElements = new ArrayList<>();
-    private int currentPageIndex;
-
-    public TextExtractor() {
-        addOperator(new BeginText());
-        addOperator(new EndText());
-        addOperator(new SetGraphicsStateParameters());
-        addOperator(new Save());
-        addOperator(new Restore());
-        addOperator(new NextLine());
-        addOperator(new SetCharSpacing());
-        addOperator(new MoveText());
-        addOperator(new MoveTextSetLeading());
-        addOperator(new SetFontAndSize());
-        addOperator(new ShowText());
-        addOperator(new ShowTextAdjusted());
-        addOperator(new SetTextLeading());
-        addOperator(new SetMatrix());
-        addOperator(new SetTextRenderingMode());
-        addOperator(new SetTextRise());
-        addOperator(new SetWordSpacing());
-        addOperator(new SetTextHorizontalScaling());
-        addOperator(new DrawObject());
-    }
-
-    public String extractTextFromPage(PDDocument document, int pageIndex) throws IOException {
-        PDFTextStripper stripper = new PDFTextStripper();
-        stripper.setSortByPosition(true);
-        stripper.setStartPage(pageIndex + 1);
-        stripper.setEndPage(pageIndex + 1);
-        return stripper.getText(document);
-    }
-
-    public List<TextElement> extractTextElementsFromPage(PDDocument document, int pageIndex) throws IOException {
-        textElements.clear();
-        currentPageIndex = pageIndex;
-
-        PDFTextStripper stripper = new PDFTextStripper() {
-            @Override
-            protected void processTextPosition(TextPosition text) {
-                TextElement element = new TextElement();
-                element.setId(UUID.randomUUID().toString());
-                element.setText(text.getUnicode());
-                element.setX(text.getX());
-                element.setY(text.getY());
-                element.setWidth(text.getWidth());
-                element.setHeight(text.getHeight());
-                element.setFontSize(text.getFontSize());
-                element.setFontName(text.getFont().getName());
-                element.setPageIndex(currentPageIndex);
-
-                element.setRotation(text.getRotation());
-
-                if (getGraphicsState() != null && getGraphicsState().getNonStrokingColor() != null) {
-                    float[] color = getGraphicsState().getNonStrokingColor().getComponents();
-                    if (color != null && color.length >= 3) {
-                        element.setColor(String.format("rgb(%d,%d,%d)",
-                                Math.round(color[0] * 255),
-                                Math.round(color[1] * 255),
-                                Math.round(color[2] * 255)));
-                    }
-                }
-
-                try {
-                    if (text.getFont() != null) {
-                        element.setIsBold(text.getFont().getName().toLowerCase().contains("bold"));
-                        element.setIsItalic(text.getFont().getName().toLowerCase().contains("italic") ||
-                                text.getFont().getName().toLowerCase().contains("oblique"));
-                        element.setIsEmbedded(text.getFont().isEmbedded());
-                    }
-                } catch (Exception e) {
-                    log.warn("Error extracting font details", e);
-                }
-
-                textElements.add(element);
-                super.processTextPosition(text);
-            }
-        };
-
-        stripper.setSortByPosition(true);
-        stripper.setStartPage(pageIndex + 1);
-        stripper.setEndPage(pageIndex + 1);
-        stripper.getText(document);
-
-        // Group text elements by words and lines for better comparison
-        groupTextElements();
-
-        return new ArrayList<>(textElements);
-    }
-
-    private void groupTextElements() {
-        if (textElements.isEmpty()) {
-            return;
-        }
-
-        // Create a copy of the list to avoid concurrent modification
-        List<TextElement> elementsCopy = new ArrayList<>(textElements);
-
-        // Clear the original list
-        textElements.clear();
-
-        // Sort the copy
-        elementsCopy.sort((a, b) -> {
-            // Explicit null handling using Optional
-            Float yA = Optional.ofNullable(a.getY()).orElse(Float.MAX_VALUE);
-            Float yB = Optional.ofNullable(b.getY()).orElse(Float.MAX_VALUE);
-            Float xA = Optional.ofNullable(a.getX()).orElse(Float.MAX_VALUE);
-            Float xB = Optional.ofNullable(b.getX()).orElse(Float.MAX_VALUE);
-
-            float yDiff = yA - yB;
-            if (Math.abs(yDiff) < 3.0f) { // Within same line tolerance
-                // If Y is similar, sort by X
-                return Float.compare(xA, xB);
-            }
-            return Float.compare(yA, yB);
-        });
-
-        // Add sorted elements back to the original list
-        textElements.addAll(elementsCopy);
-
-        // Group elements that survived sorting
-        if (!textElements.isEmpty()) {
-            String currentLineId = UUID.randomUUID().toString();
-            String currentWordId = UUID.randomUUID().toString();
-            float lastY = textElements.get(0).getY();
-            float lastEndX = textElements.get(0).getX() + textElements.get(0).getWidth();
-
-            textElements.get(0).setLineId(currentLineId);
-            textElements.get(0).setWordId(currentWordId);
-
-            for (int i = 1; i < textElements.size(); i++) {
-                TextElement current = textElements.get(i);
-
-                float yDiff = Math.abs(current.getY() - lastY);
-
-                // Check if this is a new line
-                if (yDiff > 3.0f) {
-                    currentLineId = UUID.randomUUID().toString();
-                    currentWordId = UUID.randomUUID().toString();
-                    lastEndX = current.getX() + current.getWidth();
-                }
-                // Check if this is a new word on the same line
-                else if (current.getX() - lastEndX > current.getWidth() * 0.3) {
-                    currentWordId = UUID.randomUUID().toString();
-                    lastEndX = current.getX() + current.getWidth();
-                } else {
-                    // Continue the current word
-                    lastEndX = Math.max(lastEndX, current.getX() + current.getWidth());
-                }
-
-                current.setLineId(currentLineId);
-                current.setWordId(currentWordId);
-                lastY = current.getY();
-            }
-        }
-    }
     /**
-     * Extract text from specific regions on a PDF page.
+     * Extract text from a specific page in a PDF document.
      *
      * @param document The PDF document
      * @param pageIndex The zero-based page index
-     * @param regions Map of region names to rectangle areas
-     * @return Map of region names to extracted text
+     * @return Extracted text content
      * @throws IOException If there's an error extracting text
      */
-    public Map<String, String> extractTextFromRegions(PDDocument document, int pageIndex,
-                                                      Map<String, Rectangle> regions) throws IOException {
-        PDPage page = document.getPage(pageIndex);
-        PDFTextStripperByArea stripper = new PDFTextStripperByArea();
-        stripper.setSortByPosition(true);
+    public String extractTextFromPage(PDDocument document, int pageIndex) throws IOException {
+        try {
+            // Create custom text stripper for extracting text
+            PDFTextStripper stripper = new PDFTextStripper();
 
-        // Add all regions
-        for (Map.Entry<String, Rectangle> entry : regions.entrySet()) {
-            stripper.addRegion(entry.getKey(), entry.getValue());
+            // Set the page range to extract text from a specific page
+            stripper.setStartPage(pageIndex + 1); // 1-based page numbers
+            stripper.setEndPage(pageIndex + 1);
+
+            // Capture the text in a StringWriter
+            StringWriter writer = new StringWriter();
+            stripper.writeText(document, writer);
+
+            return writer.toString();
+        } catch (Exception e) {
+            log.warn("Error extracting text from page {}: {}", pageIndex + 1, e.getMessage());
+            return ""; // Return empty string in case of error instead of null
         }
-
-        stripper.extractRegions(page);
-
-        // Get text for each region
-        Map<String, String> regionText = new HashMap<>();
-        for (String region : regions.keySet()) {
-            regionText.put(region, stripper.getTextForRegion(region));
-        }
-
-        return regionText;
     }
 
     /**
-     * Identify paragraphs in a page.
+     * Extract text elements with detailed positioning information from a page.
      *
      * @param document The PDF document
      * @param pageIndex The zero-based page index
-     * @return List of paragraphs with their bounding boxes
-     * @throws IOException If there's an error processing the page
+     * @return List of text elements with positioning information
+     * @throws IOException If there's an error extracting text
      */
-    public List<Paragraph> identifyParagraphs(PDDocument document, int pageIndex) throws IOException {
-        List<TextElement> elements = extractTextElementsFromPage(document, pageIndex);
-        List<Paragraph> paragraphs = new ArrayList<>();
+    public List<TextElement> extractTextElementsFromPage(PDDocument document, int pageIndex) throws IOException {
+        try {
+            // Create a custom implementation of PDFTextStripper
+            PositionedTextStripper stripper = new PositionedTextStripper();
 
-        if (elements.isEmpty()) {
-            return paragraphs;
-        }
+            // Set the page range to extract text from a specific page
+            stripper.setStartPage(pageIndex + 1); // 1-based page numbers
+            stripper.setEndPage(pageIndex + 1);
 
-        // Group elements by line
-        Map<String, List<TextElement>> lineMap = new HashMap<>();
-        for (TextElement element : elements) {
-            lineMap.computeIfAbsent(element.getLineId(), k -> new ArrayList<>()).add(element);
-        }
+            // Reset text positions before extracting from a new page
+            stripper.resetTextPositions();
 
-        // Sort lines by Y position
-        List<String> sortedLineIds = new ArrayList<>(lineMap.keySet());
-        sortedLineIds.sort((id1, id2) -> {
-            float y1 = lineMap.get(id1).get(0).getY();
-            float y2 = lineMap.get(id2).get(0).getY();
-            return Float.compare(y1, y2);
-        });
+            // Extract text (this populates the text positions)
+            stripper.getText(document);
 
-        // Create paragraphs by grouping lines
-        Paragraph currentParagraph = null;
-        float lastBottomY = 0;
+            // Get the text positions and convert to TextElement objects
+            List<TextPosition> positions = stripper.getTextPositions();
+            List<TextElement> elements = new ArrayList<>();
 
-        for (String lineId : sortedLineIds) {
-            List<TextElement> line = lineMap.get(lineId);
+            for (int i = 0; i < positions.size(); i++) {
+                TextPosition pos = positions.get(i);
+                if (pos == null) continue; // Skip null positions
 
-            // Sort elements in line by X position
-            line.sort((e1, e2) -> Float.compare(e1.getX(), e2.getX()));
+                // Create a unique ID for each text element
+                String id = UUID.randomUUID().toString();
 
-            // Calculate line bounds
-            float minX = line.get(0).getX();
-            float minY = line.get(0).getY();
-            float maxX = line.get(line.size() - 1).getX() + line.get(line.size() - 1).getWidth();
-            float maxY = minY;
-            float maxHeight = 0;
+                // Get page height for coordinate transformation
+                float pageHeight = pos.getPage().getMediaBox().getHeight();
+                
+                // PDFBox Y is baseline from bottom-left. We need top-left Y for the element's bounding box top edge.
+                float pdfBoxY = (float) pos.getY();
+                float pdfBoxHeight = (float) pos.getHeightDir(); // Use height adjusted for direction/rotation
 
-            for (TextElement element : line) {
-                float elementBottom = element.getY() + element.getHeight();
-                if (elementBottom > maxY) {
-                    maxY = elementBottom;
-                }
-                if (element.getHeight() > maxHeight) {
-                    maxHeight = element.getHeight();
-                }
+                // Calculate the Y coordinate of the top edge relative to the top-left origin
+                // Formula: pageHeight - (baselineY_from_bottom + ascent)
+                // Approximating ascent with height for now: pageHeight - (pdfBoxY + pdfBoxHeight) - this seems wrong.
+                // Let's try: pageHeight - pdfBoxY. This gives baseline relative to top.
+                // To get top edge from top-left: pageHeight - (pdfBoxY + ascent).
+                // Let's use a simpler approximation: top_y = pageHeight - pdfBoxY
+                // This sends the baseline relative to top-left. Frontend might need adjustment OR
+                // we calculate top edge here: top_y = pageHeight - (pdfBoxY + pdfBoxHeight) -- Let's try this first.
+                // It assumes pdfBoxY is bottom edge, which is wrong. It's baseline.
+                
+                // Correct approach: Transform baseline Y to top-left origin.
+                float transformedY = pageHeight - pdfBoxY;
+
+                // Create a TextElement with positioning information, using the TRANSFORMED Y (baseline from top)
+                // The grouping logic below will calculate the final bounding box based on these transformed coordinates.
+                TextElement element = new TextElement(
+                        id,
+                        pos.getUnicode(),
+                        (float) pos.getX(),
+                        transformedY, // Use baseline relative to top-left for initial element
+                        (float) pos.getWidth(),
+                        pdfBoxHeight, // Use directional height
+                        pos.getFont().getName(),
+                        pos.getFontSize(),
+                        pos.getFontSizeInPt()
+                );
+
+                elements.add(element);
             }
 
-            // Build line text
-            StringBuilder lineText = new StringBuilder();
-            for (TextElement element : line) {
-                lineText.append(element.getText());
-            }
-
-            // Check if this is a new paragraph
-            boolean isNewParagraph = currentParagraph == null ||
-                    (maxY - lastBottomY) > maxHeight * 1.5 ||
-                    lineText.toString().trim().endsWith(".") ||
-                    line.get(0).getX() > currentParagraph.getMinX() + 10; // Indentation
-
-            if (isNewParagraph) {
-                // Finish previous paragraph if exists
-                if (currentParagraph != null) {
-                    paragraphs.add(currentParagraph);
-                }
-
-                // Start new paragraph
-                currentParagraph = new Paragraph();
-                currentParagraph.setId(UUID.randomUUID().toString());
-                currentParagraph.setMinX(minX);
-                currentParagraph.setMinY(minY);
-                currentParagraph.setMaxX(maxX);
-                currentParagraph.setMaxY(maxY);
-                currentParagraph.setText(lineText.toString());
-                currentParagraph.getLineIds().add(lineId);
-            } else {
-                // Add to existing paragraph
-                currentParagraph.setText(currentParagraph.getText() + " " + lineText.toString());
-                currentParagraph.getLineIds().add(lineId);
-                currentParagraph.setMaxX(Math.max(currentParagraph.getMaxX(), maxX));
-                currentParagraph.setMaxY(maxY);
-            }
-
-            lastBottomY = maxY;
+            // Group text elements (combine characters into words, etc.)
+            return groupTextElements(elements);
+        } catch (Exception e) {
+            log.warn("Error extracting text elements from page {}: {}", pageIndex + 1, e.getMessage());
+            return Collections.emptyList(); // Return empty list instead of null
         }
-
-        // Add the last paragraph
-        if (currentParagraph != null) {
-            paragraphs.add(currentParagraph);
-        }
-
-        return paragraphs;
     }
 
     /**
-     * Class representing a paragraph in a PDF document.
+     * Group text elements to form words and lines.
+     * Combines individual characters into meaningful text elements.
+     *
+     * @param elements The list of raw text elements (typically individual characters)
+     * @return List of grouped text elements
      */
-    public static class Paragraph {
-        private String id;
-        private String text;
-        private float minX;
-        private float minY;
-        private float maxX;
-        private float maxY;
-        private List<String> lineIds = new ArrayList<>();
+    protected List<TextElement> groupTextElements(List<TextElement> elements) {
+        // First, sort text elements by Y position (to identify lines) then by X position
+        if (elements == null || elements.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        // Getters and setters
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
+        try {
+            // Copy the list to avoid modifying the original
+            List<TextElement> sortedElements = new ArrayList<>(elements);
 
-        public String getText() { return text; }
-        public void setText(String text) { this.text = text; }
+            // Sort by Y position (primary) and X position (secondary).
+            // Since Y is now relative to top-left, smaller Y means higher up the page. This sort order is correct.
+            Collections.sort(sortedElements, Comparator
+                    .comparing(TextElement::getY) // Smaller Y is higher on page
+                    .thenComparing(TextElement::getX));
 
-        public float getMinX() { return minX; }
-        public void setMinX(float minX) { this.minX = minX; }
+            List<TextElement> groupedElements = new ArrayList<>();
+            List<TextElement> currentLine = new ArrayList<>();
+            float lastY = -1;
+            float lineHeight = 0;
+            float yTolerance = 2.0f; // Tolerance for Y-position to consider text on the same line
 
-        public float getMinY() { return minY; }
-        public void setMinY(float minY) { this.minY = minY; }
+            for (int i = 0; i < sortedElements.size(); i++) {
+                TextElement element = sortedElements.get(i);
+                if (element == null) continue; // Skip null elements
 
-        public float getMaxX() { return maxX; }
-        public void setMaxX(float maxX) { this.maxX = maxX; }
+                // Determine if this is part of the current line
+                if (lastY < 0 || Math.abs(element.getY() - lastY) <= yTolerance) {
+                    // Same line, add to current line
+                    currentLine.add(element);
+                    lastY = element.getY();
+                    lineHeight = Math.max(lineHeight, element.getHeight());
+                } else {
+                    // New line, process the current line and start a new one
+                    groupedElements.addAll(groupWordsInLine(currentLine));
+                    currentLine.clear();
+                    currentLine.add(element);
+                    lastY = element.getY();
+                    lineHeight = element.getHeight();
+                }
+            }
 
-        public float getMaxY() { return maxY; }
-        public void setMaxY(float maxY) { this.maxY = maxY; }
+            // Process the last line
+            if (!currentLine.isEmpty()) {
+                groupedElements.addAll(groupWordsInLine(currentLine));
+            }
 
-        public List<String> getLineIds() { return lineIds; }
+            return groupedElements;
+        } catch (Exception e) {
+            log.warn("Error grouping text elements: {}", e.getMessage());
+            return elements; // Return original elements if grouping fails
+        }
+    }
 
-        // Get width and height
-        public float getWidth() { return maxX - minX; }
-        public float getHeight() { return maxY - minY; }
+    /**
+     * Group elements in a line into words.
+     *
+     * @param lineElements The elements in a single line
+     * @return List of word elements
+     */
+    private List<TextElement> groupWordsInLine(List<TextElement> lineElements) {
+        if (lineElements == null || lineElements.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        // Get bounding box as Rectangle2D
-        public Rectangle2D.Float getBoundingBox() {
-            return new Rectangle2D.Float(minX, minY, getWidth(), getHeight());
+        List<TextElement> wordElements = new ArrayList<>();
+        List<TextElement> currentWord = new ArrayList<>();
+        float lastEndX = -1;
+        float spaceTolerance = 3.0f; // Tolerance for space between characters to consider them part of the same word
+
+        // Sort elements by X position
+        Collections.sort(lineElements, Comparator.comparing(TextElement::getX));
+
+        for (int i = 0; i < lineElements.size(); i++) {
+            TextElement element = lineElements.get(i);
+            if (element == null) continue; // Skip null elements
+
+            // Determine if this is part of the current word
+            if (lastEndX < 0 || Math.abs(element.getX() - lastEndX) <= spaceTolerance) {
+                // Same word, add to current word
+                currentWord.add(element);
+                lastEndX = element.getX() + element.getWidth();
+            } else {
+                // New word, create a word element and start a new word
+                if (!currentWord.isEmpty()) {
+                    wordElements.add(createWordElement(currentWord));
+                    currentWord.clear();
+                }
+                currentWord.add(element);
+                lastEndX = element.getX() + element.getWidth();
+            }
+        }
+
+        // Process the last word
+        if (!currentWord.isEmpty()) {
+            wordElements.add(createWordElement(currentWord));
+        }
+
+        return wordElements;
+    }
+
+    /**
+     * Create a single word element from a list of character elements.
+     *
+     * @param characterElements The list of character elements
+     * @return A single word element
+     */
+    private TextElement createWordElement(List<TextElement> characterElements) {
+        if (characterElements == null || characterElements.isEmpty()) {
+            return null;
+        }
+
+        // Calculate bounds of the word using the transformed coordinates
+        float wordMinX = Float.MAX_VALUE;
+        float wordMaxX = Float.MIN_VALUE;
+        float wordMinY = Float.MAX_VALUE; // Top-most Y (smallest value)
+        float wordMaxY = Float.MIN_VALUE; // Bottom-most Y (largest value)
+
+        StringBuilder text = new StringBuilder();
+        String fontName = null;
+        float fontSize = 0;
+
+        for (TextElement element : characterElements) {
+            if (element == null) continue; // Skip null elements
+
+            wordMinX = Math.min(wordMinX, element.getX());
+            wordMaxX = Math.max(wordMaxX, element.getX() + element.getWidth());
+            // Y is baseline relative to top. The bounding box top is roughly Y - height.
+            // Let's calculate min/max based on the element's baseline Y and height.
+            wordMinY = Math.min(wordMinY, element.getY() - element.getHeight()); // Approximate top edge
+            wordMaxY = Math.max(wordMaxY, element.getY()); // Baseline is approx bottom edge
+
+            text.append(element.getText());
+
+            // Use the font of the first character as the word's font
+            if (fontName == null) {
+                fontName = element.getFontName();
+                fontSize = element.getFontSize();
+            }
+        }
+
+        // Calculate final word bounds
+        float finalWidth = wordMaxX - wordMinX;
+        float finalHeight = wordMaxY - wordMinY; // Height based on min/max Y
+
+        // Ensure dimensions are valid
+        if (finalWidth <= 0) finalWidth = 1.0f; 
+        if (finalHeight <= 0) finalHeight = fontSize > 0 ? fontSize : 10.0f; // Use font size if height is invalid
+
+        // Create a word element using the calculated top-left corner (wordMinX, wordMinY) and dimensions
+        return new TextElement(
+                UUID.randomUUID().toString(),
+                text.toString(),
+                wordMinX,
+                wordMinY, // This is the calculated top Y coordinate of the word box
+                finalWidth,
+                finalHeight,
+                fontName != null ? fontName : "Unknown",
+                fontSize,
+                fontSize
+        );
+    }
+
+    /**
+     * Custom PDFTextStripper that captures position information.
+     */
+    private static class PositionedTextStripper extends PDFTextStripper {
+        private List<TextPosition> textPositions = new ArrayList<>();
+
+        public PositionedTextStripper() throws IOException {
+            super();
+            setSortByPosition(true);
+        }
+
+        public List<TextPosition> getTextPositions() {
+            return textPositions;
+        }
+
+        public void resetTextPositions() {
+            textPositions.clear();
+        }
+
+        @Override
+        protected void processTextPosition(TextPosition text) {
+            if (text != null) {
+                textPositions.add(text);
+            }
+            super.processTextPosition(text);
         }
     }
 }

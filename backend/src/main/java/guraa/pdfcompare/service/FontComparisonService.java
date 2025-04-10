@@ -218,17 +218,16 @@ public class FontComparisonService {
                         .changeType("modified")
                         .severity("minor")
                         .description(description.toString())
-                        .fontName(baseFont.getFontName())
-                        .baseFont(baseFont.getFontName())
-                        .compareFont(compareFont.getFontName())
+                        .baseFontName(baseFont.getFontName()) // Corrected method name
+                        .compareFontName(compareFont.getFontName()) // Corrected method name
                         .baseFontFamily(baseFont.getFontFamily())
                         .compareFontFamily(compareFont.getFontFamily())
-                        .isBaseEmbedded(baseFont.isEmbedded())
-                        .isCompareEmbedded(compareFont.isEmbedded())
-                        .isBaseBold(baseFont.isBold())
-                        .isCompareBold(compareFont.isBold())
-                        .isBaseItalic(baseFont.isItalic())
-                        .isCompareItalic(compareFont.isItalic())
+                        .baseEmbedded(baseFont.isEmbedded()) // Corrected method name
+                        .compareEmbedded(compareFont.isEmbedded()) // Corrected method name
+                        .baseBold(baseFont.isBold()) // Corrected method name
+                        .compareBold(compareFont.isBold()) // Corrected method name
+                        .baseItalic(baseFont.isItalic()) // Corrected method name
+                        .compareItalic(compareFont.isItalic()) // Corrected method name
                         .build();
 
                 // Use default positioning for fonts (top of the page)
@@ -252,12 +251,11 @@ public class FontComparisonService {
                         .changeType("deleted")
                         .severity("minor")
                         .description("Font \"" + font.getFontName() + "\" removed")
-                        .fontName(font.getFontName())
-                        .baseFont(font.getFontName())
+                        .baseFontName(font.getFontName()) // Corrected method name
                         .baseFontFamily(font.getFontFamily())
-                        .isBaseEmbedded(font.isEmbedded())
-                        .isBaseBold(font.isBold())
-                        .isBaseItalic(font.isItalic())
+                        .baseEmbedded(font.isEmbedded()) // Corrected method name
+                        .baseBold(font.isBold()) // Corrected method name
+                        .baseItalic(font.isItalic()) // Corrected method name
                         .build();
 
                 // Use default positioning for fonts (top of the page)
@@ -281,12 +279,11 @@ public class FontComparisonService {
                         .changeType("added")
                         .severity("minor")
                         .description("Font \"" + font.getFontName() + "\" added")
-                        .fontName(font.getFontName())
-                        .compareFont(font.getFontName())
+                        .compareFontName(font.getFontName()) // Corrected method name
                         .compareFontFamily(font.getFontFamily())
-                        .isCompareEmbedded(font.isEmbedded())
-                        .isCompareBold(font.isBold())
-                        .isCompareItalic(font.isItalic())
+                        .compareEmbedded(font.isEmbedded()) // Corrected method name
+                        .compareBold(font.isBold()) // Corrected method name
+                        .compareItalic(font.isItalic()) // Corrected method name
                         .build();
 
                 // Use default positioning for fonts (top of the page)

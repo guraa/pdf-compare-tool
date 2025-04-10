@@ -20,6 +20,7 @@ import org.apache.commons.io.FileUtils;
 
 import javax.imageio.ImageIO;
 import java.awt.geom.Point2D;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -192,7 +193,7 @@ public class ImageExtractor extends PDFStreamEngine {
                     // A proper implementation would require a deeper understanding of form XObjects
                     // and their resources.
                     // For now, we just log a message.
-                    log.warn("Skipping processing of form XObject.  Complex forms may not be processed correctly.");
+                    log.warn("Skipping processing of form XObject. Complex forms may not be processed correctly.");
                 } catch (Exception e) {
                     log.warn("Error processing form XObject: {}", e.getMessage());
                 }
@@ -224,7 +225,7 @@ public class ImageExtractor extends PDFStreamEngine {
                 getGraphicsState().getCurrentTransformationMatrix().getTranslateY()
         );
     }
-    
+
     private void saveImageMetadata(PDImageXObject image, String imageName, int width, int height) {
         try {
             ImageInfo imageInfo = new ImageInfo();
@@ -284,9 +285,14 @@ public class ImageExtractor extends PDFStreamEngine {
         private String id;
         private String imageName;
         private int pageNumber;
-        private java.awt.image.BufferedImage image;
+        private BufferedImage image;
         private byte[] imageData;
         private String imageHash;
+        private String imagePath;
+        private int width;
+        private int height;
+        private String format;
+        private Point2D position;
         private String colorSpace;
         private int bitsPerComponent;
         private boolean interpolate;

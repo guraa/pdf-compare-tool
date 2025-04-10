@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
@@ -121,22 +122,24 @@ public class DifferenceCoordinateValidator {
             return;
         }
 
-        int totalDiffs = 0;
-        int withCoordinates = 0;
+        // Use AtomicInteger to be modified within lambda
+        final AtomicInteger totalDiffs = new AtomicInteger(0);
+        final AtomicInteger withCoordinates = new AtomicInteger(0);
 
         // Process all differences and count those with coordinates
         processAllDifferences(pageDetails, diff -> {
-            totalDiffs++;
+            totalDiffs.incrementAndGet();
             if (validateDifferenceCoordinates(diff)) {
-                withCoordinates++;
+                withCoordinates.incrementAndGet();
             }
         });
 
         // Log summary
-        if (totalDiffs > 0) {
-            double percentage = (double) withCoordinates / totalDiffs * 100;
-            log.info("Page {}: {} out of {} differences have coordinates ({:.2f}%)",
-                    pageDetails.getPageNumber(), withCoordinates, totalDiffs, percentage);
+        if (totalDiffs.get() > 0) {
+            double percentage = (double) withCoordinates.get() / totalDiffs.get() * 100;
+            log.info("Page {}: {} out of {} differences have coordinates ({}%)",
+                    pageDetails.getPageNumber(), withCoordinates.get(), totalDiffs.get(),
+                    String.format("%.2f", percentage));
         } else {
             log.info("Page {}: No differences found", pageDetails.getPageNumber());
         }

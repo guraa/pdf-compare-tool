@@ -14,41 +14,78 @@ const EnhancedDiffHighlighter = ({
   const compareImageRef = useRef(null);
   const baseHighlightRef = useRef(null);
   const compareHighlightRef = useRef(null);
+  const baseScrollContainerRef = useRef(null); // Ref for base scroll container
+  const compareScrollContainerRef = useRef(null); // Ref for compare scroll container
+  const isSyncingScroll = useRef(false); // Flag to prevent scroll loops
   
   const [baseImageLoaded, setBaseImageLoaded] = useState(false);
   const [compareImageLoaded, setCompareImageLoaded] = useState(false);
-  const [baseDimensions, setBaseDimensions] = useState({ width: 0, height: 0 });
-  const [compareDimensions, setCompareDimensions] = useState({ width: 0, height: 0 });
+  // Store both natural and rendered dimensions + scale
+  const [baseDimensions, setBaseDimensions] = useState({ naturalWidth: 0, naturalHeight: 0, renderedWidth: 0, renderedHeight: 0, scaleX: 1, scaleY: 1 });
+  const [compareDimensions, setCompareDimensions] = useState({ naturalWidth: 0, naturalHeight: 0, renderedWidth: 0, renderedHeight: 0, scaleX: 1, scaleY: 1 });
   const [tooltipInfo, setTooltipInfo] = useState(null);
+
+  // Function to update dimensions and scale
+  const updateDimensions = (imageRef, setDimensions) => {
+    if (imageRef.current) {
+      const naturalWidth = imageRef.current.naturalWidth;
+      const naturalHeight = imageRef.current.naturalHeight;
+      const renderedWidth = imageRef.current.offsetWidth;
+      const renderedHeight = imageRef.current.offsetHeight;
+      
+      // Avoid division by zero if image hasn't rendered fully yet
+      const scaleX = naturalWidth > 0 ? renderedWidth / naturalWidth : 1;
+      const scaleY = naturalHeight > 0 ? renderedHeight / naturalHeight : 1;
+
+      console.log(`Updating dimensions: Natural ${naturalWidth}x${naturalHeight}, Rendered ${renderedWidth}x${renderedHeight}, Scale ${scaleX.toFixed(2)}x${scaleY.toFixed(2)}`);
+
+      setDimensions({
+        naturalWidth,
+        naturalHeight,
+        renderedWidth,
+        renderedHeight,
+        scaleX,
+        scaleY
+      });
+      return true; // Indicate success
+    }
+    return false; // Indicate failure
+  };
   
   // Handle image load events
   const handleBaseImageLoad = () => {
     if (baseImageRef.current) {
-      console.log('Base image loaded successfully with dimensions:', 
-        baseImageRef.current.naturalWidth, 'x', baseImageRef.current.naturalHeight);
-      
-      setBaseDimensions({
-        width: baseImageRef.current.naturalWidth,
-        height: baseImageRef.current.naturalHeight,
-        originalWidth: baseImageRef.current.naturalWidth,
-        originalHeight: baseImageRef.current.naturalHeight
-      });
-      setBaseImageLoaded(true);
+      console.log('Base image loaded:', baseImageRef.current.src);
+      if (updateDimensions(baseImageRef, setBaseDimensions)) {
+        setBaseImageLoaded(true);
+      } else {
+         // Retry dimension update shortly after load, sometimes offsetWidth isn't ready immediately
+         setTimeout(() => {
+            if(updateDimensions(baseImageRef, setBaseDimensions)) {
+              setBaseImageLoaded(true);
+            } else {
+              console.error("Failed to get base image dimensions even after delay.");
+            }
+         }, 100); // 100ms delay
+      }
     }
   };
   
   const handleCompareImageLoad = () => {
     if (compareImageRef.current) {
-      console.log('Compare image loaded successfully with dimensions:', 
-        compareImageRef.current.naturalWidth, 'x', compareImageRef.current.naturalHeight);
-      
-      setCompareDimensions({
-        width: compareImageRef.current.naturalWidth,
-        height: compareImageRef.current.naturalHeight,
-        originalWidth: compareImageRef.current.naturalWidth,
-        originalHeight: compareImageRef.current.naturalHeight
-      });
-      setCompareImageLoaded(true);
+      console.log('Compare image loaded:', compareImageRef.current.src);
+       if (updateDimensions(compareImageRef, setCompareDimensions)) {
+        setCompareImageLoaded(true);
+      } else {
+         // Retry dimension update
+         setTimeout(() => {
+            if(updateDimensions(compareImageRef, setCompareDimensions)) {
+              setCompareImageLoaded(true);
+            } else {
+              console.error("Failed to get compare image dimensions even after delay.");
+            }
+         }, 100);
+      }
     }
   };
   
@@ -119,10 +156,11 @@ const EnhancedDiffHighlighter = ({
   // Function to draw highlights on canvas - simplified for accuracy
   const drawHighlights = (canvas, differences, dimensions, source, highlightMode, selectedDiff, zoom) => {
     const ctx = canvas.getContext('2d');
-    
-    // Set canvas dimensions scaled by zoom
-    canvas.width = dimensions.width * zoom;
-    canvas.height = dimensions.height * zoom;
+    const { renderedWidth, renderedHeight, scaleX, scaleY } = dimensions;
+
+    // Set canvas dimensions based on the RENDERED image size, scaled by zoom
+    canvas.width = renderedWidth * zoom;
+    canvas.height = renderedHeight * zoom;
     
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -140,21 +178,20 @@ const EnhancedDiffHighlighter = ({
       }
       
       // Skip if the difference doesn't have position and bounds data
-      if (!diff.position || !diff.bounds) {
+      // Use direct properties: x, y, width, height
+      if (diff.x === undefined || diff.y === undefined || diff.width === undefined || diff.height === undefined) {
+        console.warn('Difference skipped due to missing coordinates:', diff);
         return;
       }
       
       // Determine if this is the selected difference
       const isSelected = selectedDiff && selectedDiff.id === diff.id;
       
-      // Get position and bounds, scaled by zoom
-      const x = (diff.position.x || 0) * zoom;
-      const y = (diff.position.y || 0) * zoom;
-      
-      // Use the bounds directly from the diff data, scaled by zoom
-      // Don't apply extra scaling that might make boxes too large
-      const width = (diff.bounds.width || 0) * zoom;
-      const height = (diff.bounds.height || 0) * zoom;
+      // Get position and bounds, apply rendering scale AND zoom
+      const x = (diff.x || 0) * scaleX * zoom;
+      const y = (diff.y || 0) * scaleY * zoom;
+      const width = (diff.width || 0) * scaleX * zoom;
+      const height = (diff.height || 0) * scaleY * zoom;
       
       // Determine colors based on change type
       let fillColor, strokeColor;
@@ -247,31 +284,36 @@ const EnhancedDiffHighlighter = ({
     const canvas = e.target;
     const rect = canvas.getBoundingClientRect();
     const dimensions = source === 'base' ? baseDimensions : compareDimensions;
-    
+    const { scaleX: renderScaleX, scaleY: renderScaleY } = dimensions;
+
     // Calculate click position relative to the canvas
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    // Scale coordinates correctly
-    const scaleX = canvas.width / rect.width; 
-    const scaleY = canvas.height / rect.height;
-    const clickX = x * scaleX; 
-    const clickY = y * scaleY;
+    const clickXRel = e.clientX - rect.left;
+    const clickYRel = e.clientY - rect.top;
+
+    // Scale click coordinates from display size to canvas size
+    const canvasScaleX = canvas.width / rect.width;
+    const canvasScaleY = canvas.height / rect.height;
+    const clickXCanvas = clickXRel * canvasScaleX;
+    const clickYCanvas = clickYRel * canvasScaleY;
     
     // Find the clicked difference
     const zoom = viewSettings?.zoom ?? 1;
     
-    // Only consider differences with position data
-    const positionedDifferences = differences.filter(diff => diff.position && diff.bounds);
+    // Only consider differences with position data (using direct properties)
+    const positionedDifferences = differences.filter(diff => 
+      diff.x !== undefined && diff.y !== undefined && diff.width !== undefined && diff.height !== undefined
+    );
     
     for (const diff of positionedDifferences) {
-      const diffX = (diff.position.x || 0) * zoom;
-      const diffY = (diff.position.y || 0) * zoom;
-      const diffWidth = (diff.bounds.width || 0) * zoom;
-      const diffHeight = (diff.bounds.height || 0) * zoom;
+      // Calculate diff bounds on the canvas (applying render scale and zoom)
+      const diffX = (diff.x || 0) * renderScaleX * zoom;
+      const diffY = (diff.y || 0) * renderScaleY * zoom;
+      const diffWidth = (diff.width || 0) * renderScaleX * zoom;
+      const diffHeight = (diff.height || 0) * renderScaleY * zoom;
       
-      if (clickX >= diffX && clickX <= diffX + diffWidth &&
-          clickY >= diffY && clickY <= diffY + diffHeight) {
+      // Check if the canvas click coordinates fall within the calculated diff bounds
+      if (clickXCanvas >= diffX && clickXCanvas <= diffX + diffWidth &&
+          clickYCanvas >= diffY && clickYCanvas <= diffY + diffHeight) {
         // Call the callback with the difference object
         onDifferenceSelect(diff);
         
@@ -299,32 +341,38 @@ const EnhancedDiffHighlighter = ({
     
     const canvas = e.target;
     const rect = canvas.getBoundingClientRect();
-    
+    const dimensions = source === 'base' ? baseDimensions : compareDimensions;
+    const { scaleX: renderScaleX, scaleY: renderScaleY } = dimensions;
+
     // Calculate mouse position relative to the canvas
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    // Scale coordinates correctly
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const mouseX = x * scaleX;
-    const mouseY = y * scaleY;
+    const mouseXRel = e.clientX - rect.left;
+    const mouseYRel = e.clientY - rect.top;
+
+    // Scale mouse coordinates from display size to canvas size
+    const canvasScaleX = canvas.width / rect.width;
+    const canvasScaleY = canvas.height / rect.height;
+    const mouseXCanvas = mouseXRel * canvasScaleX;
+    const mouseYCanvas = mouseYRel * canvasScaleY;
     
     // Check if mouse is over a difference
     let isOverDifference = false;
     const zoom = viewSettings?.zoom ?? 1;
     
-    // Only consider differences with position data
-    const positionedDifferences = differences.filter(diff => diff.position && diff.bounds);
+    // Only consider differences with position data (using direct properties)
+    const positionedDifferences = differences.filter(diff => 
+      diff.x !== undefined && diff.y !== undefined && diff.width !== undefined && diff.height !== undefined
+    );
     
     for (const diff of positionedDifferences) {
-      const diffX = (diff.position.x || 0) * zoom;
-      const diffY = (diff.position.y || 0) * zoom;
-      const diffWidth = (diff.bounds.width || 0) * zoom;
-      const diffHeight = (diff.bounds.height || 0) * zoom;
+       // Calculate diff bounds on the canvas (applying render scale and zoom)
+      const diffX = (diff.x || 0) * renderScaleX * zoom;
+      const diffY = (diff.y || 0) * renderScaleY * zoom;
+      const diffWidth = (diff.width || 0) * renderScaleX * zoom;
+      const diffHeight = (diff.height || 0) * renderScaleY * zoom;
       
-      if (mouseX >= diffX && mouseX <= diffX + diffWidth &&
-          mouseY >= diffY && mouseY <= diffY + diffHeight) {
+      // Check if the canvas mouse coordinates fall within the calculated diff bounds
+      if (mouseXCanvas >= diffX && mouseXCanvas <= diffX + diffWidth &&
+          mouseYCanvas >= diffY && mouseYCanvas <= diffY + diffHeight) {
         canvas.style.cursor = 'pointer';
         isOverDifference = true;
         
@@ -352,6 +400,42 @@ const EnhancedDiffHighlighter = ({
     setTooltipInfo(null);
   };
 
+  // Effect for synchronizing scroll
+  useEffect(() => {
+    const baseContainer = baseScrollContainerRef.current;
+    const compareContainer = compareScrollContainerRef.current;
+
+    const syncScroll = (source, target) => {
+      if (!isSyncingScroll.current) {
+        isSyncingScroll.current = true;
+        target.scrollTop = source.scrollTop;
+        target.scrollLeft = source.scrollLeft;
+        // Use requestAnimationFrame to release the lock after the browser has processed the scroll update
+        requestAnimationFrame(() => {
+          isSyncingScroll.current = false;
+        });
+      }
+    };
+
+    const handleBaseScroll = () => syncScroll(baseContainer, compareContainer);
+    const handleCompareScroll = () => syncScroll(compareContainer, baseContainer);
+
+    if (baseContainer && compareContainer) {
+      baseContainer.addEventListener('scroll', handleBaseScroll);
+      compareContainer.addEventListener('scroll', handleCompareScroll);
+      console.log("Scroll sync listeners added.");
+    }
+
+    // Cleanup
+    return () => {
+      if (baseContainer && compareContainer) {
+        baseContainer.removeEventListener('scroll', handleBaseScroll);
+        compareContainer.removeEventListener('scroll', handleCompareScroll);
+        console.log("Scroll sync listeners removed.");
+      }
+    };
+  }, [baseImageLoaded, compareImageLoaded]); // Re-run if images reload, ensuring refs are current
+
   return (
     <div className="enhanced-diff-container">
       <div className="diff-legend">
@@ -371,7 +455,8 @@ const EnhancedDiffHighlighter = ({
       
       <div className="diff-document base-document">
         <div className="document-label">Base Document</div>
-        <div className="image-container">
+        {/* Attach ref to the scrollable container */}
+        <div className="image-container" ref={baseScrollContainerRef}> 
           {baseImageUrl ? (
             <>
               <img
@@ -400,7 +485,8 @@ const EnhancedDiffHighlighter = ({
       
       <div className="diff-document compare-document">
         <div className="document-label">Compare Document</div>
-        <div className="image-container">
+         {/* Attach ref to the scrollable container */}
+        <div className="image-container" ref={compareScrollContainerRef}>
           {compareImageUrl ? (
             <>
               <img
