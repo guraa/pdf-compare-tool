@@ -1,4 +1,3 @@
-
 package guraa.pdfcompare.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -7,14 +6,8 @@ import guraa.pdfcompare.model.ComparisonResult;
 import guraa.pdfcompare.model.PageDetails;
 import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.model.difference.Difference;
-import guraa.pdfcompare.model.difference.FontDifference;
-import guraa.pdfcompare.model.difference.ImageDifference;
 import guraa.pdfcompare.model.difference.TextDifference;
 import guraa.pdfcompare.util.DifferenceCalculator;
-import guraa.pdfcompare.util.FontAnalyzer;
-
-import guraa.pdfcompare.util.ImageExtractor;
-import guraa.pdfcompare.util.TextElement;
 import guraa.pdfcompare.util.TextExtractor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,39 +26,25 @@ import java.util.stream.Collectors;
 
 /**
  * Service for detecting differences between PDF documents.
+ * This main class coordinates the overall comparison process.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DifferenceDetectionService {
 
-    /**
-     * Logs current memory usage for debugging purposes.
-     * 
-     * @param point Description of the point in code where memory is being checked
-     */
-    private void logMemoryUsage(String point) {
-        Runtime runtime = Runtime.getRuntime();
-        long totalMemory = runtime.totalMemory() / (1024 * 1024);
-        long freeMemory = runtime.freeMemory() / (1024 * 1024);
-        long usedMemory = totalMemory - freeMemory;
-        long maxMemory = runtime.maxMemory() / (1024 * 1024);
-        
-        log.info("Memory at {}: Used={}MB, Free={}MB, Total={}MB, Max={}MB", 
-                point, usedMemory, freeMemory, totalMemory, maxMemory);
-    }
-
     private final TextExtractor textExtractor;
-    private final ImageExtractor imageExtractor;
-    private final FontAnalyzer fontAnalyzer;
+    private final ImageComparisonService imageComparisonService;
+    private final FontComparisonService fontComparisonService;
     private final DifferenceCalculator differenceCalculator;
     private final ObjectMapper objectMapper;
+    private final DifferenceDetectionServiceOptimizer optimizer;
 
     /**
      * Compare all pages between two PDF documents.
      *
-     * @param comparison The comparison entity
-     * @param baseDocument The base document
+     * @param comparison      The comparison entity
+     * @param baseDocument    The base document
      * @param compareDocument The comparison document
      * @return List of page differences
      * @throws IOException If there's an error processing the documents
@@ -74,6 +53,9 @@ public class DifferenceDetectionService {
             Comparison comparison,
             PdfDocument baseDocument,
             PdfDocument compareDocument) throws IOException {
+
+        // Log memory usage at the start
+        optimizer.logMemoryUsage("Start of compareAllPages");
 
         // Load PDF documents
         PDDocument basePdf = PDDocument.load(new File(baseDocument.getFilePath()));
@@ -94,837 +76,376 @@ public class DifferenceDetectionService {
             int maxPages = Math.max(basePageCount, comparePageCount);
 
             for (int i = 0; i < maxPages; i++) {
-                // Check if page exists in both documents
-                boolean pageInBase = i < basePageCount;
-                boolean pageInCompare = i < comparePageCount;
-
-                // Create page difference object
-                ComparisonResult.PageDifference pageDiff = new ComparisonResult.PageDifference();
-                pageDiff.setPageNumber(i + 1); // 1-based page numbers for the API
-                pageDiff.setOnlyInBase(pageInBase && !pageInCompare);
-                pageDiff.setOnlyInCompare(!pageInBase && pageInCompare);
-
-                // If page exists in only one document, add minimal information
-                if (!pageInBase || !pageInCompare) {
-                    pageDifferences.add(pageDiff);
-                    continue;
-                }
-
-                // Get pages from both documents
-                PDPage basePage = basePdf.getPage(i);
-                PDPage comparePage = comparePdf.getPage(i);
-
-                // Check dimensions
-                PDRectangle baseSize = basePage.getMediaBox();
-                PDRectangle compareSize = comparePage.getMediaBox();
-
-                pageDiff.setDimensionsDifferent(!baseSize.equals(compareSize));
-
-                // Extract text from both pages
-                String baseText = textExtractor.extractTextFromPage(basePdf, i);
-                String compareText = textExtractor.extractTextFromPage(comparePdf, i);
-
-                // Compare text content
-                List<TextDifference> textDiffs = differenceCalculator.compareText(
-                        baseText, compareText, comparison.getTextComparisonMethod());
-
-                if (!textDiffs.isEmpty()) {
-                    ComparisonResult.TextDifferences textDifferences = new ComparisonResult.TextDifferences();
-                    textDifferences.setBaseText(baseText);
-                    textDifferences.setCompareText(compareText);
-                    textDifferences.setDifferences(new ArrayList<>(textDiffs));
-
-                    pageDiff.setTextDifferences(textDifferences);
-                }
-
-                // Compare text elements (style, fonts, positioning)
-                List<TextElement> baseElements = textExtractor.extractTextElementsFromPage(basePdf, i);
-                List<TextElement> compareElements = textExtractor.extractTextElementsFromPage(comparePdf, i);
-
-                List<Difference> textElementDiffs = compareTextElements(baseElements, compareElements);
-                if (!textElementDiffs.isEmpty()) {
-                    pageDiff.setTextElementDifferences(textElementDiffs);
-                }
-
-                // Compare images
-                List<ImageExtractor.ImageInfo> baseImages = imageExtractor.extractImagesFromPage(
-                        basePdf, i, comparisonDir.resolve("base_images"));
-                List<ImageExtractor.ImageInfo> compareImages = imageExtractor.extractImagesFromPage(
-                        comparePdf, i, comparisonDir.resolve("compare_images"));
-
-                List<Difference> imageDiffs = compareImages(baseImages, compareImages);
-                if (!imageDiffs.isEmpty()) {
-                    pageDiff.setImageDifferences(imageDiffs);
-                }
-
-                // Compare fonts - try to use pre-extracted font information first
-                List<FontAnalyzer.FontInfo> baseFonts = loadPreExtractedFonts(
-                        baseDocument.getFileId(), i + 1);
-                
-                // If pre-extracted fonts not available, extract them now
-                if (baseFonts == null || baseFonts.isEmpty()) {
-                    baseFonts = fontAnalyzer.analyzeFontsOnPage(
-                            basePdf, i, comparisonDir.resolve("base_fonts"));
-                }
-                
-                List<FontAnalyzer.FontInfo> compareFonts = loadPreExtractedFonts(
-                        compareDocument.getFileId(), i + 1);
-                
-                // If pre-extracted fonts not available, extract them now
-                if (compareFonts == null || compareFonts.isEmpty()) {
-                    compareFonts = fontAnalyzer.analyzeFontsOnPage(
-                            comparePdf, i, comparisonDir.resolve("compare_fonts"));
-                }
-
-                List<Difference> fontDiffs = compareFonts(baseFonts, compareFonts);
-                if (!fontDiffs.isEmpty()) {
-                    pageDiff.setFontDifferences(fontDiffs);
-                }
-
-                // Also create detailed page analysis for the API to serve
-                createPageDetails(
-                        comparison.getComparisonId(),
-                        i + 1, // 1-based page number
-                        baseDocument,
-                        compareDocument,
-                        baseText,
-                        compareText,
-                        textDiffs,
-                        textElementDiffs,
-                        imageDiffs,
-                        fontDiffs,
-                        baseSize,
-                        compareSize);
+                // Use memory optimization for page processing
+                final int pageIndex = i;
+                ComparisonResult.PageDifference pageDiff = optimizer.processPageWithMemoryOptimization(
+                        i + 1, // Log with 1-based page number
+                        () -> processPage(
+                                comparison,
+                                basePdf,
+                                comparePdf,
+                                baseDocument,
+                                compareDocument,
+                                pageIndex,
+                                basePageCount,
+                                comparePageCount,
+                                comparisonDir
+                        )
+                );
 
                 pageDifferences.add(pageDiff);
             }
 
             return pageDifferences;
-            // Log memory before closing PDFs
-          
         } finally {
             // Close PDFs
             basePdf.close();
             comparePdf.close();
-            
-            // Log memory after closing PDFs
 
-            
-            // Force garbage collection to free memory
-            System.gc();
+            // Log memory usage at the end
+            optimizer.logMemoryUsage("End of compareAllPages");
 
+            // Suggest garbage collection
+            optimizer.checkAndOptimizeMemory();
         }
     }
 
     /**
-     * Compare text elements between two pages.
-     *
-     * @param baseElements Text elements from the base page
-     * @param compareElements Text elements from the comparison page
-     * @return List of differences
+     * Process a single page for comparison.
      */
-    private List<Difference> compareTextElements(
-            List<TextElement> baseElements,
-            List<TextElement> compareElements) {
+    private ComparisonResult.PageDifference processPage(
+            Comparison comparison,
+            PDDocument basePdf,
+            PDDocument comparePdf,
+            PdfDocument baseDocument,
+            PdfDocument compareDocument,
+            int pageIndex,
+            int basePageCount,
+            int comparePageCount,
+            Path comparisonDir) {
 
-        List<Difference> differences = new ArrayList<>();
+        // Check if page exists in both documents
+        boolean pageInBase = pageIndex < basePageCount;
+        boolean pageInCompare = pageIndex < comparePageCount;
 
-        // This is a simplified implementation that focuses on basic text differences
-        // A complete implementation would use more sophisticated matching algorithms
+        // Create page difference object
+        ComparisonResult.PageDifference pageDiff = new ComparisonResult.PageDifference();
+        pageDiff.setPageNumber(pageIndex + 1); // 1-based page numbers for the API
+        pageDiff.setOnlyInBase(pageInBase && !pageInCompare);
+        pageDiff.setOnlyInCompare(!pageInBase && pageInCompare);
 
-        // Match elements based on similar position and text
-        Map<TextElement, TextElement> matches =
-                matchTextElements(baseElements, compareElements);
-
-        // Track elements that have been matched
-        Set<TextElement> matchedBaseElements = new HashSet<>(matches.keySet());
-        Set<TextElement> matchedCompareElements = new HashSet<>(matches.values());
-
-        // Find style differences in matched elements
-        for (Map.Entry<TextElement, TextElement> match : matches.entrySet()) {
-            TextElement baseElement = match.getKey();
-            TextElement compareElement = match.getValue();
-
-            // Compare font size
-            boolean fontSizeDifferent = Math.abs(baseElement.getFontSize() - compareElement.getFontSize()) > 0.1;
-
-            String baseFontName = baseElement.getFontName();
-            String compareFontName = compareElement.getFontName();
-
-            baseFontName = baseFontName.contains("+") ? baseFontName.substring(baseFontName.indexOf("+") + 1) : baseFontName;
-            compareFontName = compareFontName.contains("+") ? compareFontName.substring(compareFontName.indexOf("+") + 1) : compareFontName;
-
-            boolean fontNameDifferent = !baseFontName.equals(compareFontName);
-
-            // Compare color
-            boolean colorDifferent = !compareColors(baseElement.getColor(), compareElement.getColor());
-
-            if (fontSizeDifferent || fontNameDifferent || colorDifferent) {
-                // Create style difference
-                String diffId = UUID.randomUUID().toString();
-
-                // Create description
-                StringBuilder description = new StringBuilder("Style differs for text \"")
-                        .append(baseElement.getText())
-                        .append("\": ");
-
-                if (fontSizeDifferent) {
-                    description.append("Font size changed from ")
-                            .append(baseElement.getFontSize())
-                            .append(" to ")
-                            .append(compareElement.getFontSize())
-                            .append(". ");
-                }
-
-                if (fontNameDifferent) {
-                    description.append("Font changed from \"")
-                            .append(baseElement.getFontName())
-                            .append("\" to \"")
-                            .append(compareElement.getFontName())
-                            .append("\". ");
-                }
-
-                if (colorDifferent) {
-                    description.append("Color changed from ")
-                            .append(baseElement.getColor())
-                            .append(" to ")
-                            .append(compareElement.getColor())
-                            .append(".");
-                }
-
-                // Create style difference
-                guraa.pdfcompare.model.difference.StyleDifference diff =
-                        guraa.pdfcompare.model.difference.StyleDifference.builder()
-                                .id(diffId)
-                                .type("style")
-                                .changeType("modified")
-                                .severity("minor")
-                                .description(description.toString())
-                                .text(baseElement.getText())
-                                .baseColor(baseElement.getColor())
-                                .compareColor(compareElement.getColor())
-                                .build();
-
-                // Set position and bounds
-                differenceCalculator.setPositionAndBounds(
-                        diff,
-                        baseElement.getX(),
-                        baseElement.getY(),
-                        baseElement.getWidth(),
-                        baseElement.getHeight());
-
-                differences.add(diff);
-            }
+        // If page exists in only one document, add minimal information
+        if (!pageInBase || !pageInCompare) {
+            return pageDiff;
         }
 
-        // Elements only in base document (deleted)
-        for (TextElement element : baseElements) {
-            if (!matchedBaseElements.contains(element)) {
-                // Create text difference for deleted element
-                String diffId = UUID.randomUUID().toString();
+        // Get pages from both documents
+        PDPage basePage = basePdf.getPage(pageIndex);
+        PDPage comparePage = comparePdf.getPage(pageIndex);
 
-                TextDifference diff = TextDifference.builder()
-                        .id(diffId)
-                        .type("text")
-                        .changeType("deleted")
-                        .severity("minor")
-                        .text(element.getText())
-                        .baseText(element.getText())
-                        .description("Text \"" + element.getText() + "\" deleted")
-                        .build();
+        // Check dimensions
+        PDRectangle baseSize = basePage.getMediaBox();
+        PDRectangle compareSize = comparePage.getMediaBox();
 
-                // Set position and bounds
-                differenceCalculator.setPositionAndBounds(
-                        diff,
-                        element.getX(),
-                        element.getY(),
-                        element.getWidth(),
-                        element.getHeight());
+        pageDiff.setDimensionsDifferent(!baseSize.equals(compareSize));
 
-                differences.add(diff);
+        try {
+            // Extract text from both pages
+            String baseText = textExtractor.extractTextFromPage(basePdf, pageIndex);
+            String compareText = textExtractor.extractTextFromPage(comparePdf, pageIndex);
+
+            // Compare text content
+            List<TextDifference> textDiffs = differenceCalculator.compareText(
+                    baseText, compareText, comparison.getTextComparisonMethod());
+
+            // Ensure all text differences have coordinates
+            ensureTextDifferencesHaveCoordinates(textDiffs, baseText, baseSize.getWidth(), baseSize.getHeight(),
+                    basePdf, pageIndex);
+
+            if (!textDiffs.isEmpty()) {
+                ComparisonResult.TextDifferences textDifferences = new ComparisonResult.TextDifferences();
+                textDifferences.setBaseText(baseText);
+                textDifferences.setCompareText(compareText);
+                textDifferences.setDifferences(new ArrayList<>(textDiffs));
+
+                pageDiff.setTextDifferences(textDifferences);
             }
+
+            // Compare text elements (style, fonts, positioning)
+            List<guraa.pdfcompare.util.TextElement> baseElements = textExtractor.extractTextElementsFromPage(basePdf, pageIndex);
+            List<guraa.pdfcompare.util.TextElement> compareElements = textExtractor.extractTextElementsFromPage(comparePdf, pageIndex);
+
+            List<Difference> textElementDiffs = TextElementComparisonService.compareTextElements(
+                    baseElements, compareElements, differenceCalculator);
+
+            // Make sure all text element differences have coordinates
+            ensureCoordinatesForDifferences(textElementDiffs, baseSize.getWidth(), baseSize.getHeight(), 0.3);
+
+            if (!textElementDiffs.isEmpty()) {
+                pageDiff.setTextElementDifferences(textElementDiffs);
+            }
+
+            // Compare images
+            List<Difference> imageDiffs = imageComparisonService.compareImagesOnPage(
+                    basePdf, comparePdf, pageIndex, comparisonDir);
+
+            // Ensure all image differences have coordinates
+            ensureCoordinatesForDifferences(imageDiffs, baseSize.getWidth(), baseSize.getHeight(), 0.4);
+
+            if (!imageDiffs.isEmpty()) {
+                pageDiff.setImageDifferences(imageDiffs);
+            }
+
+            // Compare fonts
+            List<Difference> fontDiffs = fontComparisonService.compareFontsOnPage(
+                    basePdf, comparePdf, pageIndex, baseDocument, compareDocument, comparisonDir);
+
+            // Ensure all font differences have coordinates
+            ensureCoordinatesForDifferences(fontDiffs, baseSize.getWidth(), baseSize.getHeight(), 0.2);
+
+            if (!fontDiffs.isEmpty()) {
+                pageDiff.setFontDifferences(fontDiffs);
+            }
+
+            // Also create detailed page analysis for the API to serve
+            createPageDetails(
+                    comparison.getComparisonId(),
+                    pageIndex + 1, // 1-based page number
+                    baseDocument,
+                    compareDocument,
+                    baseText,
+                    compareText,
+                    textDiffs,
+                    textElementDiffs,
+                    imageDiffs,
+                    fontDiffs,
+                    baseSize,
+                    compareSize);
+
+        } catch (Exception e) {
+            log.error("Error processing page {}: {}", pageIndex + 1, e.getMessage(), e);
         }
 
-        // Elements only in compare document (added)
-        for (TextElement element : compareElements) {
-            if (!matchedCompareElements.contains(element)) {
-                // Create text difference for added element
-                String diffId = UUID.randomUUID().toString();
-
-                TextDifference diff = TextDifference.builder()
-                        .id(diffId)
-                        .type("text")
-                        .changeType("added")
-                        .severity("minor")
-                        .text(element.getText())
-                        .compareText(element.getText())
-                        .description("Text \"" + element.getText() + "\" added")
-                        .build();
-
-                // Set position and bounds
-                differenceCalculator.setPositionAndBounds(
-                        diff,
-                        element.getX(),
-                        element.getY(),
-                        element.getWidth(),
-                        element.getHeight());
-
-                differences.add(diff);
-            }
-        }
-
-        return differences;
+        return pageDiff;
     }
 
     /**
-     * Match text elements between base and comparison pages.
-     *
-     * @param baseElements Text elements from base page
-     * @param compareElements Text elements from comparison page
-     * @return Map of matched elements
+     * Ensure text differences have coordinates.
      */
-    private Map<TextElement, TextElement> matchTextElements(
-            List<TextElement> baseElements,
-            List<TextElement> compareElements) {
+    private void ensureTextDifferencesHaveCoordinates(
+            List<TextDifference> textDiffs,
+            String fullText,
+            double pageWidth,
+            double pageHeight,
+            PDDocument pdf,
+            int pageIndex) {
 
-        Map<TextElement, TextElement> matches = new HashMap<>();
+        try {
+            // Extract text elements to find positions
+            List<guraa.pdfcompare.util.TextElement> textElements = textExtractor.extractTextElementsFromPage(pdf, pageIndex);
 
-        // This is a simplified matching algorithm
-        // A real implementation would use more sophisticated techniques
-
-        // Create a list of potential matches
-        List<ElementMatch> potentialMatches = new ArrayList<>();
-
-        for (TextElement baseElement : baseElements) {
-            for (TextElement compareElement : compareElements) {
-                // Calculate similarity based on text content and position
-                double textSimilarity = calculateTextSimilarity(
-                        baseElement.getText(), compareElement.getText());
-
-                // Calculate position similarity
-                double positionSimilarity = 1.0 -
-                        (Math.abs(baseElement.getX() - compareElement.getX()) +
-                                Math.abs(baseElement.getY() - compareElement.getY())) / 100.0;
-
-                // Ensure position similarity is between 0 and 1
-                positionSimilarity = Math.max(0.0, Math.min(1.0, positionSimilarity));
-
-                // Combine similarities
-                double overallSimilarity = 0.7 * textSimilarity + 0.3 * positionSimilarity;
-
-                // Only consider matches with at least 50% similarity
-                if (overallSimilarity >= 0.5) {
-                    potentialMatches.add(new ElementMatch(
-                            baseElement, compareElement, overallSimilarity));
+            // Create a map to quickly find text elements that might match each difference
+            Map<String, List<guraa.pdfcompare.util.TextElement>> textElementMap = new HashMap<>();
+            for (guraa.pdfcompare.util.TextElement element : textElements) {
+                String text = element.getText().trim();
+                if (!text.isEmpty()) {
+                    textElementMap.computeIfAbsent(text, k -> new ArrayList<>()).add(element);
                 }
             }
-        }
 
-        // Sort potential matches by similarity (highest first)
-        potentialMatches.sort((a, b) -> Double.compare(b.getSimilarity(), a.getSimilarity()));
-
-        // Assign matches greedily
-        Set<TextElement> matchedBaseElements = new HashSet<>();
-        Set<TextElement> matchedCompareElements = new HashSet<>();
-
-        for (ElementMatch match : potentialMatches) {
-            TextElement baseElement = match.getBaseElement();
-            TextElement compareElement = match.getCompareElement();
-
-            // Skip if either element is already matched
-            if (matchedBaseElements.contains(baseElement) ||
-                    matchedCompareElements.contains(compareElement)) {
-                continue;
-            }
-
-            // Create match
-            matches.put(baseElement, compareElement);
-
-            // Mark as matched
-            matchedBaseElements.add(baseElement);
-            matchedCompareElements.add(compareElement);
-        }
-
-        return matches;
-    }
-
-    /**
-     * Compare images between two pages.
-     *
-     * @param baseImages Images from base page
-     * @param compareImages Images from comparison page
-     * @return List of differences
-     */
-    private List<Difference> compareImages(
-            List<ImageExtractor.ImageInfo> baseImages,
-            List<ImageExtractor.ImageInfo> compareImages) {
-
-        List<Difference> differences = new ArrayList<>();
-
-        // Match images based on hash and content
-        Map<ImageExtractor.ImageInfo, ImageExtractor.ImageInfo> matches =
-                matchImages(baseImages, compareImages);
-
-        // Track images that have been matched
-        Set<ImageExtractor.ImageInfo> matchedBaseImages = new HashSet<>(matches.keySet());
-        Set<ImageExtractor.ImageInfo> matchedCompareImages = new HashSet<>(matches.values());
-
-        // Find differences in matched images
-        for (Map.Entry<ImageExtractor.ImageInfo, ImageExtractor.ImageInfo> match : matches.entrySet()) {
-            ImageExtractor.ImageInfo baseImage = match.getKey();
-            ImageExtractor.ImageInfo compareImage = match.getValue();
-
-            // Check for differences
-            boolean sizeDifferent = baseImage.getWidth() != compareImage.getWidth() ||
-                    baseImage.getHeight() != compareImage.getHeight();
-
-            boolean formatDifferent = !baseImage.getFormat().equals(compareImage.getFormat());
-
-            // Compare image content
-            double differenceScore = differenceCalculator.compareImages(
-                    baseImage.getImage(), compareImage.getImage());
-
-            boolean contentDifferent = differenceScore > 0.1; // 10% threshold for content difference
-
-            if (sizeDifferent || formatDifferent || contentDifferent) {
-                // Create image difference
-                String diffId = UUID.randomUUID().toString();
-
-                // Create description
-                StringBuilder description = new StringBuilder("Image differs: ");
-
-                if (sizeDifferent) {
-                    description.append("Size changed from ")
-                            .append(baseImage.getWidth())
-                            .append("x")
-                            .append(baseImage.getHeight())
-                            .append(" to ")
-                            .append(compareImage.getWidth())
-                            .append("x")
-                            .append(compareImage.getHeight())
-                            .append(". ");
-                }
-
-                if (formatDifferent) {
-                    description.append("Format changed from ")
-                            .append(baseImage.getFormat())
-                            .append(" to ")
-                            .append(compareImage.getFormat())
-                            .append(". ");
-                }
-
-                if (contentDifferent) {
-                    description.append("Image content changed (")
-                            .append(Math.round(differenceScore * 100))
-                            .append("% different).");
-                }
-
-                // Create image difference
-                ImageDifference diff = ImageDifference.builder()
-                        .id(diffId)
-                        .type("image")
-                        .changeType("modified")
-                        .severity(differenceCalculator.calculateSeverity("image", differenceScore))
-                        .description(description.toString())
-                        .baseImageHash(baseImage.getImageHash())
-                        .compareImageHash(compareImage.getImageHash())
-                        .baseFormat(baseImage.getFormat())
-                        .compareFormat(compareImage.getFormat())
-                        .baseWidth(baseImage.getWidth())
-                        .baseHeight(baseImage.getHeight())
-                        .compareWidth(compareImage.getWidth())
-                        .compareHeight(compareImage.getHeight())
-                        .baseThumbnailPath(baseImage.getImagePath())
-                        .compareThumbnailPath(compareImage.getImagePath())
-                        .visualDifferenceScore(differenceScore)
-                        .build();
-
-                // Set position using the base image
-                if (baseImage.getPosition() != null) {
-                    differenceCalculator.setPositionAndBounds(
-                            diff,
-                            baseImage.getPosition().getX(),
-                            baseImage.getPosition().getY(),
-                            baseImage.getWidth(),
-                            baseImage.getHeight());
-                }
-
-                differences.add(diff);
-            }
-        }
-
-        // Images only in base document (deleted)
-        for (ImageExtractor.ImageInfo image : baseImages) {
-            if (!matchedBaseImages.contains(image)) {
-                // Create image difference for deleted image
-                String diffId = UUID.randomUUID().toString();
-
-                ImageDifference diff = ImageDifference.builder()
-                        .id(diffId)
-                        .type("image")
-                        .changeType("deleted")
-                        .severity("major")
-                        .description("Image removed")
-                        .baseImageHash(image.getImageHash())
-                        .baseFormat(image.getFormat())
-                        .baseWidth(image.getWidth())
-                        .baseHeight(image.getHeight())
-                        .baseThumbnailPath(image.getImagePath())
-                        .build();
-
-                // Set position
-                if (image.getPosition() != null) {
-                    differenceCalculator.setPositionAndBounds(
-                            diff,
-                            image.getPosition().getX(),
-                            image.getPosition().getY(),
-                            image.getWidth(),
-                            image.getHeight());
-                }
-
-                differences.add(diff);
-            }
-        }
-
-        // Images only in compare document (added)
-        for (ImageExtractor.ImageInfo image : compareImages) {
-            if (!matchedCompareImages.contains(image)) {
-                // Create image difference for added image
-                String diffId = UUID.randomUUID().toString();
-
-                ImageDifference diff = ImageDifference.builder()
-                        .id(diffId)
-                        .type("image")
-                        .changeType("added")
-                        .severity("major")
-                        .description("Image added")
-                        .compareImageHash(image.getImageHash())
-                        .compareFormat(image.getFormat())
-                        .compareWidth(image.getWidth())
-                        .compareHeight(image.getHeight())
-                        .compareThumbnailPath(image.getImagePath())
-                        .build();
-
-                // Set position
-                if (image.getPosition() != null) {
-                    differenceCalculator.setPositionAndBounds(
-                            diff,
-                            image.getPosition().getX(),
-                            image.getPosition().getY(),
-                            image.getWidth(),
-                            image.getHeight());
-                }
-
-                differences.add(diff);
-            }
-        }
-
-        return differences;
-    }
-
-    /**
-     * Match images between base and comparison pages.
-     *
-     * @param baseImages Images from base page
-     * @param compareImages Images from comparison page
-     * @return Map of matched images
-     */
-    private Map<ImageExtractor.ImageInfo, ImageExtractor.ImageInfo> matchImages(
-            List<ImageExtractor.ImageInfo> baseImages,
-            List<ImageExtractor.ImageInfo> compareImages) {
-
-        Map<ImageExtractor.ImageInfo, ImageExtractor.ImageInfo> matches = new HashMap<>();
-
-        // First match by hash (exact matches)
-        for (ImageExtractor.ImageInfo baseImage : baseImages) {
-            for (ImageExtractor.ImageInfo compareImage : compareImages) {
-                if (baseImage.getImageHash() != null &&
-                        baseImage.getImageHash().equals(compareImage.getImageHash())) {
-                    matches.put(baseImage, compareImage);
-                    break;
-                }
-            }
-        }
-
-        // Track images that have been matched
-        Set<ImageExtractor.ImageInfo> matchedBaseImages = new HashSet<>(matches.keySet());
-        Set<ImageExtractor.ImageInfo> matchedCompareImages = new HashSet<>(matches.values());
-
-        // For unmatched images, try matching by similarity
-        for (ImageExtractor.ImageInfo baseImage : baseImages) {
-            if (matchedBaseImages.contains(baseImage)) {
-                continue;
-            }
-
-            double bestSimilarity = 0.5; // Minimum threshold for similarity
-            ImageExtractor.ImageInfo bestMatch = null;
-
-            for (ImageExtractor.ImageInfo compareImage : compareImages) {
-                if (matchedCompareImages.contains(compareImage)) {
+            // Assign coordinates to each text difference
+            for (TextDifference diff : textDiffs) {
+                // Get the text to search for
+                String diffText = diff.getBaseText() != null ? diff.getBaseText() : diff.getCompareText();
+                if (diffText == null || diffText.trim().isEmpty()) {
                     continue;
                 }
 
-                // Compare images
-                double similarity = 1.0 - differenceCalculator.compareImages(
-                        baseImage.getImage(), compareImage.getImage());
+                // Try to find exact matches first
+                boolean coordsFound = findAndAssignCoordinates(diff, diffText, textElementMap, pageWidth, pageHeight);
 
-                if (similarity > bestSimilarity) {
-                    bestSimilarity = similarity;
-                    bestMatch = compareImage;
-                }
-            }
-
-            if (bestMatch != null) {
-                matches.put(baseImage, bestMatch);
-                matchedBaseImages.add(baseImage);
-                matchedCompareImages.add(bestMatch);
-            }
-        }
-
-        return matches;
-    }
-
-    /**
-     * Compare fonts between two pages.
-     *
-     * @param baseFonts Fonts from base page
-     * @param compareFonts Fonts from comparison page
-     * @return List of differences
-     */
-    private List<Difference> compareFonts(
-            List<FontAnalyzer.FontInfo> baseFonts,
-            List<FontAnalyzer.FontInfo> compareFonts) {
-
-        List<Difference> differences = new ArrayList<>();
-
-        // Match fonts based on name and properties
-        Map<FontAnalyzer.FontInfo, FontAnalyzer.FontInfo> matches =
-                matchFonts(baseFonts, compareFonts);
-
-        // Track fonts that have been matched
-        Set<FontAnalyzer.FontInfo> matchedBaseFonts = new HashSet<>(matches.keySet());
-        Set<FontAnalyzer.FontInfo> matchedCompareFonts = new HashSet<>(matches.values());
-
-        // Find differences in matched fonts
-        for (Map.Entry<FontAnalyzer.FontInfo, FontAnalyzer.FontInfo> match : matches.entrySet()) {
-            FontAnalyzer.FontInfo baseFont = match.getKey();
-            FontAnalyzer.FontInfo compareFont = match.getValue();
-
-            String baseFontName = baseFont.getFontName();
-            String compareFontName = compareFont.getFontName();
-            baseFontName = baseFontName.contains("+") ? baseFontName.substring(baseFontName.indexOf("+") + 1) : baseFontName;
-            compareFontName = compareFontName.contains("+") ? compareFontName.substring(compareFontName.indexOf("+") + 1) : compareFontName;
-
-            String baseFamily = baseFont.getFontFamily();
-            String compareFamily = compareFont.getFontFamily();
-            baseFamily = baseFamily.contains("+") ? baseFamily.substring(baseFamily.indexOf("+") + 1) : baseFamily;
-            compareFamily = compareFamily.contains("+") ? compareFamily.substring(compareFamily.indexOf("+") + 1) : compareFamily;
-
-// Comparisons
-            boolean nameDifferent = !baseFontName.equals(compareFontName);
-            boolean familyDifferent = !baseFamily.equals(compareFamily);
-            boolean embeddingDifferent = baseFont.isEmbedded() != compareFont.isEmbedded();
-            boolean boldDifferent = baseFont.isBold() != compareFont.isBold();
-            boolean italicDifferent = baseFont.isItalic() != compareFont.isItalic();
-
-
-            if (nameDifferent || familyDifferent || embeddingDifferent ||
-                    boldDifferent || italicDifferent) {
-
-                // Create font difference
-                String diffId = UUID.randomUUID().toString();
-
-                // Create description
-                StringBuilder description = new StringBuilder("Font differs: ");
-
-                if (nameDifferent) {
-                    description.append("Name changed from \"")
-                            .append(baseFont.getFontName())
-                            .append("\" to \"")
-                            .append(compareFont.getFontName())
-                            .append("\". ");
-                }
-
-                if (familyDifferent) {
-                    description.append("Family changed from \"")
-                            .append(baseFont.getFontFamily())
-                            .append("\" to \"")
-                            .append(compareFont.getFontFamily())
-                            .append("\". ");
-                }
-
-                if (embeddingDifferent) {
-                    description.append("Font ")
-                            .append(baseFont.isEmbedded() ? "was" : "was not")
-                            .append(" embedded in base and ")
-                            .append(compareFont.isEmbedded() ? "is" : "is not")
-                            .append(" embedded in comparison. ");
-                }
-
-                if (boldDifferent) {
-                    description.append("Font ")
-                            .append(baseFont.isBold() ? "was" : "was not")
-                            .append(" bold in base and ")
-                            .append(compareFont.isBold() ? "is" : "is not")
-                            .append(" bold in comparison. ");
-                }
-
-                if (italicDifferent) {
-                    description.append("Font ")
-                            .append(baseFont.isItalic() ? "was" : "was not")
-                            .append(" italic in base and ")
-                            .append(compareFont.isItalic() ? "is" : "is not")
-                            .append(" italic in comparison.");
-                }
-
-                // Create font difference
-                FontDifference diff = FontDifference.builder()
-                        .id(diffId)
-                        .type("font")
-                        .changeType("modified")
-                        .severity("minor")
-                        .description(description.toString())
-                        .fontName(baseFont.getFontName())
-                        .baseFont(baseFont.getFontName())
-                        .compareFont(compareFont.getFontName())
-                        .baseFontFamily(baseFont.getFontFamily())
-                        .compareFontFamily(compareFont.getFontFamily())
-                        .isBaseEmbedded(baseFont.isEmbedded())
-                        .isCompareEmbedded(compareFont.isEmbedded())
-                        .isBaseBold(baseFont.isBold())
-                        .isCompareBold(compareFont.isBold())
-                        .isBaseItalic(baseFont.isItalic())
-                        .isCompareItalic(compareFont.isItalic())
-                        .build();
-
-                differences.add(diff);
-            }
-        }
-
-        // Fonts only in base document (deleted)
-        for (FontAnalyzer.FontInfo font : baseFonts) {
-            if (!matchedBaseFonts.contains(font)) {
-                // Create font difference for deleted font
-                String diffId = UUID.randomUUID().toString();
-
-                FontDifference diff = FontDifference.builder()
-                        .id(diffId)
-                        .type("font")
-                        .changeType("deleted")
-                        .severity("minor")
-                        .description("Font \"" + font.getFontName() + "\" removed")
-                        .fontName(font.getFontName())
-                        .baseFont(font.getFontName())
-                        .baseFontFamily(font.getFontFamily())
-                        .isBaseEmbedded(font.isEmbedded())
-                        .isBaseBold(font.isBold())
-                        .isBaseItalic(font.isItalic())
-                        .build();
-
-                differences.add(diff);
-            }
-        }
-
-        // Fonts only in compare document (added)
-        for (FontAnalyzer.FontInfo font : compareFonts) {
-            if (!matchedCompareFonts.contains(font)) {
-                // Create font difference for added font
-                String diffId = UUID.randomUUID().toString();
-
-                FontDifference diff = FontDifference.builder()
-                        .id(diffId)
-                        .type("font")
-                        .changeType("added")
-                        .severity("minor")
-                        .description("Font \"" + font.getFontName() + "\" added")
-                        .fontName(font.getFontName())
-                        .compareFont(font.getFontName())
-                        .compareFontFamily(font.getFontFamily())
-                        .isCompareEmbedded(font.isEmbedded())
-                        .isCompareBold(font.isBold())
-                        .isCompareItalic(font.isItalic())
-                        .build();
-
-                differences.add(diff);
-            }
-        }
-
-        return differences;
-    }
-
-    /**
-     * Match fonts between base and comparison pages.
-     *
-     * @param baseFonts Fonts from base page
-     * @param compareFonts Fonts from comparison page
-     * @return Map of matched fonts
-     */
-    private Map<FontAnalyzer.FontInfo, FontAnalyzer.FontInfo> matchFonts(
-            List<FontAnalyzer.FontInfo> baseFonts,
-            List<FontAnalyzer.FontInfo> compareFonts) {
-
-        Map<FontAnalyzer.FontInfo, FontAnalyzer.FontInfo> matches = new HashMap<>();
-
-        // First match by name (exact matches)
-        for (FontAnalyzer.FontInfo baseFont : baseFonts) {
-            for (FontAnalyzer.FontInfo compareFont : compareFonts) {
-                if (baseFont.getFontName().equals(compareFont.getFontName())) {
-                    matches.put(baseFont, compareFont);
-                    break;
-                }
-            }
-        }
-
-        // Track fonts that have been matched
-        Set<FontAnalyzer.FontInfo> matchedBaseFonts = new HashSet<>(matches.keySet());
-        Set<FontAnalyzer.FontInfo> matchedCompareFonts = new HashSet<>(matches.values());
-
-        // For unmatched fonts, try matching by family and properties
-        for (FontAnalyzer.FontInfo baseFont : baseFonts) {
-            if (matchedBaseFonts.contains(baseFont)) {
-                continue;
-            }
-
-            for (FontAnalyzer.FontInfo compareFont : compareFonts) {
-                if (matchedCompareFonts.contains(compareFont)) {
-                    continue;
-                }
-
-                // Check if families match (with null safety)
-                if (baseFont.getFontFamily() != null && compareFont.getFontFamily() != null && 
-                    baseFont.getFontFamily().equals(compareFont.getFontFamily())) {
-                    // Check if other properties match
-                    boolean boldMatches = baseFont.isBold() == compareFont.isBold();
-                    boolean italicMatches = baseFont.isItalic() == compareFont.isItalic();
-
-                    if (boldMatches && italicMatches) {
-                        matches.put(baseFont, compareFont);
-                        matchedBaseFonts.add(baseFont);
-                        matchedCompareFonts.add(compareFont);
-                        break;
+                // If no exact match, try to find partial matches
+                if (!coordsFound && diffText.length() > 5) {
+                    // Try to match based on context - find a portion of the text
+                    String context = findTextContext(fullText, diffText);
+                    if (context != null && !context.equals(diffText)) {
+                        coordsFound = findAndAssignCoordinates(diff, context, textElementMap, pageWidth, pageHeight);
                     }
                 }
+
+                // If still no coordinates, use estimated position
+                if (!coordsFound) {
+                    // Estimate position based on change type and other heuristics
+                    double relativeY = estimateRelativeYPosition(diff, pageIndex);
+                    differenceCalculator.estimatePositionForDifference(diff, pageWidth, pageHeight, relativeY);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Error assigning coordinates to text differences: {}", e.getMessage(), e);
+
+            // Fallback: ensure all differences have at least estimated coordinates
+            for (TextDifference diff : textDiffs) {
+                if (diff.getX() == 0 && diff.getY() == 0) {
+                    double relativeY = estimateRelativeYPosition(diff, pageIndex);
+                    differenceCalculator.estimatePositionForDifference(diff, pageWidth, pageHeight, relativeY);
+                }
             }
         }
+    }
 
-        return matches;
+    /**
+     * Find text context to help locate where a difference is on the page.
+     */
+    private String findTextContext(String fullText, String diffText) {
+        if (fullText == null || diffText == null) {
+            return null;
+        }
+
+        int index = fullText.indexOf(diffText);
+        if (index >= 0) {
+            // Get some context around the difference
+            int start = Math.max(0, index - 20);
+            int end = Math.min(fullText.length(), index + diffText.length() + 20);
+
+            // Try to expand to whole words
+            while (start > 0 && !Character.isWhitespace(fullText.charAt(start))) {
+                start--;
+            }
+
+            while (end < fullText.length() && !Character.isWhitespace(fullText.charAt(end))) {
+                end++;
+            }
+
+            return fullText.substring(start, end).trim();
+        }
+
+        return null;
+    }
+
+    /**
+     * Find matching text elements and assign coordinates to the difference.
+     */
+    private boolean findAndAssignCoordinates(
+            TextDifference diff,
+            String searchText,
+            Map<String, List<guraa.pdfcompare.util.TextElement>> textElementMap,
+            double pageWidth,
+            double pageHeight) {
+
+        // Try to find exact matches first
+        List<guraa.pdfcompare.util.TextElement> matches = textElementMap.getOrDefault(searchText.trim(), Collections.emptyList());
+
+        // If no exact matches, search for partial matches
+        if (matches.isEmpty() && searchText.length() > 10) {
+            List<guraa.pdfcompare.util.TextElement> candidates = new ArrayList<>();
+            for (Map.Entry<String, List<guraa.pdfcompare.util.TextElement>> entry : textElementMap.entrySet()) {
+                if (entry.getKey().contains(searchText) || searchText.contains(entry.getKey())) {
+                    candidates.addAll(entry.getValue());
+                }
+            }
+            matches = candidates;
+        }
+
+        if (!matches.isEmpty()) {
+            // Calculate a bounding box that includes all matching elements
+            double minX = pageWidth;
+            double minY = pageHeight;
+            double maxX = 0;
+            double maxY = 0;
+
+            for (guraa.pdfcompare.util.TextElement element : matches) {
+                minX = Math.min(minX, element.getX());
+                minY = Math.min(minY, element.getY());
+                maxX = Math.max(maxX, element.getX() + element.getWidth());
+                maxY = Math.max(maxY, element.getY() + element.getHeight());
+            }
+
+            // Set the coordinates on the difference
+            differenceCalculator.setPositionAndBounds(
+                    diff,
+                    minX,
+                    minY,
+                    maxX - minX,
+                    maxY - minY);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Estimate relative Y position for a difference on the page.
+     */
+    private double estimateRelativeYPosition(TextDifference diff, int pageNumber) {
+        // The idea is to distribute differences across the page for better visualization
+        // Based on page number and other factors to make it predictable and consistent
+
+        double baseOffset = (pageNumber % 10) * 0.05;
+
+        // Use hash code of the text for deterministic but distributed placement
+        int textHash = diff.getText() != null ? diff.getText().hashCode() : 0;
+        double hashOffset = Math.abs(textHash % 100) / 100.0 * 0.4; // 0-0.4 range
+
+        double position = 0.1 + baseOffset + hashOffset; // Start at 10% from the top, then add offsets
+
+        // Cap at reasonable range
+        return Math.min(0.9, Math.max(0.1, position));
+    }
+
+    /**
+     * Ensure all differences in a list have coordinates.
+     */
+    private void ensureCoordinatesForDifferences(
+            List<Difference> differences,
+            double pageWidth,
+            double pageHeight,
+            double defaultRelativeY) {
+
+        if (differences == null) {
+            return;
+        }
+
+        // Map to track how many differences of each type we've seen
+        Map<String, Integer> typeCounts = new HashMap<>();
+
+        for (Difference diff : differences) {
+            // Skip if already has coordinates
+            if (diff.getX() != 0 || diff.getY() != 0) {
+                continue;
+            }
+
+            // Get count for this type
+            int count = typeCounts.getOrDefault(diff.getType(), 0);
+            typeCounts.put(diff.getType(), count + 1);
+
+            // Calculate a relative Y offset based on the count to spread differences vertically
+            double relativeYOffset = count * 0.05;
+            double relativeY = defaultRelativeY + relativeYOffset;
+
+            // Ensure we stay within bounds
+            relativeY = Math.min(0.9, relativeY);
+
+            // Set position and bounds
+            differenceCalculator.estimatePositionForDifference(diff, pageWidth, pageHeight, relativeY);
+        }
     }
 
     /**
      * Create detailed page analysis for a standard comparison.
      *
-     * @param comparisonId The comparison ID
-     * @param pageNumber The page number (1-based)
-     * @param baseDocument The base document
-     * @param compareDocument The comparison document
-     * @param baseText Text content from base page
-     * @param compareText Text content from comparison page
-     * @param textDiffs Text differences
+     * @param comparisonId     The comparison ID
+     * @param pageNumber       The page number (1-based)
+     * @param baseDocument     The base document
+     * @param compareDocument  The comparison document
+     * @param baseText         Text content from base page
+     * @param compareText      Text content from comparison page
+     * @param textDiffs        Text differences
      * @param textElementDiffs Text element differences
-     * @param imageDiffs Image differences
-     * @param fontDiffs Font differences
-     * @param baseSize Base page dimensions
-     * @param compareSize Comparison page dimensions
+     * @param imageDiffs       Image differences
+     * @param fontDiffs        Font differences
+     * @param baseSize         Base page dimensions
+     * @param compareSize      Comparison page dimensions
      * @throws IOException If there's an error saving the page details
      */
     private void createPageDetails(
@@ -968,8 +489,14 @@ public class DifferenceDetectionService {
         List<Difference> baseDifferences = new ArrayList<>();
         List<Difference> compareDifferences = new ArrayList<>();
 
-        // Add text differences
+        // Add text differences - ensure all have coordinates
         for (TextDifference diff : textDiffs) {
+            // Make sure all text differences have coordinates
+            if (diff.getX() == 0 && diff.getY() == 0 && diff.getWidth() == 0 && diff.getHeight() == 0) {
+                double relativeY = estimateRelativeYPosition(diff, pageNumber);
+                differenceCalculator.estimatePositionForDifference(diff, baseSize.getWidth(), baseSize.getHeight(), relativeY);
+            }
+
             if (!"added".equals(diff.getChangeType())) {
                 baseDifferences.add(diff);
             }
@@ -979,8 +506,13 @@ public class DifferenceDetectionService {
             }
         }
 
-        // Add text element differences
+        // Add text element differences - ensure all have coordinates
         for (Difference diff : textElementDiffs) {
+            // Make sure all differences have coordinates
+            if (diff.getX() == 0 && diff.getY() == 0 && diff.getWidth() == 0 && diff.getHeight() == 0) {
+                differenceCalculator.estimatePositionForDifference(diff, baseSize.getWidth(), baseSize.getHeight(), 0.3);
+            }
+
             if (!"added".equals(diff.getChangeType())) {
                 baseDifferences.add(diff);
             }
@@ -990,8 +522,13 @@ public class DifferenceDetectionService {
             }
         }
 
-        // Add image differences
+        // Add image differences - ensure all have coordinates
         for (Difference diff : imageDiffs) {
+            // Make sure all image differences have coordinates
+            if (diff.getX() == 0 && diff.getY() == 0 && diff.getWidth() == 0 && diff.getHeight() == 0) {
+                differenceCalculator.estimatePositionForDifference(diff, baseSize.getWidth(), baseSize.getHeight(), 0.4);
+            }
+
             if (!"added".equals(diff.getChangeType())) {
                 baseDifferences.add(diff);
             }
@@ -1001,8 +538,13 @@ public class DifferenceDetectionService {
             }
         }
 
-        // Add font differences
+        // Add font differences - ensure all have coordinates
         for (Difference diff : fontDiffs) {
+            // Make sure all font differences have coordinates
+            if (diff.getX() == 0 && diff.getY() == 0 && diff.getWidth() == 0 && diff.getHeight() == 0) {
+                differenceCalculator.estimatePositionForDifference(diff, baseSize.getWidth(), baseSize.getHeight(), 0.2);
+            }
+
             if (!"added".equals(diff.getChangeType())) {
                 baseDifferences.add(diff);
             }
@@ -1041,67 +583,16 @@ public class DifferenceDetectionService {
     }
 
     /**
-     * Calculate similarity between two text strings.
-     *
-     * @param text1 First text
-     * @param text2 Second text
-     * @return Similarity score between 0.0 and 1.0
-     */
-    private double calculateTextSimilarity(String text1, String text2) {
-        if (text1 == null || text2 == null) {
-            return 0.0;
-        }
-
-        if (text1.equals(text2)) {
-            return 1.0;
-        }
-
-        // Calculate Levenshtein distance
-        int[][] distance = new int[text1.length() + 1][text2.length() + 1];
-
-        for (int i = 0; i <= text1.length(); i++) {
-            distance[i][0] = i;
-        }
-
-        for (int j = 0; j <= text2.length(); j++) {
-            distance[0][j] = j;
-        }
-
-        for (int i = 1; i <= text1.length(); i++) {
-            for (int j = 1; j <= text2.length(); j++) {
-                if (text1.charAt(i - 1) == text2.charAt(j - 1)) {
-                    distance[i][j] = distance[i - 1][j - 1];
-                } else {
-                    distance[i][j] = Math.min(
-                            distance[i - 1][j] + 1,     // Delete
-                            Math.min(
-                                    distance[i][j - 1] + 1,     // Insert
-                                    distance[i - 1][j - 1] + 1  // Substitute
-                            )
-                    );
-                }
-            }
-        }
-
-        int maxLength = Math.max(text1.length(), text2.length());
-        if (maxLength == 0) {
-            return 1.0; // Both strings are empty
-        }
-
-        return 1.0 - (double) distance[text1.length()][text2.length()] / maxLength;
-    }
-
-    /**
      * Compare pages for a specific document pair.
      *
-     * @param comparison The comparison entity
-     * @param baseDocument The base document
-     * @param compareDocument The comparison document
-     * @param baseStartPage Start page in base document
-     * @param baseEndPage End page in base document
+     * @param comparison       The comparison entity
+     * @param baseDocument     The base document
+     * @param compareDocument  The comparison document
+     * @param baseStartPage    Start page in base document
+     * @param baseEndPage      End page in base document
      * @param compareStartPage Start page in comparison document
-     * @param compareEndPage End page in comparison document
-     * @param pairIndex Index of the document pair
+     * @param compareEndPage   End page in comparison document
+     * @param pairIndex        Index of the document pair
      * @throws IOException If there's an error processing the documents
      */
     public void comparePages(
@@ -1115,14 +606,14 @@ public class DifferenceDetectionService {
             int pairIndex) throws IOException {
 
         // Log memory at start
-        logMemoryUsage("START of comparePages for pair " + pairIndex);
+        optimizer.logMemoryUsage("START of comparePages for pair " + pairIndex);
 
         // Load PDF documents
         PDDocument basePdf = PDDocument.load(new File(baseDocument.getFilePath()));
         PDDocument comparePdf = PDDocument.load(new File(compareDocument.getFilePath()));
-        
+
         // Log memory after loading PDFs
-        logMemoryUsage("AFTER loading PDFs for pair " + pairIndex);
+        optimizer.logMemoryUsage("AFTER loading PDFs for pair " + pairIndex);
 
         try {
             // Create directory for comparison results
@@ -1159,6 +650,19 @@ public class DifferenceDetectionService {
                 List<TextDifference> textDiffs = differenceCalculator.compareText(
                         baseText, compareText, comparison.getTextComparisonMethod());
 
+                // Get page dimensions for coordinate assignment
+                PDRectangle baseSize = pageInBase ? basePdf.getPage(basePageIdx).getMediaBox() : null;
+                PDRectangle compareSize = pageInCompare ? comparePdf.getPage(comparePageIdx).getMediaBox() : null;
+
+                // Ensure all text differences have coordinates
+                if (pageInBase) {
+                    ensureTextDifferencesHaveCoordinates(textDiffs, baseText, baseSize.getWidth(), baseSize.getHeight(),
+                            basePdf, basePageIdx);
+                } else if (pageInCompare) {
+                    ensureTextDifferencesHaveCoordinates(textDiffs, compareText, compareSize.getWidth(), compareSize.getHeight(),
+                            comparePdf, comparePageIdx);
+                }
+
                 // Split differences by source document
                 List<Difference> baseTextDiffs = textDiffs.stream()
                         .filter(diff -> !"added".equals(diff.getChangeType()))
@@ -1171,83 +675,13 @@ public class DifferenceDetectionService {
                 baseDifferences.addAll(baseTextDiffs);
                 compareDifferences.addAll(compareTextDiffs);
 
-                // Get page dimensions if available
-                PDRectangle baseSize = pageInBase ? basePdf.getPage(basePageIdx).getMediaBox() : null;
-                PDRectangle compareSize = pageInCompare ? comparePdf.getPage(comparePageIdx).getMediaBox() : null;
-
-                // Compare text elements (style, fonts, positioning) if both pages exist
+                // Process other difference types if both pages exist
                 if (pageInBase && pageInCompare) {
-                    List<TextElement> baseElements =
-                            textExtractor.extractTextElementsFromPage(basePdf, basePageIdx);
-                    List<TextElement> compareElements =
-                            textExtractor.extractTextElementsFromPage(comparePdf, comparePageIdx);
-
-                    List<Difference> textElementDiffs = compareTextElements(baseElements, compareElements);
-
-                    // Split element differences by source document
-                    List<Difference> baseElementDiffs = textElementDiffs.stream()
-                            .filter(diff -> !"added".equals(diff.getChangeType()))
-                            .collect(Collectors.toList());
-
-                    List<Difference> compareElementDiffs = textElementDiffs.stream()
-                            .filter(diff -> !"deleted".equals(diff.getChangeType()))
-                            .collect(Collectors.toList());
-
-                    baseDifferences.addAll(baseElementDiffs);
-                    compareDifferences.addAll(compareElementDiffs);
-
-                    // Compare images
-                    List<ImageExtractor.ImageInfo> baseImages = imageExtractor.extractImagesFromPage(
-                            basePdf, basePageIdx, comparisonDir.resolve("base_images"));
-                    List<ImageExtractor.ImageInfo> compareImages = imageExtractor.extractImagesFromPage(
-                            comparePdf, comparePageIdx, comparisonDir.resolve("compare_images"));
-
-                    List<Difference> imageDiffs = compareImages(baseImages, compareImages);
-
-                    // Split image differences by source document
-                    List<Difference> baseImageDiffs = imageDiffs.stream()
-                            .filter(diff -> !"added".equals(diff.getChangeType()))
-                            .collect(Collectors.toList());
-
-                    List<Difference> compareImageDiffs = imageDiffs.stream()
-                            .filter(diff -> !"deleted".equals(diff.getChangeType()))
-                            .collect(Collectors.toList());
-
-                    baseDifferences.addAll(baseImageDiffs);
-                    compareDifferences.addAll(compareImageDiffs);
-
-                    // Compare fonts - try to use pre-extracted font information first
-                    List<FontAnalyzer.FontInfo> baseFonts = loadPreExtractedFonts(
-                            baseDocument.getFileId(), basePageIdx + 1);
-                    
-                    // If pre-extracted fonts not available, extract them now
-                    if (baseFonts == null || baseFonts.isEmpty()) {
-                        baseFonts = fontAnalyzer.analyzeFontsOnPage(
-                                basePdf, basePageIdx, comparisonDir.resolve("base_fonts"));
-                    }
-                    
-                    List<FontAnalyzer.FontInfo> compareFonts = loadPreExtractedFonts(
-                            compareDocument.getFileId(), comparePageIdx + 1);
-                    
-                    // If pre-extracted fonts not available, extract them now
-                    if (compareFonts == null || compareFonts.isEmpty()) {
-                        compareFonts = fontAnalyzer.analyzeFontsOnPage(
-                                comparePdf, comparePageIdx, comparisonDir.resolve("compare_fonts"));
-                    }
-
-                    List<Difference> fontDiffs = compareFonts(baseFonts, compareFonts);
-
-                    // Split font differences by source document
-                    List<Difference> baseFontDiffs = fontDiffs.stream()
-                            .filter(diff -> !"added".equals(diff.getChangeType()))
-                            .collect(Collectors.toList());
-
-                    List<Difference> compareFontDiffs = fontDiffs.stream()
-                            .filter(diff -> !"deleted".equals(diff.getChangeType()))
-                            .collect(Collectors.toList());
-
-                    baseDifferences.addAll(baseFontDiffs);
-                    compareDifferences.addAll(compareFontDiffs);
+                    // Delegate to specialized services for each difference type
+                    processPairPageWithBothDocuments(
+                            basePdf, comparePdf, basePageIdx, comparePageIdx,
+                            baseDocument, compareDocument, comparisonDir,
+                            baseDifferences, compareDifferences);
                 }
 
                 // Create detailed page analysis for the API to serve
@@ -1270,24 +704,108 @@ public class DifferenceDetectionService {
             // Close PDFs
             basePdf.close();
             comparePdf.close();
+
+            // Log memory after processing
+            optimizer.logMemoryUsage("END of comparePages for pair " + pairIndex);
+
+            // Force garbage collection to free memory
+            optimizer.checkAndOptimizeMemory();
         }
     }
 
     /**
-     * Create detailed page analysis for a document pair in smart comparison mode.
+     * Process a pair page when both documents exist.
      *
-     * @param comparisonId The comparison ID
-     * @param pairIndex The pair index
-     * @param relPageNumber The relative page number (1-based) within the pair
-     * @param baseDocument The base document
-     * @param compareDocument The comparison document
-     * @param baseText Text content from base page
-     * @param compareText Text content from comparison page
-     * @param baseDifferences Differences in base document
-     * @param compareDifferences Differences in comparison document
-     * @param baseSize Base page dimensions
-     * @param compareSize Comparison page dimensions
-     * @param pageExistsInBase Whether the page exists in base document
+     * @param basePdf            Base PDF document
+     * @param comparePdf         Compare PDF document
+     * @param basePageIdx        Base page index
+     * @param comparePageIdx     Compare page index
+     * @param baseDocument       Base document info
+     * @param compareDocument    Compare document info
+     * @param comparisonDir      Directory for comparison output
+     * @param baseDifferences    List to add base differences to
+     * @param compareDifferences List to add compare differences to
+     * @throws IOException If there's an error processing the pages
+     */
+    private void processPairPageWithBothDocuments(
+            PDDocument basePdf, PDDocument comparePdf,
+            int basePageIdx, int comparePageIdx,
+            PdfDocument baseDocument, PdfDocument compareDocument,
+            Path comparisonDir,
+            List<Difference> baseDifferences,
+            List<Difference> compareDifferences) throws IOException {
+
+        // Compare text elements
+        List<guraa.pdfcompare.util.TextElement> baseElements =
+                textExtractor.extractTextElementsFromPage(basePdf, basePageIdx);
+        List<guraa.pdfcompare.util.TextElement> compareElements =
+                textExtractor.extractTextElementsFromPage(comparePdf, comparePageIdx);
+
+        List<Difference> textElementDiffs = TextElementComparisonService.compareTextElements(
+                baseElements, compareElements, differenceCalculator);
+
+        // Split element differences by source document
+        List<Difference> baseElementDiffs = textElementDiffs.stream()
+                .filter(diff -> !"added".equals(diff.getChangeType()))
+                .collect(Collectors.toList());
+
+        List<Difference> compareElementDiffs = textElementDiffs.stream()
+                .filter(diff -> !"deleted".equals(diff.getChangeType()))
+                .collect(Collectors.toList());
+
+        baseDifferences.addAll(baseElementDiffs);
+        compareDifferences.addAll(compareElementDiffs);
+
+        // Compare images
+        List<Difference> imageDiffs = imageComparisonService.compareImagesOnPage(
+                basePdf, comparePdf, basePageIdx, comparePageIdx, comparisonDir);
+
+        // Split image differences by source document
+        List<Difference> baseImageDiffs = imageDiffs.stream()
+                .filter(diff -> !"added".equals(diff.getChangeType()))
+                .collect(Collectors.toList());
+
+        List<Difference> compareImageDiffs = imageDiffs.stream()
+                .filter(diff -> !"deleted".equals(diff.getChangeType()))
+                .collect(Collectors.toList());
+
+        baseDifferences.addAll(baseImageDiffs);
+        compareDifferences.addAll(compareImageDiffs);
+
+        // Compare fonts
+        List<Difference> fontDiffs = fontComparisonService.compareFontsOnPage(
+                basePdf, comparePdf, basePageIdx, comparePageIdx,
+                baseDocument, compareDocument, comparisonDir);
+
+        // Split font differences by source document
+        List<Difference> baseFontDiffs = fontDiffs.stream()
+                .filter(diff -> !"added".equals(diff.getChangeType()))
+                .collect(Collectors.toList());
+
+        List<Difference> compareFontDiffs = fontDiffs.stream()
+                .filter(diff -> !"deleted".equals(diff.getChangeType()))
+                .collect(Collectors.toList());
+
+        baseDifferences.addAll(baseFontDiffs);
+        compareDifferences.addAll(compareFontDiffs);
+    }
+
+    /**
+     * Create detailed page analysis for a document pair in smart comparison mode.
+     * Ensures all differences include coordinate information.
+     *
+     * @param comparisonId        The comparison ID
+     * @param pairIndex           The pair index
+     * @param relPageNumber       The relative page number (1-based) within the pair
+     * @param baseDocument        The base document
+     * @param compareDocument     The comparison document
+     * @param baseText            Text content from base page
+     * @param compareText         Text content from comparison page
+     * @param baseDifferences     Differences in base document
+     * @param compareDifferences  Differences in comparison document
+     * @param baseSize            Base page dimensions
+     * @param compareSize         Comparison page dimensions
+     * @param pageExistsInBase    Whether the page exists in base document
      * @param pageExistsInCompare Whether the page exists in comparison document
      * @throws IOException If there's an error saving the page details
      */
@@ -1329,6 +847,19 @@ public class DifferenceDetectionService {
         pageDetails.setBaseExtractedText(baseText);
         pageDetails.setCompareExtractedText(compareText);
 
+        // Ensure all differences have coordinates before storing them
+        if (baseSize != null && pageExistsInBase) {
+            ensureCoordinatesForDifferences(baseDifferences, baseSize.getWidth(), baseSize.getHeight(), 0.3);
+        } else if (compareSize != null && pageExistsInCompare) {
+            ensureCoordinatesForDifferences(baseDifferences, compareSize.getWidth(), compareSize.getHeight(), 0.3);
+        }
+
+        if (compareSize != null && pageExistsInCompare) {
+            ensureCoordinatesForDifferences(compareDifferences, compareSize.getWidth(), compareSize.getHeight(), 0.3);
+        } else if (baseSize != null && pageExistsInBase) {
+            ensureCoordinatesForDifferences(compareDifferences, baseSize.getWidth(), baseSize.getHeight(), 0.3);
+        }
+
         // Store differences
         pageDetails.setBaseDifferences(baseDifferences);
         pageDetails.setCompareDifferences(compareDifferences);
@@ -1360,160 +891,5 @@ public class DifferenceDetectionService {
         Path detailsPath = Paths.get("uploads", "comparisons", comparisonId,
                 "pair_" + pairIndex + "_page_" + relPageNumber + "_details.json");
         objectMapper.writeValue(detailsPath.toFile(), pageDetails);
-    }
-
-    /**
-     * Load pre-extracted font information from the document's fonts directory.
-     *
-     * @param documentId The document ID
-     * @param pageNumber The page number (1-based)
-     * @return List of font information, or null if not available
-     */
-    private List<FontAnalyzer.FontInfo> loadPreExtractedFonts(String documentId, int pageNumber) {
-        try {
-            // Check if the fonts directory exists for this document
-            Path fontsDir = Paths.get("uploads", "documents", documentId, "fonts");
-            if (!Files.exists(fontsDir)) {
-                return null;
-            }
-            
-            // Look for font information files for this page
-            Path fontInfoPath = fontsDir.resolve("page_" + pageNumber + "_fonts.json");
-            if (!Files.exists(fontInfoPath)) {
-                return null;
-            }
-            
-            // Read and parse the font information
-            try {
-                String fontInfoJson = new String(Files.readAllBytes(fontInfoPath));
-                // If the file exists but is empty or invalid, return null
-                if (fontInfoJson == null || fontInfoJson.trim().isEmpty()) {
-                    return null;
-                }
-                
-                // Parse the JSON into a list of FontInfo objects
-                try {
-                    return objectMapper.readValue(fontInfoPath.toFile(), 
-                            objectMapper.getTypeFactory().constructCollectionType(List.class, FontAnalyzer.FontInfo.class));
-                } catch (Exception e) {
-                    log.warn("Error parsing font information for document {} page {}: {}", 
-                            documentId, pageNumber, e.getMessage());
-                    return null;
-                }
-            } catch (Exception e) {
-                log.warn("Error reading font information for document {} page {}: {}", 
-                        documentId, pageNumber, e.getMessage());
-                return null;
-            }
-        } catch (Exception e) {
-            log.warn("Error accessing font information for document {} page {}: {}", 
-                    documentId, pageNumber, e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Parse RGB values from a CSS color string.
-     *
-     * @param color The color string (like "rgb(r,g,b)")
-     * @return Array of RGB values
-     */
-    private int[] parseRgb(String color) {
-        if (color == null) {
-            return null;
-        }
-
-        // Handle rgb() format
-        if (color.startsWith("rgb(") && color.endsWith(")")) {
-            String[] parts = color.substring(4, color.length() - 1).split(",");
-            if (parts.length >= 3) {
-                try {
-                    int r = Integer.parseInt(parts[0].trim());
-                    int g = Integer.parseInt(parts[1].trim());
-                    int b = Integer.parseInt(parts[2].trim());
-                    return new int[]{ r, g, b };
-                } catch (NumberFormatException e) {
-                    return null;
-                }
-            }
-        }
-
-        // Handle hex format (#rrggbb)
-        if (color.startsWith("#") && (color.length() == 7 || color.length() == 4)) {
-            try {
-                if (color.length() == 7) {
-                    int r = Integer.parseInt(color.substring(1, 3), 16);
-                    int g = Integer.parseInt(color.substring(3, 5), 16);
-                    int b = Integer.parseInt(color.substring(5, 7), 16);
-                    return new int[]{ r, g, b };
-                } else {
-                    // Short form #rgb
-                    int r = Integer.parseInt(color.substring(1, 2) + color.substring(1, 2), 16);
-                    int g = Integer.parseInt(color.substring(2, 3) + color.substring(2, 3), 16);
-                    int b = Integer.parseInt(color.substring(3, 4) + color.substring(3, 4), 16);
-                    return new int[]{ r, g, b };
-                }
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Compare two colors.
-     *
-     * @param color1 First color
-     * @param color2 Second color
-     * @return True if colors are similar
-     */
-    private boolean compareColors(String color1, String color2) {
-        if (color1 == null || color2 == null) {
-            return color1 == color2;
-        }
-
-        if (color1.equals(color2)) {
-            return true;
-        }
-
-        // Parse RGB values
-        int[] rgb1 = parseRgb(color1);
-        int[] rgb2 = parseRgb(color2);
-
-        if (rgb1 == null || rgb2 == null) {
-            return false;
-        }
-
-        // Calculate color distance
-        double distance = Math.sqrt(
-                Math.pow(rgb1[0] - rgb2[0], 2) +
-                        Math.pow(rgb1[1] - rgb2[1], 2) +
-                        Math.pow(rgb1[2] - rgb2[2], 2)
-        );
-
-        // Colors are similar if distance is less than a threshold
-        return distance < 30; // Threshold of 30 (out of 441.67 max)
-    }
-
-    /**
-     * Text element match structure.
-     */
-    private static class ElementMatch {
-        private final TextElement baseElement;
-        private final TextElement compareElement;
-        private final double similarity;
-
-        public ElementMatch(TextElement baseElement,
-                            TextElement compareElement,
-                            double similarity) {
-            this.baseElement = baseElement;
-            this.compareElement = compareElement;
-            this.similarity = similarity;
-        }
-
-        public TextElement getBaseElement() { return baseElement; }
-        public TextElement getCompareElement() { return compareElement; }
-        public double getSimilarity() { return similarity; }
     }
 }

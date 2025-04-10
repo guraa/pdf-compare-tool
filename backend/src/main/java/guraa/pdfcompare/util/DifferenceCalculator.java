@@ -385,7 +385,6 @@ public class DifferenceCalculator {
             return "minor"; // Default for other types
         }
     }
-
     /**
      * Estimate coordinates for differences without position data.
      * This method uses context information to estimate the position.
@@ -426,4 +425,5 @@ public class DifferenceCalculator {
         // Set the estimated position and bounds
         setPositionAndBounds(difference, x, y, defaultWidth, defaultHeight);
     }
+
 }
