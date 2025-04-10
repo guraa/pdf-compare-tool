@@ -10,6 +10,7 @@ import guraa.pdfcompare.util.PdfRenderer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
+
 import org.apache.pdfbox.rendering.ImageType;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.scheduling.annotation.Async;

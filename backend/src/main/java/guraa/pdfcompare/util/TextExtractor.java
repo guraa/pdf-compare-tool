@@ -3,18 +3,14 @@ package guraa.pdfcompare.util;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.text.TextPosition;
 import org.springframework.stereotype.Component;
 
-import java.awt.geom.Rectangle2D;
 import java.io.IOException;
 import java.io.StringWriter;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Utility class for extracting text from PDF documents with improved positioning information.
@@ -22,7 +18,6 @@ import java.util.UUID;
 @Slf4j
 @Component
 public class TextExtractor {
-
     /**
      * Extract text from a specific page in a PDF document.
      *
@@ -51,6 +46,7 @@ public class TextExtractor {
         }
     }
 
+
     /**
      * Extract text elements with detailed positioning information from a page.
      *
@@ -63,6 +59,10 @@ public class TextExtractor {
         try {
             // Create a custom implementation of PDFTextStripper
             PositionedTextStripper stripper = new PositionedTextStripper();
+
+            // Get the page height for coordinate transformation
+            PDPage currentPage = document.getPage(pageIndex);
+            float pageHeight = currentPage.getMediaBox().getHeight();
 
             // Set the page range to extract text from a specific page
             stripper.setStartPage(pageIndex + 1); // 1-based page numbers
@@ -85,36 +85,35 @@ public class TextExtractor {
                 // Create a unique ID for each text element
                 String id = UUID.randomUUID().toString();
 
-                // Get page height for coordinate transformation
-                float pageHeight = pos.getPage().getMediaBox().getHeight();
-                
-                // PDFBox Y is baseline from bottom-left. We need top-left Y for the element's bounding box top edge.
+                // Correct Y-coordinate transformation
+                // PDF baseline Y is from bottom, we want top-left origin
                 float pdfBoxY = (float) pos.getY();
-                float pdfBoxHeight = (float) pos.getHeightDir(); // Use height adjusted for direction/rotation
+                float pdfBoxHeight = (float) pos.getHeightDir(); // Height adjusted for direction/rotation
 
-                // Calculate the Y coordinate of the top edge relative to the top-left origin
-                // Formula: pageHeight - (baselineY_from_bottom + ascent)
-                // Approximating ascent with height for now: pageHeight - (pdfBoxY + pdfBoxHeight) - this seems wrong.
-                // Let's try: pageHeight - pdfBoxY. This gives baseline relative to top.
-                // To get top edge from top-left: pageHeight - (pdfBoxY + ascent).
-                // Let's use a simpler approximation: top_y = pageHeight - pdfBoxY
-                // This sends the baseline relative to top-left. Frontend might need adjustment OR
-                // we calculate top edge here: top_y = pageHeight - (pdfBoxY + pdfBoxHeight) -- Let's try this first.
-                // It assumes pdfBoxY is bottom edge, which is wrong. It's baseline.
-                
-                // Correct approach: Transform baseline Y to top-left origin.
-                float transformedY = pageHeight - pdfBoxY;
+                // Transform Y coordinate to top-left origin
+                // pageHeight - pdfBoxY gives baseline from top
+                // Subtract height to get the top edge from top-left origin
+                float transformedY = pageHeight - pdfBoxY - pdfBoxHeight;
 
-                // Create a TextElement with positioning information, using the TRANSFORMED Y (baseline from top)
-                // The grouping logic below will calculate the final bounding box based on these transformed coordinates.
+                // Normalize font name and handle potential ToUnicode CMap errors
+                String fontName;
+                try {
+                    PDFont font = pos.getFont();
+                    fontName = normalizeFontName(font.getName());
+                } catch (Exception e) {
+                    log.warn("Error getting font name: {}", e.getMessage());
+                    fontName = "Unknown";
+                }
+
+                // Create a TextElement with corrected positioning information
                 TextElement element = new TextElement(
                         id,
                         pos.getUnicode(),
                         (float) pos.getX(),
-                        transformedY, // Use baseline relative to top-left for initial element
+                        transformedY, // Corrected Y coordinate
                         (float) pos.getWidth(),
-                        pdfBoxHeight, // Use directional height
-                        pos.getFont().getName(),
+                        pdfBoxHeight,
+                        fontName,
                         pos.getFontSize(),
                         pos.getFontSizeInPt()
                 );
@@ -129,6 +128,7 @@ public class TextExtractor {
             return Collections.emptyList(); // Return empty list instead of null
         }
     }
+
 
     /**
      * Group text elements to form words and lines.
@@ -283,7 +283,7 @@ public class TextExtractor {
         float finalHeight = wordMaxY - wordMinY; // Height based on min/max Y
 
         // Ensure dimensions are valid
-        if (finalWidth <= 0) finalWidth = 1.0f; 
+        if (finalWidth <= 0) finalWidth = 1.0f;
         if (finalHeight <= 0) finalHeight = fontSize > 0 ? fontSize : 10.0f; // Use font size if height is invalid
 
         // Create a word element using the calculated top-left corner (wordMinX, wordMinY) and dimensions
@@ -299,6 +299,25 @@ public class TextExtractor {
                 fontSize
         );
     }
+
+    /**
+     * Normalize font name by removing prefixes like "OKDFSH+" or similar.
+     *
+     * @param originalName The original font name
+     * @return Normalized font name
+     */
+    private String normalizeFontName(String originalName) {
+        if (originalName == null) return "Unknown";
+
+        // Remove common prefixes like "OKDFSH+" or other embedded font markers
+        int plusIndex = originalName.indexOf('+');
+        if (plusIndex != -1 && plusIndex < originalName.length() - 1) {
+            return originalName.substring(plusIndex + 1);
+        }
+
+        return originalName;
+    }
+
 
     /**
      * Custom PDFTextStripper that captures position information.

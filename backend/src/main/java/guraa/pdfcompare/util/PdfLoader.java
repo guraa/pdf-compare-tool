@@ -1,7 +1,7 @@
 package guraa.pdfcompare.util;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.pdfbox.io.MemoryUsageSetting;
+import org.apache.pdfbox.io.RandomAccessBufferedFileInputStream;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 
@@ -19,7 +19,6 @@ import java.nio.file.StandardCopyOption;
 @Slf4j
 public class PdfLoader {
 
-
     /**
      * Load a PDF document with maximum error resilience.
      * Uses multiple fallback strategies for handling problematic files.
@@ -31,8 +30,8 @@ public class PdfLoader {
     public static PDDocument loadDocumentWithFallbackOptions(File file) throws IOException {
         System.setProperty("org.apache.pdfbox.baseParser.pushBackSize", "8192");
         try {
-            // First try standard loading with memory usage settings
-            return PDDocument.load(file, createMemorySettings());
+            // First try standard loading
+            return PDDocument.load(file);
         } catch (InvalidPasswordException e) {
             throw e; // Password protected PDFs need special handling
         } catch (Exception e) {
@@ -49,46 +48,21 @@ public class PdfLoader {
                 return loadWithSanitizedCopy(file);
             }
 
-            // Try parent class fallback options if sanitizing doesn't work
+            // Try with RandomAccessBufferedFileInputStream
             try {
-                MemoryUsageSetting memSettings = MemoryUsageSetting.setupMainMemoryOnly();
-                PDDocument doc = PDDocument.load(file, memSettings);
-                log.info("Successfully loaded PDF with memory-only settings");
-                return doc;
+                return PDDocument.load(new RandomAccessBufferedFileInputStream(file));
             } catch (Exception e2) {
-                log.warn("Error loading PDF with memory-only settings: {}", e2.getMessage());
+                log.warn("Error loading PDF with RandomAccessBufferedFileInputStream: {}", e2.getMessage());
+            }
 
-                // Try with strict memory usage settings (temp files allowed)
-                try {
-                    MemoryUsageSetting memSettings = MemoryUsageSetting.setupTempFileOnly();
-                    PDDocument doc = PDDocument.load(file, memSettings);
-                    log.info("Successfully loaded PDF with temp file settings");
-                    return doc;
-                } catch (Exception e3) {
-                    log.warn("Error loading PDF with temp file settings: {}", e3.getMessage());
-
-                    // Last-ditch attempt - try with buffered stream approach
-                    try (FileInputStream fis = new FileInputStream(file)) {
-                        PDDocument doc = PDDocument.load(fis);
-                        log.info("Successfully loaded PDF from stream");
-                        return doc;
-                    } catch (Exception e4) {
-                        log.error("Failed to load PDF with all fallback options: {}", e4.getMessage());
-                        throw new IOException("Could not load PDF document after multiple attempts", e4);
-                    }
-                }
+            // Try with direct file input stream
+            try (FileInputStream fis = new FileInputStream(file)) {
+                return PDDocument.load(fis);
+            } catch (Exception e3) {
+                log.error("Failed to load PDF with all fallback options: {}", e3.getMessage());
+                throw new IOException("Could not load PDF document after multiple attempts", e3);
             }
         }
-    }
-
-    /**
-     * Create memory usage settings optimized for reliability.
-     *
-     * @return Memory usage settings
-     */
-    private static MemoryUsageSetting createMemorySettings() {
-        // Use memory with temp file fallback, up to 50MB in memory
-        return MemoryUsageSetting.setupMixed(50 * 1024 * 1024);
     }
 
     /**
@@ -105,29 +79,21 @@ public class PdfLoader {
             // Create a sanitized copy in a temporary location
             sanitizedFile = createSanitizedCopy(file);
 
-            // Try loading with memory-only settings first
+            // Try loading with RandomAccessBufferedFileInputStream
             try {
-                MemoryUsageSetting memSettings = MemoryUsageSetting.setupMainMemoryOnly();
-                PDDocument doc = PDDocument.load(sanitizedFile, memSettings);
-                log.info("Successfully loaded sanitized PDF with memory-only settings");
-                return doc;
-            } catch (Exception e) {
-                log.warn("Error loading sanitized PDF with memory-only settings: {}", e.getMessage());
+                return PDDocument.load(new RandomAccessBufferedFileInputStream(sanitizedFile));
+            } catch (Exception e1) {
+                log.warn("Error loading sanitized PDF with RandomAccessBufferedFileInputStream: {}", e1.getMessage());
 
-                // Try with temp-file settings
+                // Fallback to standard loading
                 try {
-                    MemoryUsageSetting memSettings = MemoryUsageSetting.setupTempFileOnly();
-                    PDDocument doc = PDDocument.load(sanitizedFile, memSettings);
-                    log.info("Successfully loaded sanitized PDF with temp file settings");
-                    return doc;
+                    return PDDocument.load(sanitizedFile);
                 } catch (Exception e2) {
-                    log.warn("Error loading sanitized PDF with temp file settings: {}", e2.getMessage());
+                    log.warn("Error loading sanitized PDF with standard loading: {}", e2.getMessage());
 
                     // Last attempt with FileInputStream
                     try (FileInputStream fis = new FileInputStream(sanitizedFile)) {
-                        PDDocument doc = PDDocument.load(fis);
-                        log.info("Successfully loaded sanitized PDF from stream");
-                        return doc;
+                        return PDDocument.load(fis);
                     } catch (Exception e3) {
                         log.error("Failed to load sanitized PDF with all fallback options: {}", e3.getMessage());
                         throw new IOException("Could not load sanitized PDF document after multiple attempts", e3);
