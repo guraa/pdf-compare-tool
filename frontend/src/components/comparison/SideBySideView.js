@@ -10,9 +10,12 @@ import './SideBySideView.css';
 const SideBySideView = ({ comparisonId }) => {
   const isMounted = useRef(true);
   const fetchInProgress = useRef(false);
-  
-  const { 
-    state, 
+  const scrollContainerRef = useRef(null);
+  const baseContentRef = useRef(null);
+  const compareContentRef = useRef(null);
+
+  const {
+    state,
     setError,
     setLoading,
     setDocumentPairs,
@@ -21,7 +24,7 @@ const SideBySideView = ({ comparisonId }) => {
     setSelectedDifference,
     updateViewSettings
   } = useComparison();
-  
+
   const [activeView, setActiveView] = useState('matching');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageDetails, setPageDetails] = useState(null);
@@ -34,7 +37,6 @@ const SideBySideView = ({ comparisonId }) => {
   const [showDifferencePanel, setShowDifferencePanel] = useState(true);
   const [zoom, setZoom] = useState(1.0);
 
-  // Clean up blob URLs on unmount
   useEffect(() => {
     return () => {
       if (baseImageUrl) URL.revokeObjectURL(baseImageUrl);
@@ -42,7 +44,6 @@ const SideBySideView = ({ comparisonId }) => {
     };
   }, [baseImageUrl, compareImageUrl]);
 
-  // Safely extract selected pair from state
   const selectedPair = useMemo(() => {
     if (state.documentPairs && state.documentPairs.length > 0) {
       return state.documentPairs[state.selectedDocumentPairIndex || 0];
@@ -50,7 +51,6 @@ const SideBySideView = ({ comparisonId }) => {
     return null;
   }, [state.documentPairs, state.selectedDocumentPairIndex]);
 
-  // Memoized max page count calculation
   const maxPageCount = useMemo(() => {
     if (!selectedPair) return 1;
     const basePages = selectedPair.baseEndPage - selectedPair.baseStartPage + 1;
@@ -58,33 +58,25 @@ const SideBySideView = ({ comparisonId }) => {
     return Math.max(basePages, comparePages);
   }, [selectedPair]);
 
-  // Fetch document pairs on mount
   useEffect(() => {
     const fetchDocumentPairs = async () => {
       if (!comparisonId || fetchInProgress.current) return;
-      
+
       try {
         fetchInProgress.current = true;
         setLoading(true);
-        
+
         const pairs = await getDocumentPairs(comparisonId);
-        
+
         if (pairs && pairs.length > 0) {
-          // Set document pairs in context
           setDocumentPairs(pairs);
-          
-          // Find first matched pair
           const matchedPairIndex = pairs.findIndex(pair => pair.matched);
           const initialIndex = matchedPairIndex >= 0 ? matchedPairIndex : 0;
-          
-          // Set selected pair index
+
           setSelectedDocumentPairIndex(initialIndex);
-          
-          // Switch to comparison view if there's at least one matched pair
+
           if (matchedPairIndex >= 0) {
             setActiveView('comparison');
-            
-            // Reset to first page of document pair
             setCurrentPage(1);
           }
         } else {
@@ -100,18 +92,16 @@ const SideBySideView = ({ comparisonId }) => {
         }
       }
     };
-    
+
     fetchDocumentPairs();
   }, [comparisonId]);
 
-  // Fetch page details and images
   useEffect(() => {
     const fetchPageData = async () => {
-      // Ensure we have all required data
-      if (!comparisonId || !selectedPair || 
-          !state.baseFile?.fileId || 
-          !state.compareFile?.fileId ||
-          activeView !== 'comparison') {
+      if (!comparisonId || !selectedPair ||
+        !state.baseFile?.fileId ||
+        !state.compareFile?.fileId ||
+        activeView !== 'comparison') {
         return;
       }
 
@@ -120,14 +110,12 @@ const SideBySideView = ({ comparisonId }) => {
       setBaseDifferences([]);
       setCompareDifferences([]);
 
-      // Clean up previous blob URLs
       if (baseImageUrl) URL.revokeObjectURL(baseImageUrl);
       if (compareImageUrl) URL.revokeObjectURL(compareImageUrl);
       setBaseImageUrl(null);
       setCompareImageUrl(null);
 
       try {
-        // Fetch page details
         const details = await getDocumentPageDetails(
           comparisonId,
           state.selectedDocumentPairIndex,
@@ -135,18 +123,15 @@ const SideBySideView = ({ comparisonId }) => {
           state.filters
         );
 
-        // Process differences
         if (details) {
           setPageDetails(details);
           setBaseDifferences(details.baseDifferences || []);
           setCompareDifferences(details.compareDifferences || []);
         }
 
-        // Calculate specific page numbers
         const basePage = selectedPair.baseStartPage + currentPage - 1;
         const comparePage = selectedPair.compareStartPage + currentPage - 1;
 
-        // Fetch images as blobs
         const fetchImage = async (fileId, pageNum, docType) => {
           if (!fileId || pageNum < 1) return null;
 
@@ -163,7 +148,6 @@ const SideBySideView = ({ comparisonId }) => {
           }
         };
 
-        // Fetch base and compare images
         const [baseUrl, compareUrl] = await Promise.all([
           fetchImage(state.baseFile.fileId, basePage, 'base'),
           fetchImage(state.compareFile.fileId, comparePage, 'compare')
@@ -182,10 +166,10 @@ const SideBySideView = ({ comparisonId }) => {
 
     fetchPageData();
   }, [
-    comparisonId, 
-    selectedPair, 
-    currentPage, 
-    state.selectedDocumentPairIndex, 
+    comparisonId,
+    selectedPair,
+    currentPage,
+    state.selectedDocumentPairIndex,
     state.baseFile?.fileId,
     state.compareFile?.fileId,
     state.filters,
@@ -205,10 +189,31 @@ const SideBySideView = ({ comparisonId }) => {
     updateViewSettings({ zoom: newZoom });
   };
 
-  // Render for document matching view
+  // Sync scrolling
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    const syncScroll = (e) => {
+      if (baseContentRef.current && compareContentRef.current) {
+        const scrollTop = e.target.scrollTop;
+        baseContentRef.current.scrollTop = scrollTop;
+        compareContentRef.current.scrollTop = scrollTop;
+      }
+    };
+
+    if (container) {
+      container.addEventListener('scroll', syncScroll);
+    }
+
+    return () => {
+      if (container) {
+        container.removeEventListener('scroll', syncScroll);
+      }
+    };
+  }, []);
+
   if (activeView === 'matching') {
     return (
-      <DocumentMatchingView 
+      <DocumentMatchingView
         comparisonId={comparisonId}
         onSelectDocumentPair={(pairIndex, pair) => {
           setSelectedDocumentPairIndex(pairIndex);
@@ -219,7 +224,6 @@ const SideBySideView = ({ comparisonId }) => {
     );
   }
 
-  // If no selected pair, show loading
   if (!selectedPair) {
     return (
       <div className="loading-container">
@@ -229,118 +233,107 @@ const SideBySideView = ({ comparisonId }) => {
     );
   }
 
-  // Render comparison view
   return (
     <div className="pdf-comparison-container">
       <div className="comparison-header">
         <div className="zoom-controls">
-          <button onClick={handleZoomOut} title="Zoom Out">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z"/>
-            </svg>
-          </button>
-          
+          <button onClick={handleZoomOut} title="Zoom Out">-</button>
           <button onClick={() => setZoom(1.0)} title="Reset Zoom">
             {Math.round(zoom * 100)}%
           </button>
-          
-          <button onClick={handleZoomIn} title="Zoom In">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-              <path d="M12 10h-2v-2h-1v2h-2v1h2v2h1v-2h2z"/>
-            </svg>
-          </button>
+          <button onClick={handleZoomIn} title="Zoom In">+</button>
         </div>
       </div>
-      
+
       <div className="comparison-content">
-        <div className={`documents-container ${showDifferencePanel ? 'with-panel' : ''}`}>
-          <div className="document-view base-document">
-            <div className="document-header">
-              <h4>Base Document</h4>
-              <div className="page-info">
-                Page {selectedPair.baseStartPage + currentPage - 1}
+        <div
+          className={`documents-container-scroll-wrapper ${showDifferencePanel ? 'with-panel' : ''}`}
+          ref={scrollContainerRef}
+        >
+          <div className="documents-inner">
+            <div className="document-view base-document" ref={baseContentRef}>
+              <div className="document-header">
+                <h4>Base Document</h4>
+                <div className="page-info">
+                  Page {selectedPair.baseStartPage + currentPage - 1}
+                </div>
+              </div>
+              <div className="document-content">
+                {loadingImages ? (
+                  <Spinner size="medium" />
+                ) : baseImageUrl ? (
+                  <img
+                    src={baseImageUrl}
+                    alt={`Base document page ${selectedPair.baseStartPage + currentPage - 1}`}
+                    style={{
+                      width: `${100 * zoom}%`,
+                      height: 'auto',
+                      objectFit: 'contain'
+                    }}
+                  />
+                ) : (
+                  <div>No base document page available</div>
+                )}
               </div>
             </div>
-            <div className="document-content">
-              {loadingImages ? (
-                <Spinner size="medium" />
-              ) : baseImageUrl ? (
-                <img 
-                  src={baseImageUrl} 
-                  alt={`Base document page ${selectedPair.baseStartPage + currentPage - 1}`}
-                  style={{ 
-                    width: `${100 * zoom}%`, 
-                    height: 'auto',
-                    objectFit: 'contain'
-                  }}
-                />
-              ) : (
-                <div>No base document page available</div>
-              )}
-            </div>
-          </div>
-          
-          <div className="document-view compare-document">
-            <div className="document-header">
-              <h4>Compare Document</h4>
-              <div className="page-info">
-                Page {selectedPair.compareStartPage + currentPage - 1}
+
+            <div className="document-view compare-document" ref={compareContentRef}>
+              <div className="document-header">
+                <h4>Compare Document</h4>
+                <div className="page-info">
+                  Page {selectedPair.compareStartPage + currentPage - 1}
+                </div>
               </div>
-            </div>
-            <div className="document-content">
-              {loadingImages ? (
-                <Spinner size="medium" />
-              ) : compareImageUrl ? (
-                <img 
-                  src={compareImageUrl} 
-                  alt={`Compare document page ${selectedPair.compareStartPage + currentPage - 1}`}
-                  style={{ 
-                    width: `${100 * zoom}%`, 
-                    height: 'auto',
-                    objectFit: 'contain'
-                  }}
-                />
-              ) : (
-                <div>No compare document page available</div>
-              )}
+              <div className="document-content">
+                {loadingImages ? (
+                  <Spinner size="medium" />
+                ) : compareImageUrl ? (
+                  <img
+                    src={compareImageUrl}
+                    alt={`Compare document page ${selectedPair.compareStartPage + currentPage - 1}`}
+                    style={{
+                      width: `${100 * zoom}%`,
+                      height: 'auto',
+                      objectFit: 'contain'
+                    }}
+                  />
+                ) : (
+                  <div>No compare document page available</div>
+                )}
+              </div>
             </div>
           </div>
         </div>
-        
+
         {showDifferencePanel && (
           <div className="difference-panel">
-            <SimplifiedDifferenceList 
-              result={pageDetails}
-            />
+            <SimplifiedDifferenceList result={pageDetails} />
           </div>
         )}
       </div>
-      
+
       <div className="comparison-footer">
         <div className="page-navigation">
-          <button 
+          <button
             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
             disabled={currentPage <= 1 || loadingImages}
           >
             Previous Page
           </button>
-          
           <div className="page-indicator">
             Page {currentPage} of {maxPageCount}
           </div>
-          
-          <button 
+          <button
             onClick={() => setCurrentPage(prev => Math.min(maxPageCount, prev + 1))}
             disabled={currentPage >= maxPageCount || loadingImages}
           >
             Next Page
           </button>
         </div>
-        
+
         <div className="view-controls">
           <div className="highlight-controls">
-            <select 
+            <select
               value={highlightMode}
               onChange={(e) => setHighlightMode(e.target.value)}
             >
@@ -351,7 +344,7 @@ const SideBySideView = ({ comparisonId }) => {
               <option value="none">No Highlights</option>
             </select>
           </div>
-          
+
           <div className="panel-toggle">
             <button onClick={() => setShowDifferencePanel(prev => !prev)}>
               {showDifferencePanel ? 'Hide Differences' : 'Show Differences'}

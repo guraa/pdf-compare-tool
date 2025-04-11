@@ -1120,3 +1120,11 @@ org.apache.pdfbox.contentstream.operator.state.EmptyGraphicsStackException: Cann
 2025-04-11 13:09:44 [http-nio-3010-exec-2] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison 8df82220-135c-4304-8569-f0dcc2b80a48 with filters: {severity=null, types=text,font,image,style,metadata, search=null}
 2025-04-11 13:11:07 [http-nio-3010-exec-9] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
 2025-04-11 13:11:07 [http-nio-3010-exec-9] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison 8df82220-135c-4304-8569-f0dcc2b80a48 with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-11 13:17:00 [http-nio-3010-exec-5] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-11 13:17:00 [http-nio-3010-exec-5] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison 8df82220-135c-4304-8569-f0dcc2b80a48 with filters: {severity=null, types=text,font,image,style,metadata, search=null}
+2025-04-11 13:17:49 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-11 13:17:49
+2025-04-11 13:17:49 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-11 13:17:49 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 10,20 MB, documents: 8,16 MB, comparisons: 2,04 MB, temp: 0 B
+2025-04-11 13:17:49 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 53,96 MB, max memory: 7,91 GB, processors: 16
+2025-04-11 13:20:54 [http-nio-3010-exec-10] INFO  g.p.controller.ComparisonController - Filtering by types: text,font,image,style,metadata
+2025-04-11 13:20:54 [http-nio-3010-exec-10] INFO  g.p.controller.ComparisonController - Received request for page 1 of document pair 0 in comparison 8df82220-135c-4304-8569-f0dcc2b80a48 with filters: {severity=null, types=text,font,image,style,metadata, search=null}

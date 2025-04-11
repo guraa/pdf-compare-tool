@@ -345,3 +345,33 @@
 .documents-container {
   animation: fadeIn var(--transition-medium);
 }
+.documents-container-scroll-wrapper {
+  height: calc(100vh - 200px); /* Adjust as needed to fit header/footer */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+
+.documents-inner {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.document-view {
+  flex: 1;
+  overflow: hidden;
+}
+
+.document-content {
+  display: flex;
+  justify-content: center;
+  align-items: start;
+  padding-bottom: 40px;
+}
+
+.document-view img {
+  display: block;
+  width: 100%;
+}
