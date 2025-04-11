@@ -44,12 +44,19 @@ const PDFRenderer = ({
     console.log('PDFRenderer DEBUG: Differences array:', differences);
     
     // Check if differences have valid coordinates
+    differences.forEach(diff => {
+
+      console.log(typeof diff.x)
+      console.log(diff.x == 'number')
+      console.log(diff.width)
+      console.log(diff.height)
+    });
     const validDiffs = differences.filter(diff => 
-      diff && diff.position && diff.bounds && 
-      typeof diff.position.x === 'number' && 
-      typeof diff.position.y === 'number' &&
-      typeof diff.bounds.width === 'number' &&
-      typeof diff.bounds.height === 'number'
+      diff  && 
+      typeof diff.x === 'number' && 
+      typeof diff.y === 'number' &&
+      typeof diff.width === 'number' &&
+      typeof diff.height === 'number'
     );
     
     console.log(`PDFRenderer DEBUG: Valid differences with coordinates: ${validDiffs.length} of ${differences.length}`);
@@ -113,7 +120,7 @@ const PDFRenderer = ({
   };
   
   // Draw highlights on canvas - with additional debugging
-  useEffect(() => {
+  useEffect(async () => {
     if (!canvasRef.current || !imageLoaded || highlightMode === 'none') {
       console.log(`PDFRenderer DEBUG: Skipping canvas drawing - canvasRef exists: ${!!canvasRef.current}, imageLoaded: ${imageLoaded}, highlightMode: ${highlightMode}`);
       return;
@@ -121,10 +128,15 @@ const PDFRenderer = ({
     
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
+
+    const page = await page.getPage(page);
+    const pdfViewport = page.getViewport({ scale: 1.5 });
     
     // Set canvas dimensions
     canvas.width = dimensions.width;
     canvas.height = dimensions.height;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     console.log(`PDFRenderer DEBUG: Canvas dimensions set to ${canvas.width}x${canvas.height}`);
     
@@ -155,7 +167,7 @@ const PDFRenderer = ({
     // Loop through differences and draw them
     differences.forEach((diff, index) => {
       // Skip if no position or bounds data
-      if (!diff.position || !diff.bounds) {
+      if (!diff.x || !diff.height) {
         console.log(`PDFRenderer DEBUG: Skipping difference #${index} - missing position or bounds`);
         return;
       }
@@ -167,10 +179,10 @@ const PDFRenderer = ({
       }
       
       // Apply zoom to coordinates
-      const x = diff.position.x * zoom;
-      const y = diff.position.y * zoom;
-      const width = diff.bounds.width * zoom;
-      const height = diff.bounds.height * zoom;
+      const x = diff.x * zoom;
+      const y = diff.y * zoom;
+      const width = diff.width * zoom;
+      const height = diff.height * zoom;
       
       console.log(`PDFRenderer DEBUG: Drawing difference #${index} at (${x},${y}) with size ${width}x${height}`);
       

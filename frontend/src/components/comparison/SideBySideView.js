@@ -182,12 +182,12 @@ const SideBySideView = ({ comparisonId }) => {
         
         <div className="document-info">
           <h3>Document Comparison</h3>
-          <div className="page-ranges">
-            <span>Base: Pages {selectedPair.baseStartPage}-{selectedPair.baseEndPage}</span>
-            <span className="separator">|</span>
-            <span>Compare: Pages {selectedPair.compareStartPage}-{selectedPair.compareEndPage}</span>
-          </div>
+          
         </div>
+        <div className="page-ranges">
+        <span>Base: Pages {selectedPair.baseStartPage}-{selectedPair.baseEndPage} - Compare: Pages {selectedPair.compareStartPage}-{selectedPair.compareEndPage}</span>
+
+          </div>
         
         {/* Zoom controls */}
         <div className="zoom-controls">
