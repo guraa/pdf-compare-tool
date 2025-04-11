@@ -1,0 +1,38 @@
+.difference-highlighter {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: auto;
+    z-index: 10;
+    cursor: pointer;
+  }
+  
+  /* Highlight effect for hovering */
+  .difference-highlighter:hover {
+    cursor: pointer;
+  }
+  
+  /* Animations for selected differences */
+  @keyframes pulse-highlight {
+    0% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.02);
+      opacity: 0.8;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  
+  .selected-highlight {
+    animation: pulse-highlight 1.5s infinite;
+  }
+  
+  /* Dark mode adjustments */
+  [data-theme="dark"] .difference-highlighter {
+    filter: brightness(0.9);
+  }

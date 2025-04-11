@@ -1,0 +1,110 @@
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius-s);
+    padding: var(--spacing-xs);
+    box-shadow: var(--shadow-light);
+    margin: var(--spacing-xs) 0;
+  }
+  
+  .zoom-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background-color: var(--primary-light);
+    color: var(--primary-color);
+    border: none;
+    border-radius: var(--border-radius-s);
+    padding: var(--spacing-xs);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  
+  .zoom-button:hover {
+    background-color: var(--primary-color);
+    color: white;
+  }
+  
+  .zoom-button:disabled {
+    background-color: var(--text-disabled);
+    color: var(--text-on-primary);
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+  
+  .zoom-button svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+  }
+  
+  .zoom-value {
+    min-width: 60px;
+    text-align: center;
+    padding: var(--spacing-xs) var(--spacing-s);
+    font-size: var(--font-size-s);
+    font-weight: 500;
+    color: var(--text-primary);
+    background-color: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-s);
+    cursor: pointer;
+  }
+  
+  .zoom-value:hover {
+    background-color: var(--primary-light);
+    color: var(--primary-color);
+  }
+  
+  /* Dark mode adjustments */
+  [data-theme="dark"] .zoom-controls {
+    background-color: var(--surface-color);
+  }
+  
+  [data-theme="dark"] .zoom-button {
+    background-color: var(--primary-dark);
+    color: var(--text-on-primary);
+  }
+  
+  [data-theme="dark"] .zoom-value {
+    background-color: var(--surface-color);
+    color: var(--text-primary);
+    border-color: var(--primary-dark);
+  }
+  
+  /* Compact mode for PDF Renderer */
+  .pdf-controls .zoom-controls {
+    background: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+  }
+  
+  .pdf-controls .zoom-button,
+  .pdf-controls .zoom-value {
+    background: none;
+    border: none;
+    color: white;
+  }
+  
+  .pdf-controls .zoom-button:hover,
+  .pdf-controls .zoom-value:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+  
+  /* Responsive styles */
+  @media (max-width: 768px) {
+    .zoom-controls {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    
+    .zoom-value {
+      min-width: 50px;
+      font-size: var(--font-size-xs);
+    }
+  }
