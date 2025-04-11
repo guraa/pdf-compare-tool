@@ -2,29 +2,59 @@ import React, { useEffect, useRef } from 'react';
 import './DifferenceTooltip.css';
 
 /**
- * DifferenceTooltip component - Shows details when hovering over differences
- * @param {Object} props Component props
- * @param {Object} props.difference The difference object to display
- * @param {boolean} props.visible Whether the tooltip is visible
- * @param {number} props.x X coordinate for the tooltip
- * @param {number} props.y Y coordinate for the tooltip
+ * Enhanced DifferenceTooltip component
+ * Shows detailed information when hovering over differences
  */
-const DifferenceTooltip = ({ difference, visible, x, y }) => {
+const DifferenceTooltip = ({ 
+  difference, 
+  visible, 
+  x, 
+  y 
+}) => {
   const tooltipRef = useRef(null);
 
-  // Update tooltip position
+  // Position the tooltip relative to cursor
   useEffect(() => {
     if (tooltipRef.current && visible) {
-      tooltipRef.current.style.left = `${x}px`;
-      tooltipRef.current.style.top = `${y}px`;
+      const tooltip = tooltipRef.current;
+      
+      // Adjust position to account for tooltip size and viewport edges
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // Get tooltip dimensions
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const tooltipWidth = tooltipRect.width;
+      const tooltipHeight = tooltipRect.height;
+      
+      // Position tooltip above cursor by default
+      let posX = x - tooltipWidth / 2;
+      let posY = y - tooltipHeight - 10;
+      
+      // Adjust if tooltip would go off-screen
+      if (posX < 10) posX = 10;
+      if (posX + tooltipWidth > windowWidth - 10) posX = windowWidth - tooltipWidth - 10;
+      
+      // If tooltip would go above viewport, position it below cursor instead
+      if (posY < 10) {
+        posY = y + 20;
+        tooltip.classList.add('below');
+      } else {
+        tooltip.classList.remove('below');
+      }
+      
+      // Apply position
+      tooltip.style.left = `${posX}px`;
+      tooltip.style.top = `${posY}px`;
     }
   }, [x, y, visible]);
 
+  // Don't render anything if there's no difference or tooltip is hidden
   if (!difference || !visible) {
     return null;
   }
 
-  // Format the difference text based on type
+  // Format the difference content based on type
   const getFormattedContent = () => {
     const { type, changeType } = difference;
 
@@ -47,6 +77,10 @@ const DifferenceTooltip = ({ difference, visible, x, y }) => {
               <span className="label">Compare:</span> {difference.compareText}
             </div>
           )}
+          
+          {!difference.baseText && !difference.compareText && difference.text && (
+            <div className="diff-text">{difference.text}</div>
+          )}
         </div>
       );
     }
@@ -60,9 +94,15 @@ const DifferenceTooltip = ({ difference, visible, x, y }) => {
           </div>
           <div className="image-info">
             {difference.imageName && <div>Name: {difference.imageName}</div>}
+            {difference.description && <div>{difference.description}</div>}
             {difference.bounds && (
               <div className="dimension-info">
-                Size: {difference.bounds.width}x{difference.bounds.height}
+                Size: {Math.round(difference.bounds.width)} x {Math.round(difference.bounds.height)} px
+              </div>
+            )}
+            {changeType && (
+              <div className="change-info">
+                Change: <span className={`change-type ${changeType}`}>{changeType}</span>
               </div>
             )}
           </div>
@@ -77,8 +117,14 @@ const DifferenceTooltip = ({ difference, visible, x, y }) => {
           <div className="tooltip-header">
             <span className="diff-type">Font {changeType || 'Difference'}</span>
           </div>
-          {difference.fontName && <div>Font: {difference.fontName}</div>}
-          {difference.text && <div>Text: "{difference.text}"</div>}
+          {difference.fontName && <div className="font-name">Font: {difference.fontName}</div>}
+          {difference.baseFont && difference.compareFont && (
+            <div className="font-change">
+              <div>From: <span className="base-font">{difference.baseFont}</span></div>
+              <div>To: <span className="compare-font">{difference.compareFont}</span></div>
+            </div>
+          )}
+          {difference.text && <div className="text-sample">Text: "{difference.text}"</div>}
         </div>
       );
     }
@@ -91,27 +137,52 @@ const DifferenceTooltip = ({ difference, visible, x, y }) => {
             <span className="diff-type">Style {changeType || 'Difference'}</span>
           </div>
           {difference.styleName && <div>Style: {difference.styleName}</div>}
-          {difference.text && <div>Text: "{difference.text}"</div>}
+          {difference.description && <div>{difference.description}</div>}
+          {difference.text && <div className="text-sample">Text: "{difference.text}"</div>}
+          
+          {difference.styleProperties && (
+            <div className="style-properties">
+              <div className="properties-header">Changed properties:</div>
+              <ul className="property-list">
+                {Object.entries(difference.styleProperties).map(([key, value]) => (
+                  <li key={key}>
+                    <span className="property-name">{key}:</span> {value}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       );
-    }   
+    }
 
-    // Default case
+    // Default case for other difference types
     return (
       <div className="tooltip-content">
         <div className="tooltip-header">
           <span className="diff-type">{type || 'Unknown'} Difference</span>
         </div>
-        <div>{difference.description || 'No description available'}</div>
+        <div className="diff-description">{difference.description || 'No description available'}</div>
+        
+        {difference.position && (
+          <div className="position-info">
+            Position: x={Math.round(difference.position.x)}, y={Math.round(difference.position.y)}
+          </div>
+        )}
       </div>
     );
   };
+
+  // Determine tooltip data-type for styling
+  const tooltipType = difference.type || 'unknown';
+  const tooltipChangeType = difference.changeType || '';
 
   return (
     <div 
       ref={tooltipRef}
       className={`difference-tooltip ${visible ? 'visible' : 'hidden'}`}
-      style={{ left: x, top: y }}
+      data-type={tooltipType}
+      data-change-type={tooltipChangeType}
     >
       {getFormattedContent()}
     </div>

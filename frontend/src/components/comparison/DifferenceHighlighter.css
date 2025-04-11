@@ -7,9 +7,8 @@
     cursor: pointer;
   }
   
-  /* Highlight effect for hovering */
-  .difference-highlighter:hover {
-    cursor: pointer;
+  .difference-highlighter.invisible {
+    display: none;
   }
   
   /* Animations for selected differences */
@@ -32,7 +31,36 @@
     animation: pulse-highlight 1.5s infinite;
   }
   
+  /* Difference labels and badges */
+  .difference-label {
+    position: absolute;
+    padding: 2px 4px;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    font-size: 10px;
+    border-radius: 2px;
+    pointer-events: none;
+    font-family: Arial, sans-serif;
+    z-index: 15;
+  }
+  
+  /* Simple animation for new differences */
+  @keyframes highlight-new {
+    0% { 
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    100% { 
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  
+  .difference-highlighter canvas {
+    animation: highlight-new 0.3s ease-out;
+  }
+  
   /* Dark mode adjustments */
   [data-theme="dark"] .difference-highlighter {
-    filter: brightness(0.9);
+    filter: brightness(1.1);
   }

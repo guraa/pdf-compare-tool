@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './DifferenceHighlighter.css';
 
 /**
- * DifferenceHighlighter component - Creates overlay highlights for differences
+ * Enhanced DifferenceHighlighter component
+ * Creates overlay highlights for differences between documents
  */
 const DifferenceHighlighter = ({ 
   differences = [], 
@@ -16,6 +17,7 @@ const DifferenceHighlighter = ({
   onMouseOut
 }) => {
   const canvasRef = useRef(null);
+  const [hoveredDifference, setHoveredDifference] = useState(null);
   
   // Draw the highlights whenever relevant props change
   useEffect(() => {
@@ -29,9 +31,11 @@ const DifferenceHighlighter = ({
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, width, height);
     
+    // Skip if highlighting is disabled
+    if (highlightMode === 'none') return;
+    
     // Filter differences based on highlight mode
     const visibleDifferences = differences.filter(diff => {
-      if (highlightMode === 'none') return false;
       if (highlightMode === 'all') return true;
       return diff.type === highlightMode;
     });
@@ -94,28 +98,56 @@ const DifferenceHighlighter = ({
       // Check if this is the selected difference
       const isSelected = selectedDifference && selectedDifference.id === diff.id;
       
+      // Check if this is the hovered difference
+      const isHovered = hoveredDifference && hoveredDifference.id === diff.id;
+      
       // Draw the highlight
       ctx.fillStyle = fillColor;
       ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = isSelected ? 3 : 1;
+      ctx.lineWidth = isSelected ? 3 : isHovered ? 2 : 1;
       
-      // Draw rectangle
-      ctx.fillRect(x, y, w, h);
-      ctx.strokeRect(x, y, w, h);
+      // Draw highlight rectangle with slightly rounded corners
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 2);
+      ctx.fill();
+      ctx.stroke();
       
-      // Add border animation for selected difference
+      // Add secondary border for selected difference
       if (isSelected) {
+        // Draw outer glow effect for selected difference
         ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)'; // Yellow for selection
         ctx.lineWidth = 2;
-        ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+        ctx.beginPath();
+        ctx.roundRect(x - 3, y - 3, w + 6, h + 6, 4);
+        ctx.stroke();
+        
+        // Add label for difference type if text is not too small
+        if (w > 50 && h > 20) {
+          const label = diff.type.charAt(0).toUpperCase() + diff.type.slice(1);
+          ctx.fillStyle = strokeColor;
+          ctx.font = '10px Arial';
+          ctx.fillText(label, x + 4, y + 12);
+        }
+      }
+      
+      // Add hover effect
+      if (isHovered && !isSelected) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(x - 2, y - 2, w + 4, h + 4, 3);
+        ctx.stroke();
       }
     });
-  }, [differences, zoom, highlightMode, selectedDifference, width, height]);
+  }, [differences, zoom, highlightMode, selectedDifference, width, height, hoveredDifference]);
   
   // Helper function to find a difference at the given coordinates
   const findDifferenceAtCoordinates = (x, y) => {
     return differences.find(diff => {
-      if (!diff.position || !diff.bounds) return false;
+      if (!diff.position || !diff.bounds || highlightMode === 'none') return false;
+      
+      // Skip if this difference type is filtered out
+      if (highlightMode !== 'all' && diff.type !== highlightMode) return false;
       
       // Calculate zoomed coordinates for comparison
       const diffX = diff.position.x * zoom;
@@ -135,7 +167,7 @@ const DifferenceHighlighter = ({
   
   // Handle click on the canvas to select a difference
   const handleCanvasClick = (e) => {
-    if (!onDifferenceClick || !differences.length) return;
+    if (!onDifferenceClick || !differences.length || highlightMode === 'none') return;
     
     // Get click coordinates relative to the canvas
     const canvas = canvasRef.current;
@@ -151,11 +183,11 @@ const DifferenceHighlighter = ({
     }
   };
   
-  // Mouse move handler for tooltips
+  // Mouse move handler for tooltips and hover effects
   const handleMouseMove = (e) => {
     const canvas = canvasRef.current;
-    // Only process if the canvas exists and we have an onMouseOver handler
-    if (!canvas || typeof onMouseOver !== 'function') return;
+    // Only process if the canvas exists and we're showing highlights
+    if (!canvas || highlightMode === 'none') return;
     
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -164,11 +196,20 @@ const DifferenceHighlighter = ({
     // Find if mouse is over any difference
     const hoveredDiff = findDifferenceAtCoordinates(x, y);
     
+    // Update hover state
+    setHoveredDifference(hoveredDiff);
+    
     if (hoveredDiff) {
       canvas.style.cursor = 'pointer';
-      onMouseOver(hoveredDiff, e.clientX, e.clientY);
+      
+      // Call onMouseOver if provided
+      if (typeof onMouseOver === 'function') {
+        onMouseOver(hoveredDiff, e.clientX, e.clientY);
+      }
     } else {
       canvas.style.cursor = 'default';
+      
+      // Call onMouseOut if provided
       if (typeof onMouseOut === 'function') {
         onMouseOut();
       }
@@ -177,6 +218,8 @@ const DifferenceHighlighter = ({
   
   // Mouse leave handler
   const handleMouseLeave = () => {
+    setHoveredDifference(null);
+    
     if (typeof onMouseOut === 'function') {
       onMouseOut();
     }
@@ -185,7 +228,7 @@ const DifferenceHighlighter = ({
   return (
     <canvas
       ref={canvasRef}
-      className="difference-highlighter"
+      className={`difference-highlighter ${highlightMode === 'none' ? 'invisible' : ''}`}
       onClick={handleCanvasClick}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}

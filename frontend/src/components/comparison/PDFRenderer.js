@@ -3,7 +3,7 @@ import Spinner from '../common/Spinner';
 import './PDFRenderer.css';
 
 /**
- * Simplified PDFRenderer that uses direct image URLs
+ * Debug PDFRenderer component that logs crucial information and adds visual debugging
  */
 const PDFRenderer = ({ 
   fileId, 
@@ -13,32 +13,68 @@ const PDFRenderer = ({
   differences = [],
   selectedDifference = null,
   onDifferenceSelect,
+  onZoomChange,
+  isBaseDocument = false,
   loading = false,
-  opacity = 1,
-  onImageLoaded = null,
-  onZoomChange = null
+  opacity = 1
 }) => {
   // State
   const [renderError, setRenderError] = useState(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [debugInfo, setDebugInfo] = useState({
+    differencesCount: 0,
+    hasValidDifferences: false,
+    canvasReady: false,
+    imageSize: null
+  });
   
   // Refs
   const imageRef = useRef(null);
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
   
   // URL for the image
   const imageUrl = `/api/pdfs/document/${fileId}/page/${page}`;
   
-  // Log rendering
-  console.log(`PDFRenderer: rendering for fileId=${fileId}, page=${page}, zoom=${zoom}`);
+  // Log important information
+  useEffect(() => {
+    console.log(`PDFRenderer DEBUG: rendering for fileId=${fileId}, page=${page}, zoom=${zoom}`);
+    console.log('PDFRenderer DEBUG: Differences array:', differences);
+    
+    // Check if differences have valid coordinates
+    const validDiffs = differences.filter(diff => 
+      diff && diff.position && diff.bounds && 
+      typeof diff.position.x === 'number' && 
+      typeof diff.position.y === 'number' &&
+      typeof diff.bounds.width === 'number' &&
+      typeof diff.bounds.height === 'number'
+    );
+    
+    console.log(`PDFRenderer DEBUG: Valid differences with coordinates: ${validDiffs.length} of ${differences.length}`);
+    
+    setDebugInfo(prev => ({
+      ...prev,
+      differencesCount: differences.length,
+      hasValidDifferences: validDiffs.length > 0
+    }));
+    
+    // If there are no valid differences, log the first few differences to see what we have
+    if (validDiffs.length === 0 && differences.length > 0) {
+      console.log('PDFRenderer DEBUG: First difference object structure:', 
+        JSON.stringify(differences[0], null, 2));
+    }
+  }, [differences, fileId, page, zoom]);
   
   // Handle image load
   const handleImageLoad = () => {
-    console.log(`Image loaded successfully: page ${page}`);
+    console.log(`PDFRenderer DEBUG: Image loaded successfully: page ${page}`);
     
-    if (!imageRef.current) return;
+    if (!imageRef.current) {
+      console.error('PDFRenderer DEBUG: imageRef is null after load!');
+      return;
+    }
     
     const image = imageRef.current;
     const naturalWidth = image.naturalWidth;
@@ -47,32 +83,41 @@ const PDFRenderer = ({
     const scaledWidth = naturalWidth * zoom;
     const scaledHeight = naturalHeight * zoom;
     
-    console.log(`Image dimensions: ${naturalWidth}x${naturalHeight}, zoomed: ${scaledWidth}x${scaledHeight}`);
+    console.log(`PDFRenderer DEBUG: Image dimensions: ${naturalWidth}x${naturalHeight}, zoomed: ${scaledWidth}x${scaledHeight}`);
     
     setDimensions({
       width: scaledWidth,
       height: scaledHeight
     });
     
+    setDebugInfo(prev => ({
+      ...prev,
+      imageSize: { width: naturalWidth, height: naturalHeight, 
+                  scaled: { width: scaledWidth, height: scaledHeight } }
+    }));
+    
     setImageLoaded(true);
     setIsLoading(false);
     
-    // Call onImageLoaded callback if provided
-    if (onImageLoaded && typeof onImageLoaded === 'function') {
-      onImageLoaded(scaledWidth, scaledHeight);
+    // Call zoom change callback if provided
+    if (onZoomChange) {
+      onZoomChange(zoom);
     }
   };
   
   // Handle image error
   const handleImageError = (error) => {
-    console.error(`Error loading image for page ${page}:`, error);
+    console.error(`PDFRenderer DEBUG: Error loading image for page ${page}:`, error);
     setRenderError(`Failed to load page ${page}. The server may be unavailable or the document format is not supported.`);
     setIsLoading(false);
   };
   
-  // Draw highlights on canvas
+  // Draw highlights on canvas - with additional debugging
   useEffect(() => {
-    if (!canvasRef.current || !imageLoaded || highlightMode === 'none') return;
+    if (!canvasRef.current || !imageLoaded || highlightMode === 'none') {
+      console.log(`PDFRenderer DEBUG: Skipping canvas drawing - canvasRef exists: ${!!canvasRef.current}, imageLoaded: ${imageLoaded}, highlightMode: ${highlightMode}`);
+      return;
+    }
     
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -81,19 +126,45 @@ const PDFRenderer = ({
     canvas.width = dimensions.width;
     canvas.height = dimensions.height;
     
-    // Clear canvas
+    console.log(`PDFRenderer DEBUG: Canvas dimensions set to ${canvas.width}x${canvas.height}`);
+    
+    // Clear canvas with a visible color for debugging
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.1)'; // Very light red for debugging
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Skip if no differences or highlight mode is none
-    if (!differences || differences.length === 0) return;
+    // Skip if no differences
+    if (!differences || differences.length === 0) {
+      console.log('PDFRenderer DEBUG: No differences to highlight');
+      return;
+    }
+
+    console.log(`PDFRenderer DEBUG: Drawing ${differences.length} differences on canvas`);
     
-    // Draw each difference
-    differences.forEach(diff => {
+    setDebugInfo(prev => ({
+      ...prev,
+      canvasReady: true
+    }));
+    
+    // Draw a debug rectangle to ensure canvas is working
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+    ctx.fillRect(10, 10, 50, 50);
+    ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+    ctx.fillRect(canvas.width - 60, 10, 50, 50);
+    
+    // Loop through differences and draw them
+    differences.forEach((diff, index) => {
       // Skip if no position or bounds data
-      if (!diff.position || !diff.bounds) return;
+      if (!diff.position || !diff.bounds) {
+        console.log(`PDFRenderer DEBUG: Skipping difference #${index} - missing position or bounds`);
+        return;
+      }
       
       // Skip if type doesn't match highlight mode (unless mode is 'all')
-      if (highlightMode !== 'all' && diff.type !== highlightMode) return;
+      if (highlightMode !== 'all' && diff.type !== highlightMode) {
+        console.log(`PDFRenderer DEBUG: Skipping difference #${index} - type ${diff.type} doesn't match highlight mode ${highlightMode}`);
+        return;
+      }
       
       // Apply zoom to coordinates
       const x = diff.position.x * zoom;
@@ -101,40 +172,65 @@ const PDFRenderer = ({
       const width = diff.bounds.width * zoom;
       const height = diff.bounds.height * zoom;
       
-      // Choose color based on difference type
-      let fillColor = 'rgba(255, 82, 82, 0.3)'; // Default red for text
+      console.log(`PDFRenderer DEBUG: Drawing difference #${index} at (${x},${y}) with size ${width}x${height}`);
+      
+      // Generate vibrant highlight color
+      let fillColor;
+      let strokeColor;
       
       switch (diff.type) {
+        case 'text':
+          fillColor = 'rgba(255, 255, 0, 0.5)'; // Yellow
+          strokeColor = 'rgba(255, 200, 0, 0.8)';
+          break;
         case 'image':
-          fillColor = 'rgba(33, 150, 243, 0.3)'; // Blue for images
+          fillColor = 'rgba(0, 255, 255, 0.4)'; // Cyan
+          strokeColor = 'rgba(0, 200, 255, 0.8)';
           break;
         case 'font':
-          fillColor = 'rgba(156, 39, 176, 0.3)'; // Purple for fonts
+          fillColor = 'rgba(255, 100, 255, 0.4)'; // Pink
+          strokeColor = 'rgba(255, 0, 255, 0.8)';
           break;
         case 'style':
-          fillColor = 'rgba(255, 152, 0, 0.3)'; // Orange for styles
+          fillColor = 'rgba(100, 255, 100, 0.4)'; // Green
+          strokeColor = 'rgba(0, 255, 0, 0.8)';
           break;
         default:
-          // Use default for text
+          fillColor = 'rgba(255, 0, 0, 0.4)'; // Red
+          strokeColor = 'rgba(255, 0, 0, 0.8)';
       }
       
-      // Check if this is the selected difference
-      const isSelected = selectedDifference && selectedDifference.id === diff.id;
-      
-      // Draw the difference highlight
+      // Draw the highlight with vibrant color
       ctx.fillStyle = fillColor;
-      ctx.fillRect(x, y, width, height);
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2;
       
-      // Add border
-      ctx.strokeStyle = isSelected ? 'rgba(255, 255, 0, 0.8)' : fillColor.replace('0.3', '0.8');
-      ctx.lineWidth = isSelected ? 3 : 1;
+      // Draw highlight as rectangle
+      ctx.fillRect(x, y, width, height);
       ctx.strokeRect(x, y, width, height);
+      
+      // Add a number label for debugging
+      ctx.fillStyle = 'black';
+      ctx.font = '12px Arial';
+      ctx.fillText(`#${index}`, x + 5, y + 15);
+      
+      // If this is the selected difference, add a more visible indicator
+      if (selectedDifference && selectedDifference.id === diff.id) {
+        ctx.strokeStyle = 'rgba(255, 0, 0, 0.9)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x - 3, y - 3, width + 6, height + 6);
+        
+        // Label it as 'SELECTED' for visibility
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText('SELECTED', x + 5, y - 5);
+      }
     });
   }, [differences, highlightMode, imageLoaded, dimensions, zoom, selectedDifference]);
   
-  // Handle click on highlight
+  // Handle click on canvas to select a difference
   const handleCanvasClick = (e) => {
-    if (!onDifferenceSelect || !differences || !differences.length || !imageLoaded) return;
+    if (!canvasRef.current || !onDifferenceSelect || !differences || !differences.length) return;
     
     // Get mouse coordinates
     const canvas = canvasRef.current;
@@ -146,26 +242,30 @@ const PDFRenderer = ({
     const canvasX = mouseX * (canvas.width / rect.width);
     const canvasY = mouseY * (canvas.height / rect.height);
     
-    // Find clicked difference
-    const clickedDiff = differences.find(diff => {
-      if (!diff.position || !diff.bounds) return false;
+    console.log(`PDFRenderer DEBUG: Canvas clicked at (${canvasX}, ${canvasY})`);
+    
+    // Find if we clicked on a difference
+    let clickedDiff = null;
+    
+    for (const diff of differences) {
+      if (!diff.position || !diff.bounds) continue;
       
-      const diffX = diff.position.x * zoom;
-      const diffY = diff.position.y * zoom;
-      const diffWidth = diff.bounds.width * zoom;
-      const diffHeight = diff.bounds.height * zoom;
+      const x = diff.position.x * zoom;
+      const y = diff.position.y * zoom;
+      const width = diff.bounds.width * zoom;
+      const height = diff.bounds.height * zoom;
       
-      return (
-        canvasX >= diffX && 
-        canvasX <= diffX + diffWidth && 
-        canvasY >= diffY && 
-        canvasY <= diffY + diffHeight
-      );
-    });
+      if (canvasX >= x && canvasX <= x + width && canvasY >= y && canvasY <= y + height) {
+        clickedDiff = diff;
+        break;
+      }
+    }
     
     if (clickedDiff) {
-      console.log('Clicked difference:', clickedDiff);
+      console.log('PDFRenderer DEBUG: Clicked on difference:', clickedDiff);
       onDifferenceSelect(clickedDiff);
+    } else {
+      console.log('PDFRenderer DEBUG: Click did not hit any difference');
     }
   };
   
@@ -203,7 +303,37 @@ const PDFRenderer = ({
   }
 
   return (
-    <div className="pdf-renderer" style={{ opacity }}>
+    <div 
+      className="pdf-renderer" 
+      style={{ 
+        opacity,
+        position: 'relative',
+        border: '2px solid #ccc' // Add border for visibility
+      }}
+      ref={containerRef}
+    >
+      {/* Debug info overlay */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          background: 'rgba(0,0,0,0.7)',
+          color: 'white',
+          padding: '5px',
+          fontSize: '12px',
+          zIndex: 1000,
+          maxWidth: '300px',
+          overflowWrap: 'break-word'
+        }}
+      >
+        <div>Diffs: {debugInfo.differencesCount}</div>
+        <div>Valid coords: {debugInfo.hasValidDifferences ? 'YES' : 'NO'}</div>
+        <div>Canvas ready: {debugInfo.canvasReady ? 'YES' : 'NO'}</div>
+        <div>Image loaded: {imageLoaded ? 'YES' : 'NO'}</div>
+        <div>Highlight mode: {highlightMode}</div>
+      </div>
+      
       {/* Loading indicator */}
       {(isLoading || loading) && (
         <div className="renderer-loading">
@@ -213,7 +343,14 @@ const PDFRenderer = ({
       )}
       
       {/* Image and highlights container */}
-      <div className="canvas-container" style={{ opacity: imageLoaded ? 1 : 0.3 }}>
+      <div 
+        className="canvas-container" 
+        style={{ 
+          opacity: imageLoaded ? 1 : 0.3,
+          position: 'relative',
+          border: '1px dashed red' // Add border for debugging
+        }}
+      >
         <img 
           ref={imageRef}
           className="pdf-image"
@@ -221,7 +358,8 @@ const PDFRenderer = ({
           alt={`PDF page ${page}`}
           style={{ 
             width: dimensions.width,
-            height: dimensions.height
+            height: dimensions.height,
+            border: '1px solid blue' // Add border for debugging
           }}
           onLoad={handleImageLoad}
           onError={handleImageError}
@@ -233,6 +371,14 @@ const PDFRenderer = ({
           onClick={handleCanvasClick}
           width={dimensions.width}
           height={dimensions.height}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            pointerEvents: 'auto',
+            border: '1px solid green', // Add border for debugging
+            zIndex: 10
+          }}
         />
       </div>
       
