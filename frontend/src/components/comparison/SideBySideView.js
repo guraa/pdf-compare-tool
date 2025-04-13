@@ -11,7 +11,8 @@ const SideBySideView = ({ comparisonId }) => {
   // Refs
   const containerRef = useRef(null);
   const fetchingRef = useRef(false);
-  const fetchFailedRef = useRef(false);
+  const pairsFetchedRef = useRef(false);
+  const didInitialFetchRef = useRef(false);
 
   // Context
   const {
@@ -30,7 +31,19 @@ const SideBySideView = ({ comparisonId }) => {
   const [compareDifferences, setCompareDifferences] = useState([]);
   const [highlightMode, setHighlightMode] = useState('all');
   const [showDifferencePanel, setShowDifferencePanel] = useState(true);
-  const [zoom, setZoom] = useState(1.0);
+  const [zoom, setZoom] = useState(0.750);
+  const [pageMetadata, setPageMetadata] = useState(null);
+  
+  // Coordinate adjustment fine-tuning parameters
+  const [adjustmentParams, setAdjustmentParams] = useState({
+    xOffset: 0, // X-axis offset in pixels
+    yOffset: 0, // Y-axis offset in pixels
+    scaleAdjustment: 1.0, // Scale multiplier
+    flipY: true // Whether to flip the Y-coordinate (fixes upside-down canvas)
+  });
+  
+  // Flag to show adjustment controls for debugging
+  const [showAdjustmentControls, setShowAdjustmentControls] = useState(false);
 
   // Get the currently selected document pair
   const selectedPair = state.documentPairs?.[state.selectedDocumentPairIndex] || null;
@@ -42,11 +55,19 @@ const SideBySideView = ({ comparisonId }) => {
       selectedPair.compareEndPage - selectedPair.compareStartPage + 1
     ) : 1;
 
-  // Fetch document pairs - with circuit breaker protection
+  // CRITICAL FIX: Only fetch document pairs once on initial render
   useEffect(() => {
+    // Skip if no comparison ID or if we've already fetched
+    if (!comparisonId || didInitialFetchRef.current) {
+      return;
+    }
+
     const fetchDocumentPairs = async () => {
-      // Guard against duplicate fetches or retries after too many failures
-      if (!comparisonId || fetchingRef.current || fetchFailedRef.current) return;
+      // Set our flag immediately to prevent concurrent fetches
+      didInitialFetchRef.current = true;
+      
+      // Skip if already fetching
+      if (fetchingRef.current) return;
       
       try {
         fetchingRef.current = true;
@@ -57,7 +78,9 @@ const SideBySideView = ({ comparisonId }) => {
         console.log("Received document pairs:", pairs);
         
         if (pairs && pairs.length > 0) {
+          // Store in context
           setDocumentPairs(pairs);
+          pairsFetchedRef.current = true;
           
           // Auto-select the first matched pair
           const matchedPairIndex = pairs.findIndex(pair => pair.matched);
@@ -73,14 +96,13 @@ const SideBySideView = ({ comparisonId }) => {
         console.error("Error fetching document pairs:", err);
         setError("Failed to load document pairs: " + err.message);
         
-        // Mark as failed to prevent endless retries
+        // Reset flag on serious error so we can retry
         if (err.message && (
           err.message.includes("Service temporarily unavailable") ||
           err.message.includes("Network Error") ||
           err.message.includes("Circuit breaker is open")
         )) {
-          fetchFailedRef.current = true;
-          console.log("API appears to be unavailable, stopping retries");
+          didInitialFetchRef.current = false;
         }
       } finally {
         setLoading(false);
@@ -89,14 +111,41 @@ const SideBySideView = ({ comparisonId }) => {
     };
 
     fetchDocumentPairs();
-  }, [comparisonId]); // Remove unnecessary dependencies to prevent infinite loops
+    
+    // Cleanup function
+    return () => {
+      // Reset on component unmount, not on dependency change
+      if (!comparisonId) {
+        didInitialFetchRef.current = false;
+        pairsFetchedRef.current = false;
+      }
+    };
+  }, [comparisonId]); // Only depend on comparisonId
+
+  // Handle active view changes separately
+  useEffect(() => {
+    if (activeView === 'comparison' && selectedPair) {
+      setCurrentPage(1);
+    }
+  }, [activeView, selectedPair]);
 
   // Fetch page differences
   useEffect(() => {
+    // Skip if no necessary data or if not in comparison view
+    if (!comparisonId || !selectedPair || activeView !== 'comparison') {
+      return;
+    }
+    
+    // Create a request ID to track this specific request
+    const requestId = `page_${currentPage}_${Date.now()}`;
+    let isCurrentRequest = true;
+    
     const fetchDifferences = async () => {
-      if (!comparisonId || !selectedPair || activeView !== 'comparison') return;
+      // Skip if already fetching
+      if (fetchingRef.current) return;
       
       try {
+        fetchingRef.current = true;
         console.log(`Fetching differences for page ${currentPage}...`);
         
         const details = await getDocumentPageDetails(
@@ -106,25 +155,60 @@ const SideBySideView = ({ comparisonId }) => {
           state.filters
         );
         
+        // Only update state if this is still the current request
+        if (!isCurrentRequest) {
+          console.log("Ignoring stale response for page", currentPage);
+          return;
+        }
+        
         if (details) {
           console.log("Received difference details:", details);
+          
+          // Store base and compare differences
           setBaseDifferences(details.baseDifferences || []);
           setCompareDifferences(details.compareDifferences || []);
+          
+          // Store the page metadata for proper coordinate scaling
+          setPageMetadata({
+            baseWidth: details.baseWidth,
+            baseHeight: details.baseHeight,
+            compareWidth: details.compareWidth,
+            compareHeight: details.compareHeight
+          });
+          
+          console.log("Page dimensions:", {
+            baseWidth: details.baseWidth,
+            baseHeight: details.baseHeight,
+            compareWidth: details.compareWidth,
+            compareHeight: details.compareHeight
+          });
         }
       } catch (err) {
-        console.error("Error fetching differences:", err);
-        setError("Failed to load differences: " + err.message);
+        // Only show error if this is the current request
+        if (isCurrentRequest) {
+          console.error("Error fetching differences:", err);
+          setError("Failed to load differences: " + err.message);
+        }
+      } finally {
+        if (isCurrentRequest) {
+          fetchingRef.current = false;
+        }
       }
     };
 
     fetchDifferences();
-  }, [comparisonId, selectedPair, currentPage, state.selectedDocumentPairIndex, state.filters, activeView]);
+    
+    // Cleanup function
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [comparisonId, currentPage, state.selectedDocumentPairIndex, state.filters, activeView, selectedPair]);
 
   // Handle document pair selection
   const handleSelectDocumentPair = (pairIndex) => {
     console.log("Selecting document pair:", pairIndex);
     setSelectedDocumentPairIndex(pairIndex);
-    setCurrentPage(1);
+    setCurrentPage(1); // Reset to page 1
     setActiveView('comparison');
   };
 
@@ -136,6 +220,22 @@ const SideBySideView = ({ comparisonId }) => {
     if (state.viewSettings?.zoom !== newZoom) {
       state.updateViewSettings?.({ zoom: newZoom });
     }
+  };
+  
+  // Handle adjustment parameter changes
+  const updateAdjustmentParam = (param, value) => {
+    setAdjustmentParams(prev => ({
+      ...prev,
+      [param]: value
+    }));
+    
+    // Log the updated adjustment parameters for reference
+    console.log(`Updated adjustment parameter: ${param} = ${value}`);
+  };
+  
+  // Toggle adjustment controls visibility
+  const toggleAdjustmentControls = () => {
+    setShowAdjustmentControls(!showAdjustmentControls);
   };
 
   // If we're in document matching view
@@ -183,11 +283,29 @@ const SideBySideView = ({ comparisonId }) => {
         <div className="document-info">
           <h3>Document Comparison</h3>
           
+          {/* Calibration button - only visible in development mode */}
+          {process.env.NODE_ENV === 'development' && (
+            <button 
+              onClick={toggleAdjustmentControls}
+              style={{
+                marginLeft: '10px',
+                fontSize: '12px',
+                padding: '3px 8px',
+                background: showAdjustmentControls ? '#4caf50' : '#2c6dbd',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              {showAdjustmentControls ? 'Hide Calibration' : 'Calibrate Highlights'}
+            </button>
+          )}
         </div>
+        
         <div className="page-ranges">
-        <span>Base: Pages {selectedPair.baseStartPage}-{selectedPair.baseEndPage} - Compare: Pages {selectedPair.compareStartPage}-{selectedPair.compareEndPage}</span>
-
-          </div>
+          <span>Base: Pages {selectedPair.baseStartPage}-{selectedPair.baseEndPage} - Compare: Pages {selectedPair.compareStartPage}-{selectedPair.compareEndPage}</span>
+        </div>
         
         {/* Zoom controls */}
         <div className="zoom-controls">
@@ -208,6 +326,105 @@ const SideBySideView = ({ comparisonId }) => {
           </button>
         </div>
       </div>
+      
+      {/* Adjustment controls for fine-tuning highlight positions */}
+      {showAdjustmentControls && (
+        <div className="adjustment-controls" style={{
+          padding: '10px',
+          backgroundColor: '#f5f5f5',
+          border: '1px solid #ddd',
+          borderRadius: '4px',
+          margin: '10px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '20px',
+          alignItems: 'center'
+        }}>
+          <div>
+            <label style={{ marginRight: '8px', fontWeight: 'bold' }}>X Offset:</label>
+            <input 
+              type="range" 
+              min="-20" 
+              max="20" 
+              step="1"
+              value={adjustmentParams.xOffset}
+              onChange={(e) => updateAdjustmentParam('xOffset', parseInt(e.target.value))}
+              style={{ width: '100px', verticalAlign: 'middle' }}
+            />
+            <span style={{ marginLeft: '8px', minWidth: '30px', display: 'inline-block' }}>
+              {adjustmentParams.xOffset}px
+            </span>
+          </div>
+          
+          <div>
+            <label style={{ marginRight: '8px', fontWeight: 'bold' }}>Y Offset:</label>
+            <input 
+              type="range" 
+              min="-20" 
+              max="20" 
+              step="1"
+              value={adjustmentParams.yOffset}
+              onChange={(e) => updateAdjustmentParam('yOffset', parseInt(e.target.value))}
+              style={{ width: '100px', verticalAlign: 'middle' }}
+            />
+            <span style={{ marginLeft: '8px', minWidth: '30px', display: 'inline-block' }}>
+              {adjustmentParams.yOffset}px
+            </span>
+          </div>
+          
+          <div>
+            <label style={{ marginRight: '8px', fontWeight: 'bold' }}>Scale:</label>
+            <input 
+              type="range" 
+              min="0.8" 
+              max="1.2" 
+              step="0.01"
+              value={adjustmentParams.scaleAdjustment}
+              onChange={(e) => updateAdjustmentParam('scaleAdjustment', parseFloat(e.target.value))}
+              style={{ width: '100px', verticalAlign: 'middle' }}
+            />
+            <span style={{ marginLeft: '8px', minWidth: '50px', display: 'inline-block' }}>
+              {adjustmentParams.scaleAdjustment.toFixed(2)}x
+            </span>
+          </div>
+          
+          <div>
+            <label style={{ marginRight: '8px', fontWeight: 'bold' }}>Flip Y:</label>
+            <input 
+              type="checkbox" 
+              checked={adjustmentParams.flipY}
+              onChange={(e) => updateAdjustmentParam('flipY', e.target.checked)}
+              style={{ verticalAlign: 'middle' }}
+            />
+            <span style={{ marginLeft: '8px' }}>
+              {adjustmentParams.flipY ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+          
+          <button
+            onClick={() => setAdjustmentParams({ 
+              xOffset: 0, 
+              yOffset: 0, 
+              scaleAdjustment: 1.0,
+              flipY: false
+            })}
+            style={{
+              padding: '4px 8px',
+              backgroundColor: '#f44336',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Reset
+          </button>
+          
+          <div style={{ flexGrow: 1, textAlign: 'right', fontSize: '12px', color: '#666' }}>
+            These controls help fine-tune highlight positioning. Find the best values, then update code.
+          </div>
+        </div>
+      )}
       
       {/* Main content with single scrollbar */}
       <div className="comparison-content">
@@ -240,7 +457,12 @@ const SideBySideView = ({ comparisonId }) => {
                     selectedDifference={state.selectedDifference}
                     onDifferenceSelect={(diff) => setSelectedDifference(diff)}
                     onZoomChange={handleZoomChange}
-                    isBaseDocument={true} // This is the base document
+                    isBaseDocument={true}
+                    pageMetadata={pageMetadata}
+                    xOffsetAdjustment={adjustmentParams.xOffset}
+                    yOffsetAdjustment={adjustmentParams.yOffset}
+                    scaleAdjustment={adjustmentParams.scaleAdjustment}
+                    flipY={adjustmentParams.flipY}
                   />
                 ) : (
                   <div className="no-content">
@@ -274,7 +496,12 @@ const SideBySideView = ({ comparisonId }) => {
                     selectedDifference={state.selectedDifference}
                     onDifferenceSelect={(diff) => setSelectedDifference(diff)}
                     onZoomChange={handleZoomChange}
-                    isBaseDocument={false} // This is the compare document
+                    isBaseDocument={false}
+                    pageMetadata={pageMetadata}
+                    xOffsetAdjustment={adjustmentParams.xOffset}
+                    yOffsetAdjustment={adjustmentParams.yOffset}
+                    scaleAdjustment={adjustmentParams.scaleAdjustment}
+                    flipY={adjustmentParams.flipY}
                   />
                 ) : (
                   <div className="no-content">
