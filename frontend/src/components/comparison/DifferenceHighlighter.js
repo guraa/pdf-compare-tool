@@ -14,7 +14,8 @@ const DifferenceHighlighter = ({
   width,
   height,
   onMouseOver,
-  onMouseOut
+  onMouseOut,
+  viewportScale = 1 // Add viewport scale parameter
 }) => {
   const canvasRef = useRef(null);
   const [hoveredDifference, setHoveredDifference] = useState(null);
@@ -42,13 +43,15 @@ const DifferenceHighlighter = ({
     
     // Draw each difference
     visibleDifferences.forEach(diff => {
-      if (!diff.position || !diff.bounds) return;
+      if (diff.x === undefined || diff.y === undefined || diff.width === undefined || diff.height === undefined) return;
       
-      // Calculate zoomed coordinates
-      const x = diff.position.x * zoom;
-      const y = diff.position.y * zoom;
-      const w = diff.bounds.width * zoom;
-      const h = diff.bounds.height * zoom;
+      // Calculate zoomed coordinates with viewport scaling
+      // Using same scale factor as in PDFRenderer
+      const TEMP_SCALE_FACTOR = 0.375;
+      const x = diff.x * TEMP_SCALE_FACTOR * zoom;
+      const y = diff.y * TEMP_SCALE_FACTOR * zoom;
+      const w = diff.width * TEMP_SCALE_FACTOR * zoom;
+      const h = diff.height * TEMP_SCALE_FACTOR * zoom;
       
       // Choose color based on difference type and change type
       let fillColor = 'rgba(255, 0, 0, 0.3)'; // Default red
@@ -108,7 +111,18 @@ const DifferenceHighlighter = ({
       
       // Draw highlight rectangle with slightly rounded corners
       ctx.beginPath();
-      ctx.roundRect(x, y, w, h, 2);
+      // Use a simple rounded rect implementation for broader browser support
+      const radius = 2;
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + w - radius, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+      ctx.lineTo(x + w, y + h - radius);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+      ctx.lineTo(x + radius, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
       ctx.fill();
       ctx.stroke();
       
@@ -118,7 +132,18 @@ const DifferenceHighlighter = ({
         ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)'; // Yellow for selection
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.roundRect(x - 3, y - 3, w + 6, h + 6, 4);
+        // Larger rounded rect for the selection indicator
+        const selRadius = 4;
+        ctx.moveTo(x - 3 + selRadius, y - 3);
+        ctx.lineTo(x + w + 3 - selRadius, y - 3);
+        ctx.quadraticCurveTo(x + w + 3, y - 3, x + w + 3, y - 3 + selRadius);
+        ctx.lineTo(x + w + 3, y + h + 3 - selRadius);
+        ctx.quadraticCurveTo(x + w + 3, y + h + 3, x + w + 3 - selRadius, y + h + 3);
+        ctx.lineTo(x - 3 + selRadius, y + h + 3);
+        ctx.quadraticCurveTo(x - 3, y + h + 3, x - 3, y + h + 3 - selRadius);
+        ctx.lineTo(x - 3, y - 3 + selRadius);
+        ctx.quadraticCurveTo(x - 3, y - 3, x - 3 + selRadius, y - 3);
+        ctx.closePath();
         ctx.stroke();
         
         // Add label for difference type if text is not too small
@@ -135,7 +160,17 @@ const DifferenceHighlighter = ({
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.roundRect(x - 2, y - 2, w + 4, h + 4, 3);
+        const hoverRadius = 3;
+        ctx.moveTo(x - 2 + hoverRadius, y - 2);
+        ctx.lineTo(x + w + 2 - hoverRadius, y - 2);
+        ctx.quadraticCurveTo(x + w + 2, y - 2, x + w + 2, y - 2 + hoverRadius);
+        ctx.lineTo(x + w + 2, y + h + 2 - hoverRadius);
+        ctx.quadraticCurveTo(x + w + 2, y + h + 2, x + w + 2 - hoverRadius, y + h + 2);
+        ctx.lineTo(x - 2 + hoverRadius, y + h + 2);
+        ctx.quadraticCurveTo(x - 2, y + h + 2, x - 2, y + h + 2 - hoverRadius);
+        ctx.lineTo(x - 2, y - 2 + hoverRadius);
+        ctx.quadraticCurveTo(x - 2, y - 2, x - 2 + hoverRadius, y - 2);
+        ctx.closePath();
         ctx.stroke();
       }
     });
@@ -144,16 +179,18 @@ const DifferenceHighlighter = ({
   // Helper function to find a difference at the given coordinates
   const findDifferenceAtCoordinates = (x, y) => {
     return differences.find(diff => {
-      if (!diff.position || !diff.bounds || highlightMode === 'none') return false;
+      if (diff.x === undefined || diff.y === undefined || diff.width === undefined || diff.height === undefined || 
+          highlightMode === 'none') return false;
       
       // Skip if this difference type is filtered out
       if (highlightMode !== 'all' && diff.type !== highlightMode) return false;
       
-      // Calculate zoomed coordinates for comparison
-      const diffX = diff.position.x * zoom;
-      const diffY = diff.position.y * zoom;
-      const diffWidth = diff.bounds.width * zoom;
-      const diffHeight = diff.bounds.height * zoom;
+      // Calculate zoomed coordinates for comparison with viewport scaling
+      const TEMP_SCALE_FACTOR = 0.375;
+      const diffX = diff.x * TEMP_SCALE_FACTOR * zoom;
+      const diffY = diff.y * TEMP_SCALE_FACTOR * zoom;
+      const diffWidth = diff.width * TEMP_SCALE_FACTOR * zoom;
+      const diffHeight = diff.height * TEMP_SCALE_FACTOR * zoom;
       
       // Check if coordinates are within the difference bounds
       return (

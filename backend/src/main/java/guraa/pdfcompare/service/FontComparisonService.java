@@ -299,6 +299,222 @@ public class FontComparisonService {
     }
 
     /**
+     * Set default position for a font difference with proper coordinate transformation.
+     * This method places font differences at consistent locations relative to page size.
+     *
+     * @param diff The font difference
+     * @param pageWidth Width of the page
+     * @param pageHeight Height of the page
+     * @param index Index to vary positioning for multiple differences
+     */
+    private void setFontDifferencePosition(FontDifference diff, double pageWidth, double pageHeight, int index) {
+        // Font differences are typically positioned near the top of the page
+        double x = pageWidth * 0.1;  // 10% from left
+
+        // Offset each font difference vertically to avoid overlap
+        // Start at 10% from top and vary by index
+        double y = pageHeight * (0.1 + (index * 0.03));
+
+        // Ensure y stays within reasonable bounds (top 30% of page)
+        y = Math.min(y, pageHeight * 0.3);
+
+        // Width spans about 70% of page width
+        double width = pageWidth * 0.7;
+
+        // Height is roughly 3% of page height
+        double height = pageHeight * 0.03;
+
+        // These coordinates are already in display space (top-left origin)
+        // so no additional transformation is needed
+        differenceCalculator.setPositionAndBounds(diff, x, y, width, height);
+    }
+
+    /**
+     * Compare fonts between two pages with proper coordinate handling.
+     * Ensures all font differences have appropriate coordinates for highlighting.
+     *
+     * @param baseImages Images from base page
+     * @param compareImages Images from comparison page
+     * @param pageWidth Width of the page
+     * @param pageHeight Height of the page
+     * @return List of differences
+     */
+    private List<Difference> compareFonts(
+            List<FontAnalyzer.FontInfo> baseFonts,
+            List<FontAnalyzer.FontInfo> compareFonts,
+            double pageWidth,
+            double pageHeight) {
+
+        List<Difference> differences = new ArrayList<>();
+
+        // Match fonts based on name and properties
+        Map<FontAnalyzer.FontInfo, FontAnalyzer.FontInfo> matches =
+                matchFonts(baseFonts, compareFonts);
+
+        // Track fonts that have been matched
+        Set<FontAnalyzer.FontInfo> matchedBaseFonts = new HashSet<>(matches.keySet());
+        Set<FontAnalyzer.FontInfo> matchedCompareFonts = new HashSet<>(matches.values());
+
+        // Keep track of how many font differences we've created
+        int fontDiffIndex = 0;
+
+        // Find differences in matched fonts
+        for (Map.Entry<FontAnalyzer.FontInfo, FontAnalyzer.FontInfo> match : matches.entrySet()) {
+            FontAnalyzer.FontInfo baseFont = match.getKey();
+            FontAnalyzer.FontInfo compareFont = match.getValue();
+
+            String baseFontName = baseFont.getFontName();
+            String compareFontName = compareFont.getFontName();
+            baseFontName = baseFontName != null && baseFontName.contains("+") ?
+                    baseFontName.substring(baseFontName.indexOf("+") + 1) : baseFontName;
+            compareFontName = compareFontName != null && compareFontName.contains("+") ?
+                    compareFontName.substring(compareFontName.indexOf("+") + 1) : compareFontName;
+
+            String baseFamily = baseFont.getFontFamily();
+            String compareFamily = compareFont.getFontFamily();
+            baseFamily = baseFamily != null && baseFamily.contains("+") ?
+                    baseFamily.substring(baseFamily.indexOf("+") + 1) : baseFamily;
+            compareFamily = compareFamily != null && compareFamily.contains("+") ?
+                    compareFamily.substring(compareFamily.indexOf("+") + 1) : compareFamily;
+
+            // Comparisons
+            boolean nameDifferent = !Objects.equals(baseFontName, compareFontName);
+            boolean familyDifferent = !Objects.equals(baseFamily, compareFamily);
+            boolean embeddingDifferent = baseFont.isEmbedded() != compareFont.isEmbedded();
+            boolean boldDifferent = baseFont.isBold() != compareFont.isBold();
+            boolean italicDifferent = baseFont.isItalic() != compareFont.isItalic();
+
+            if (nameDifferent || familyDifferent || embeddingDifferent ||
+                    boldDifferent || italicDifferent) {
+
+                // Create font difference
+                String diffId = UUID.randomUUID().toString();
+
+                // Create description
+                StringBuilder description = new StringBuilder("Font differs: ");
+
+                if (nameDifferent) {
+                    description.append("Name changed from \"")
+                            .append(baseFont.getFontName())
+                            .append("\" to \"")
+                            .append(compareFont.getFontName())
+                            .append("\". ");
+                }
+
+                if (familyDifferent) {
+                    description.append("Family changed from \"")
+                            .append(baseFont.getFontFamily())
+                            .append("\" to \"")
+                            .append(compareFont.getFontFamily())
+                            .append("\". ");
+                }
+
+                if (embeddingDifferent) {
+                    description.append("Font ")
+                            .append(baseFont.isEmbedded() ? "was" : "was not")
+                            .append(" embedded in base and ")
+                            .append(compareFont.isEmbedded() ? "is" : "is not")
+                            .append(" embedded in comparison. ");
+                }
+
+                if (boldDifferent) {
+                    description.append("Font ")
+                            .append(baseFont.isBold() ? "was" : "was not")
+                            .append(" bold in base and ")
+                            .append(compareFont.isBold() ? "is" : "is not")
+                            .append(" bold in comparison. ");
+                }
+
+                if (italicDifferent) {
+                    description.append("Font ")
+                            .append(baseFont.isItalic() ? "was" : "was not")
+                            .append(" italic in base and ")
+                            .append(compareFont.isItalic() ? "is" : "is not")
+                            .append(" italic in comparison.");
+                }
+
+                // Create font difference
+                FontDifference diff = FontDifference.builder()
+                        .id(diffId)
+                        .type("font")
+                        .changeType("modified")
+                        .severity("minor")
+                        .description(description.toString())
+                        .baseFontName(baseFont.getFontName())
+                        .compareFontName(compareFont.getFontName())
+                        .baseFontFamily(baseFont.getFontFamily())
+                        .compareFontFamily(compareFont.getFontFamily())
+                        .baseEmbedded(baseFont.isEmbedded())
+                        .compareEmbedded(compareFont.isEmbedded())
+                        .baseBold(baseFont.isBold())
+                        .compareBold(compareFont.isBold())
+                        .baseItalic(baseFont.isItalic())
+                        .compareItalic(compareFont.isItalic())
+                        .build();
+
+                // Set position with proper coordinate handling
+                setFontDifferencePosition(diff, pageWidth, pageHeight, fontDiffIndex++);
+
+                differences.add(diff);
+            }
+        }
+
+        // Fonts only in base document (deleted)
+        for (FontAnalyzer.FontInfo font : baseFonts) {
+            if (!matchedBaseFonts.contains(font)) {
+                // Create font difference for deleted font
+                String diffId = UUID.randomUUID().toString();
+
+                FontDifference diff = FontDifference.builder()
+                        .id(diffId)
+                        .type("font")
+                        .changeType("deleted")
+                        .severity("minor")
+                        .description("Font \"" + font.getFontName() + "\" removed")
+                        .baseFontName(font.getFontName())
+                        .baseFontFamily(font.getFontFamily())
+                        .baseEmbedded(font.isEmbedded())
+                        .baseBold(font.isBold())
+                        .baseItalic(font.isItalic())
+                        .build();
+
+                // Set position with proper coordinate handling
+                setFontDifferencePosition(diff, pageWidth, pageHeight, fontDiffIndex++);
+
+                differences.add(diff);
+            }
+        }
+
+        // Fonts only in compare document (added)
+        for (FontAnalyzer.FontInfo font : compareFonts) {
+            if (!matchedCompareFonts.contains(font)) {
+                // Create font difference for added font
+                String diffId = UUID.randomUUID().toString();
+
+                FontDifference diff = FontDifference.builder()
+                        .id(diffId)
+                        .type("font")
+                        .changeType("added")
+                        .severity("minor")
+                        .description("Font \"" + font.getFontName() + "\" added")
+                        .compareFontName(font.getFontName())
+                        .compareFontFamily(font.getFontFamily())
+                        .compareEmbedded(font.isEmbedded())
+                        .compareBold(font.isBold())
+                        .compareItalic(font.isItalic())
+                        .build();
+
+                // Set position with proper coordinate handling
+                setFontDifferencePosition(diff, pageWidth, pageHeight, fontDiffIndex++);
+
+                differences.add(diff);
+            }
+        }
+
+        return differences;
+    }
+
+    /**
      * Match fonts between base and comparison pages.
      *
      * @param baseFonts Fonts from base page

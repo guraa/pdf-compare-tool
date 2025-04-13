@@ -1,69 +1,73 @@
-2025-04-12 00:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 00:38:03
-2025-04-12 00:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 00:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 00:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 347,85 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 01:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 01:38:03
-2025-04-12 01:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 01:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 01:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 246,16 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 02:00:00 [scheduling-1] INFO  g.pdfcompare.service.CleanupService - Starting scheduled cleanup of old data
-2025-04-12 02:00:00 [scheduling-1] INFO  g.pdfcompare.service.CleanupService - No old comparisons to clean up
-2025-04-12 02:00:00 [scheduling-1] INFO  g.pdfcompare.service.CleanupService - No old documents to clean up
-2025-04-12 02:00:00 [scheduling-1] INFO  g.pdfcompare.service.CleanupService - No temporary files to clean up
-2025-04-12 02:00:00 [scheduling-1] INFO  g.pdfcompare.service.CleanupService - Completed scheduled cleanup of old data
-2025-04-12 02:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 02:38:03
-2025-04-12 02:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 02:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 02:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 142,16 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 03:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 03:38:03
-2025-04-12 03:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 03:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 03:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 452,80 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 04:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 04:38:03
-2025-04-12 04:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 04:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 04:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 352,80 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 05:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 05:38:03
-2025-04-12 05:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 05:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 05:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 247,90 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 06:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 06:38:03
-2025-04-12 06:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 06:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 06:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 331,40 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 07:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 07:38:03
-2025-04-12 07:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 07:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 07:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 228,78 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 08:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 08:38:03
-2025-04-12 08:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 08:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 08:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 123,21 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 09:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 09:38:03
-2025-04-12 09:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 09:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 09:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 369,41 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 10:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 10:38:03
-2025-04-12 10:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 10:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 10:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 268,06 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 11:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 11:38:03
-2025-04-12 11:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 11:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 11:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 167,80 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 12:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 12:38:03
-2025-04-12 12:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 12:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 12:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 296,99 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 13:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 13:38:03
-2025-04-12 13:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 13:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 13:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 194,89 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 14:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 14:38:03
-2025-04-12 14:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 14:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 14:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 94,01 MB, max memory: 7,91 GB, processors: 16
-2025-04-12 15:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-12 15:38:03
-2025-04-12 15:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 6 comparisons
-2025-04-12 15:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 62,70 MB, documents: 50,72 MB, comparisons: 11,99 MB, temp: 0 B
-2025-04-12 15:38:03 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 298,66 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 00:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 00:08:15
+2025-04-13 00:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 00:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 00:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 529,54 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 01:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 01:08:15
+2025-04-13 01:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 01:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 01:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 422,60 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 02:00:00 [scheduling-1] INFO  g.pdfcompare.service.CleanupService - Starting scheduled cleanup of old data
+2025-04-13 02:00:00 [scheduling-1] INFO  g.pdfcompare.service.CleanupService - No old comparisons to clean up
+2025-04-13 02:00:00 [scheduling-1] INFO  g.pdfcompare.service.CleanupService - No old documents to clean up
+2025-04-13 02:00:00 [scheduling-1] INFO  g.pdfcompare.service.CleanupService - No temporary files to clean up
+2025-04-13 02:00:00 [scheduling-1] INFO  g.pdfcompare.service.CleanupService - Completed scheduled cleanup of old data
+2025-04-13 02:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 02:08:15
+2025-04-13 02:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 02:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 02:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 315,39 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 03:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 03:08:15
+2025-04-13 03:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 03:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 03:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 210,08 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 04:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 04:08:15
+2025-04-13 04:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 04:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 04:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 316,11 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 05:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 05:08:15
+2025-04-13 05:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 05:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 05:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 215,63 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 06:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 06:08:15
+2025-04-13 06:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 06:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 06:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 115,90 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 07:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 07:08:15
+2025-04-13 07:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 07:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 07:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 362,96 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 08:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 08:08:15
+2025-04-13 08:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 08:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 08:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 267,72 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 09:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 09:08:15
+2025-04-13 09:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 09:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 09:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 171,60 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 10:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 10:08:15
+2025-04-13 10:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 10:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 10:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 305,47 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 11:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 11:08:15
+2025-04-13 11:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 11:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 11:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 204,77 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 12:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 12:08:15
+2025-04-13 12:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 12:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 12:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 100,00 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 13:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 13:08:15
+2025-04-13 13:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 13:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 13:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 308,83 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 14:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 14:08:15
+2025-04-13 14:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 14:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 14:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 207,41 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 15:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 15:08:15
+2025-04-13 15:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 15:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 15:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 106,06 MB, max memory: 7,91 GB, processors: 16
+2025-04-13 16:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Running system health check at 2025-04-13 16:08:15
+2025-04-13 16:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Database status: 2 documents, 1 comparisons
+2025-04-13 16:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - Storage status: uploads dir size: 9,93 MB, documents: 7,62 MB, comparisons: 2,30 MB, temp: 0 B
+2025-04-13 16:08:15 [scheduling-1] INFO  g.p.service.SystemMonitorService - System resources: available memory: 260,33 MB, max memory: 7,91 GB, processors: 16

@@ -3,7 +3,6 @@ package guraa.pdfcompare.util;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.text.TextPosition;
 import org.springframework.stereotype.Component;
@@ -14,6 +13,7 @@ import java.util.*;
 
 /**
  * Utility class for extracting text from PDF documents with improved positioning information.
+ * Handles coordinate transformation from PDF space to display space.
  */
 @Slf4j
 @Component
@@ -46,9 +46,9 @@ public class TextExtractor {
         }
     }
 
-
     /**
      * Extract text elements with detailed positioning information from a page.
+     * Correctly transforms PDF coordinates to display coordinates.
      *
      * @param document The PDF document
      * @param pageIndex The zero-based page index
@@ -85,35 +85,24 @@ public class TextExtractor {
                 // Create a unique ID for each text element
                 String id = UUID.randomUUID().toString();
 
-                // Correct Y-coordinate transformation
-                // PDF baseline Y is from bottom, we want top-left origin
-                float pdfBoxY = (float) pos.getY();
-                float pdfBoxHeight = (float) pos.getHeightDir(); // Height adjusted for direction/rotation
+                // PDF space: Y origin is at bottom of page, increasing upward
+                // Display space: Y origin is at top of page, increasing downward
+                // Need to transform Y coordinate
+                float pdfY = (float) pos.getY();
+                float height = (float) pos.getHeightDir();
 
-                // Transform Y coordinate to top-left origin
-                // pageHeight - pdfBoxY gives baseline from top
-                // Subtract height to get the top edge from top-left origin
-                float transformedY = pageHeight - pdfBoxY - pdfBoxHeight;
+                // Transform: PDF bottom-left origin to display top-left origin
+                float displayY = pageHeight - pdfY - height; // This is the key transformation
 
-                // Normalize font name and handle potential ToUnicode CMap errors
-                String fontName;
-                try {
-                    PDFont font = pos.getFont();
-                    fontName = normalizeFontName(font.getName());
-                } catch (Exception e) {
-                    log.warn("Error getting font name: {}", e.getMessage());
-                    fontName = "Unknown";
-                }
-
-                // Create a TextElement with corrected positioning information
+                // Create a TextElement with transformed positioning information
                 TextElement element = new TextElement(
                         id,
                         pos.getUnicode(),
-                        (float) pos.getX(),
-                        transformedY, // Corrected Y coordinate
+                        (float) pos.getX(), // X remains the same
+                        displayY,           // Y is transformed
                         (float) pos.getWidth(),
-                        pdfBoxHeight,
-                        fontName,
+                        height,
+                        normalizeFontName(pos.getFont().getName()),
                         pos.getFontSize(),
                         pos.getFontSizeInPt()
                 );
@@ -125,14 +114,27 @@ public class TextExtractor {
             return groupTextElements(elements);
         } catch (Exception e) {
             log.warn("Error extracting text elements from page {}: {}", pageIndex + 1, e.getMessage());
-            return Collections.emptyList(); // Return empty list instead of null
+            return Collections.emptyList();
         }
     }
 
+    /**
+     * Extract color information from a text position if available.
+     * This is a placeholder method - the exact implementation depends on PDFBox version and customizations.
+     *
+     * @param position The text position
+     * @return The extracted color or null if not available
+     */
+    private java.awt.Color extractTextColor(TextPosition position) {
+        // This is a placeholder - actual implementation depends on PDFBox capabilities
+        // In some PDFBox versions, this information might not be directly available
+        return java.awt.Color.BLACK; // Default to black
+    }
 
     /**
      * Group text elements to form words and lines.
      * Combines individual characters into meaningful text elements.
+     * Maintains correct coordinate transformation throughout.
      *
      * @param elements The list of raw text elements (typically individual characters)
      * @return List of grouped text elements
@@ -147,10 +149,9 @@ public class TextExtractor {
             // Copy the list to avoid modifying the original
             List<TextElement> sortedElements = new ArrayList<>(elements);
 
-            // Sort by Y position (primary) and X position (secondary).
-            // Since Y is now relative to top-left, smaller Y means higher up the page. This sort order is correct.
+            // Sort by Y position (primary) and X position (secondary)
             Collections.sort(sortedElements, Comparator
-                    .comparing(TextElement::getY) // Smaller Y is higher on page
+                    .comparing(TextElement::getY) // Y is already in display space (smaller Y is higher on page)
                     .thenComparing(TextElement::getX));
 
             List<TextElement> groupedElements = new ArrayList<>();
@@ -193,6 +194,7 @@ public class TextExtractor {
 
     /**
      * Group elements in a line into words.
+     * Maintains correct coordinate transformation.
      *
      * @param lineElements The elements in a single line
      * @return List of word elements
@@ -240,6 +242,7 @@ public class TextExtractor {
 
     /**
      * Create a single word element from a list of character elements.
+     * Ensures that coordinate transformations are preserved.
      *
      * @param characterElements The list of character elements
      * @return A single word element
@@ -249,25 +252,26 @@ public class TextExtractor {
             return null;
         }
 
-        // Calculate bounds of the word using the transformed coordinates
+        // Calculate bounds of the word
+        // Because we're already working in display coordinates (top-left origin),
+        // we don't need additional coordinate transformation
         float wordMinX = Float.MAX_VALUE;
+        float wordMinY = Float.MAX_VALUE;
         float wordMaxX = Float.MIN_VALUE;
-        float wordMinY = Float.MAX_VALUE; // Top-most Y (smallest value)
-        float wordMaxY = Float.MIN_VALUE; // Bottom-most Y (largest value)
+        float wordMaxY = Float.MIN_VALUE;
 
         StringBuilder text = new StringBuilder();
         String fontName = null;
         float fontSize = 0;
+        java.awt.Color color = null;
 
         for (TextElement element : characterElements) {
             if (element == null) continue; // Skip null elements
 
             wordMinX = Math.min(wordMinX, element.getX());
+            wordMinY = Math.min(wordMinY, element.getY());
             wordMaxX = Math.max(wordMaxX, element.getX() + element.getWidth());
-            // Y is baseline relative to top. The bounding box top is roughly Y - height.
-            // Let's calculate min/max based on the element's baseline Y and height.
-            wordMinY = Math.min(wordMinY, element.getY() - element.getHeight()); // Approximate top edge
-            wordMaxY = Math.max(wordMaxY, element.getY()); // Baseline is approx bottom edge
+            wordMaxY = Math.max(wordMaxY, element.getY() + element.getHeight());
 
             text.append(element.getText());
 
@@ -275,29 +279,36 @@ public class TextExtractor {
             if (fontName == null) {
                 fontName = element.getFontName();
                 fontSize = element.getFontSize();
+                color = element.getColor();
             }
         }
 
         // Calculate final word bounds
         float finalWidth = wordMaxX - wordMinX;
-        float finalHeight = wordMaxY - wordMinY; // Height based on min/max Y
+        float finalHeight = wordMaxY - wordMinY;
 
         // Ensure dimensions are valid
         if (finalWidth <= 0) finalWidth = 1.0f;
-        if (finalHeight <= 0) finalHeight = fontSize > 0 ? fontSize : 10.0f; // Use font size if height is invalid
+        if (finalHeight <= 0) finalHeight = fontSize > 0 ? fontSize : 10.0f;
 
-        // Create a word element using the calculated top-left corner (wordMinX, wordMinY) and dimensions
-        return new TextElement(
+        // Create a word element using the calculated bounds
+        TextElement wordElement = new TextElement(
                 UUID.randomUUID().toString(),
                 text.toString(),
                 wordMinX,
-                wordMinY, // This is the calculated top Y coordinate of the word box
+                wordMinY,
                 finalWidth,
                 finalHeight,
                 fontName != null ? fontName : "Unknown",
                 fontSize,
                 fontSize
         );
+
+        if (color != null) {
+            wordElement.setColor(color);
+        }
+
+        return wordElement;
     }
 
     /**
@@ -317,7 +328,6 @@ public class TextExtractor {
 
         return originalName;
     }
-
 
     /**
      * Custom PDFTextStripper that captures position information.

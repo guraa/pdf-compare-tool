@@ -24,12 +24,12 @@ public class DifferenceCalculator {
     private static final double CRITICAL_THRESHOLD = 0.6; // 60% difference
 
     /**
-     * Set position and bounds for a difference.
+     * Set position and bounds for a difference with proper coordinate handling.
      * This method ensures every difference has proper coordinates.
      *
      * @param difference The difference to update with position information
-     * @param x X-coordinate of the difference
-     * @param y Y-coordinate of the difference
+     * @param x X-coordinate of the difference (display space - already transformed)
+     * @param y Y-coordinate of the difference (display space - already transformed)
      * @param width Width of the difference
      * @param height Height of the difference
      */
@@ -39,7 +39,7 @@ public class DifferenceCalculator {
         difference.setWidth(width);
         difference.setHeight(height);
 
-        // Set bounds for highlighting
+        // Set bounds for highlighting - these are in display coordinates
         difference.setLeft(x);
         difference.setTop(y);
         difference.setRight(x + width);
@@ -385,9 +385,10 @@ public class DifferenceCalculator {
             return "minor"; // Default for other types
         }
     }
+
     /**
      * Estimate coordinates for differences without position data.
-     * This method uses context information to estimate the position.
+     * Uses a page percentage-based approach to place differences in reasonable locations.
      *
      * @param difference The difference to assign coordinates to
      * @param pageWidth Width of the page
@@ -404,9 +405,12 @@ public class DifferenceCalculator {
         double defaultWidth = pageWidth * 0.5;
         double defaultHeight = pageHeight * 0.05;
 
+        // Calculate absolute Y position from relative Y
+        double absoluteY = pageHeight * relativeY;
+
         // Set position based on difference type
         double x = pageWidth * 0.1; // Default to 10% from left
-        double y = pageHeight * relativeY; // Use provided relative Y position
+        double y = absoluteY; // Use calculated absolute Y position
 
         if ("font".equals(difference.getType())) {
             // For font differences, place near the top of the page
@@ -426,4 +430,23 @@ public class DifferenceCalculator {
         setPositionAndBounds(difference, x, y, defaultWidth, defaultHeight);
     }
 
+    /**
+     * Set position and bounds for a difference with explicit page height transformation.
+     * Use this when working with PDF coordinates directly (origin at bottom-left).
+     *
+     * @param difference The difference to update
+     * @param pdfX X coordinate in PDF space
+     * @param pdfY Y coordinate in PDF space (origin at bottom-left)
+     * @param width Width of the difference
+     * @param height Height of the difference
+     * @param pageHeight Total page height for coordinate transformation
+     */
+    public void setPdfPositionAndBounds(Difference difference, double pdfX, double pdfY,
+                                        double width, double height, double pageHeight) {
+        // Transform Y from PDF space (bottom-left origin) to display space (top-left origin)
+        double displayY = pageHeight - pdfY - height;
+
+        // Set position and bounds using the transformed coordinates
+        setPositionAndBounds(difference, pdfX, displayY, width, height);
+    }
 }

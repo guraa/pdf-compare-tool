@@ -8,6 +8,7 @@ import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.model.difference.Difference;
 import guraa.pdfcompare.model.difference.TextDifference;
 import guraa.pdfcompare.util.DifferenceCalculator;
+import guraa.pdfcompare.util.TextElement;
 import guraa.pdfcompare.util.TextExtractor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -149,6 +150,9 @@ public class DifferenceDetectionService {
 
         pageDiff.setDimensionsDifferent(!baseSize.equals(compareSize));
 
+        float basePageHeight = baseSize.getHeight();
+        float comparePageHeight = compareSize.getHeight();
+
         try {
             // Extract text from both pages
             String baseText = textExtractor.extractTextFromPage(basePdf, pageIndex);
@@ -230,7 +234,15 @@ public class DifferenceDetectionService {
     }
 
     /**
-     * Ensure text differences have coordinates.
+     * Ensure text differences have coordinates with proper coordinate transformation.
+     * This method extracts text positions and assigns proper coordinates to differences.
+     *
+     * @param textDiffs List of text differences to update with coordinates
+     * @param fullText Full text content of the page
+     * @param pageWidth Width of the page
+     * @param pageHeight Height of the page
+     * @param pdf PDF document
+     * @param pageIndex Page index
      */
     private void ensureTextDifferencesHaveCoordinates(
             List<TextDifference> textDiffs,
@@ -241,12 +253,12 @@ public class DifferenceDetectionService {
             int pageIndex) {
 
         try {
-            // Extract text elements to find positions
-            List<guraa.pdfcompare.util.TextElement> textElements = textExtractor.extractTextElementsFromPage(pdf, pageIndex);
+            // Extract text elements with correct coordinate transformation
+            List<TextElement> textElements = textExtractor.extractTextElementsFromPage(pdf, pageIndex);
 
             // Create a map to quickly find text elements that might match each difference
-            Map<String, List<guraa.pdfcompare.util.TextElement>> textElementMap = new HashMap<>();
-            for (guraa.pdfcompare.util.TextElement element : textElements) {
+            Map<String, List<TextElement>> textElementMap = new HashMap<>();
+            for (TextElement element : textElements) {
                 String text = element.getText().trim();
                 if (!text.isEmpty()) {
                     textElementMap.computeIfAbsent(text, k -> new ArrayList<>()).add(element);
@@ -262,14 +274,14 @@ public class DifferenceDetectionService {
                 }
 
                 // Try to find exact matches first
-                boolean coordsFound = findAndAssignCoordinates(diff, diffText, textElementMap, pageWidth, pageHeight);
+                boolean coordsFound = findAndAssignCoordinates(diff, diffText, textElementMap);
 
                 // If no exact match, try to find partial matches
                 if (!coordsFound && diffText.length() > 5) {
                     // Try to match based on context - find a portion of the text
                     String context = findTextContext(fullText, diffText);
                     if (context != null && !context.equals(diffText)) {
-                        coordsFound = findAndAssignCoordinates(diff, context, textElementMap, pageWidth, pageHeight);
+                        coordsFound = findAndAssignCoordinates(diff, context, textElementMap);
                     }
                 }
 
@@ -293,9 +305,6 @@ public class DifferenceDetectionService {
         }
     }
 
-    /**
-     * Find text context to help locate where a difference is on the page.
-     */
     private String findTextContext(String fullText, String diffText) {
         if (fullText == null || diffText == null) {
             return null;
@@ -322,23 +331,18 @@ public class DifferenceDetectionService {
         return null;
     }
 
-    /**
-     * Find matching text elements and assign coordinates to the difference.
-     */
     private boolean findAndAssignCoordinates(
             TextDifference diff,
             String searchText,
-            Map<String, List<guraa.pdfcompare.util.TextElement>> textElementMap,
-            double pageWidth,
-            double pageHeight) {
+            Map<String, List<TextElement>> textElementMap) {
 
         // Try to find exact matches first
-        List<guraa.pdfcompare.util.TextElement> matches = textElementMap.getOrDefault(searchText.trim(), Collections.emptyList());
+        List<TextElement> matches = textElementMap.getOrDefault(searchText.trim(), Collections.emptyList());
 
         // If no exact matches, search for partial matches
         if (matches.isEmpty() && searchText.length() > 10) {
-            List<guraa.pdfcompare.util.TextElement> candidates = new ArrayList<>();
-            for (Map.Entry<String, List<guraa.pdfcompare.util.TextElement>> entry : textElementMap.entrySet()) {
+            List<TextElement> candidates = new ArrayList<>();
+            for (Map.Entry<String, List<TextElement>> entry : textElementMap.entrySet()) {
                 if (entry.getKey().contains(searchText) || searchText.contains(entry.getKey())) {
                     candidates.addAll(entry.getValue());
                 }
@@ -348,12 +352,12 @@ public class DifferenceDetectionService {
 
         if (!matches.isEmpty()) {
             // Calculate a bounding box that includes all matching elements
-            double minX = pageWidth;
-            double minY = pageHeight;
+            double minX = Double.MAX_VALUE;
+            double minY = Double.MAX_VALUE;
             double maxX = 0;
             double maxY = 0;
 
-            for (guraa.pdfcompare.util.TextElement element : matches) {
+            for (TextElement element : matches) {
                 minX = Math.min(minX, element.getX());
                 minY = Math.min(minY, element.getY());
                 maxX = Math.max(maxX, element.getX() + element.getWidth());
@@ -361,6 +365,8 @@ public class DifferenceDetectionService {
             }
 
             // Set the coordinates on the difference
+            // No need for additional transformation since the TextElements already have
+            // coordinates in display space (origin at top-left)
             differenceCalculator.setPositionAndBounds(
                     diff,
                     minX,
@@ -374,65 +380,13 @@ public class DifferenceDetectionService {
         return false;
     }
 
-    /**
-     * Estimate relative Y position for a difference on the page.
-     */
-    private double estimateRelativeYPosition(TextDifference diff, int pageNumber) {
-        // The idea is to distribute differences across the page for better visualization
-        // Based on page number and other factors to make it predictable and consistent
 
-        double baseOffset = (pageNumber % 10) * 0.05;
 
-        // Use hash code of the text for deterministic but distributed placement
-        int textHash = diff.getText() != null ? diff.getText().hashCode() : 0;
-        double hashOffset = Math.abs(textHash % 100) / 100.0 * 0.4; // 0-0.4 range
 
-        double position = 0.1 + baseOffset + hashOffset; // Start at 10% from the top, then add offsets
-
-        // Cap at reasonable range
-        return Math.min(0.9, Math.max(0.1, position));
-    }
 
     /**
-     * Ensure all differences in a list have coordinates.
-     */
-    private void ensureCoordinatesForDifferences(
-            List<Difference> differences,
-            double pageWidth,
-            double pageHeight,
-            double defaultRelativeY) {
-
-        if (differences == null) {
-            return;
-        }
-
-        // Map to track how many differences of each type we've seen
-        Map<String, Integer> typeCounts = new HashMap<>();
-
-        for (Difference diff : differences) {
-            // Skip if already has coordinates
-            if (diff.getX() != 0 || diff.getY() != 0) {
-                continue;
-            }
-
-            // Get count for this type
-            int count = typeCounts.getOrDefault(diff.getType(), 0);
-            typeCounts.put(diff.getType(), count + 1);
-
-            // Calculate a relative Y offset based on the count to spread differences vertically
-            double relativeYOffset = count * 0.05;
-            double relativeY = defaultRelativeY + relativeYOffset;
-
-            // Ensure we stay within bounds
-            relativeY = Math.min(0.9, relativeY);
-
-            // Set position and bounds
-            differenceCalculator.estimatePositionForDifference(diff, pageWidth, pageHeight, relativeY);
-        }
-    }
-
-    /**
-     * Create detailed page analysis for a standard comparison.
+     * Create detailed page analysis for a standard comparison with proper coordinate handling.
+     * This method ensures consistent coordinate transformation throughout the page analysis.
      *
      * @param comparisonId     The comparison ID
      * @param pageNumber       The page number (1-based)
@@ -485,6 +439,10 @@ public class DifferenceDetectionService {
         pageDetails.setBaseExtractedText(baseText);
         pageDetails.setCompareExtractedText(compareText);
 
+        // Get page heights for coordinate transformations
+        double basePageHeight = baseSize != null ? baseSize.getHeight() : 0;
+        double comparePageHeight = compareSize != null ? compareSize.getHeight() : 0;
+
         // Organize differences by source document
         List<Difference> baseDifferences = new ArrayList<>();
         List<Difference> compareDifferences = new ArrayList<>();
@@ -494,7 +452,8 @@ public class DifferenceDetectionService {
             // Make sure all text differences have coordinates
             if (diff.getX() == 0 && diff.getY() == 0 && diff.getWidth() == 0 && diff.getHeight() == 0) {
                 double relativeY = estimateRelativeYPosition(diff, pageNumber);
-                differenceCalculator.estimatePositionForDifference(diff, baseSize.getWidth(), baseSize.getHeight(), relativeY);
+                differenceCalculator.estimatePositionForDifference(diff,
+                        baseSize.getWidth(), baseSize.getHeight(), relativeY);
             }
 
             if (!"added".equals(diff.getChangeType())) {
@@ -510,7 +469,8 @@ public class DifferenceDetectionService {
         for (Difference diff : textElementDiffs) {
             // Make sure all differences have coordinates
             if (diff.getX() == 0 && diff.getY() == 0 && diff.getWidth() == 0 && diff.getHeight() == 0) {
-                differenceCalculator.estimatePositionForDifference(diff, baseSize.getWidth(), baseSize.getHeight(), 0.3);
+                differenceCalculator.estimatePositionForDifference(diff,
+                        baseSize.getWidth(), baseSize.getHeight(), 0.3);
             }
 
             if (!"added".equals(diff.getChangeType())) {
@@ -526,7 +486,8 @@ public class DifferenceDetectionService {
         for (Difference diff : imageDiffs) {
             // Make sure all image differences have coordinates
             if (diff.getX() == 0 && diff.getY() == 0 && diff.getWidth() == 0 && diff.getHeight() == 0) {
-                differenceCalculator.estimatePositionForDifference(diff, baseSize.getWidth(), baseSize.getHeight(), 0.4);
+                differenceCalculator.estimatePositionForDifference(diff,
+                        baseSize.getWidth(), baseSize.getHeight(), 0.4);
             }
 
             if (!"added".equals(diff.getChangeType())) {
@@ -542,7 +503,8 @@ public class DifferenceDetectionService {
         for (Difference diff : fontDiffs) {
             // Make sure all font differences have coordinates
             if (diff.getX() == 0 && diff.getY() == 0 && diff.getWidth() == 0 && diff.getHeight() == 0) {
-                differenceCalculator.estimatePositionForDifference(diff, baseSize.getWidth(), baseSize.getHeight(), 0.2);
+                differenceCalculator.estimatePositionForDifference(diff,
+                        baseSize.getWidth(), baseSize.getHeight(), 0.2);
             }
 
             if (!"added".equals(diff.getChangeType())) {
@@ -581,6 +543,76 @@ public class DifferenceDetectionService {
                 "page_" + pageNumber + "_details.json");
         objectMapper.writeValue(detailsPath.toFile(), pageDetails);
     }
+
+    /**
+     * Estimate relative Y position for a difference on the page.
+     * Used when exact coordinates cannot be determined.
+     *
+     * @param diff The difference
+     * @param pageNumber The page number
+     * @return Relative Y position (0.0-1.0)
+     */
+    private double estimateRelativeYPosition(TextDifference diff, int pageNumber) {
+        // The idea is to distribute differences across the page for better visualization
+        // Based on page number and other factors to make it predictable and consistent
+
+        double baseOffset = (pageNumber % 10) * 0.05;
+
+        // Use hash code of the text for deterministic but distributed placement
+        int textHash = diff.getText() != null ? diff.getText().hashCode() : 0;
+        double hashOffset = Math.abs(textHash % 100) / 100.0 * 0.4; // 0-0.4 range
+
+        double position = 0.1 + baseOffset + hashOffset; // Start at 10% from the top, then add offsets
+
+        // Cap at reasonable range
+        return Math.min(0.9, Math.max(0.1, position));
+    }
+    /**
+     * Ensure all differences in a list have coordinates.
+     * Fills in missing coordinates for any difference in the list.
+     *
+     * @param differences List of differences to check and update
+     * @param pageWidth Width of the page
+     * @param pageHeight Height of the page
+     * @param defaultRelativeY Default relative Y position (0.0-1.0) to use if no other reference is available
+     */
+    private void ensureCoordinatesForDifferences(
+            List<Difference> differences,
+            double pageWidth,
+            double pageHeight,
+            double defaultRelativeY) {
+
+        if (differences == null) {
+            return;
+        }
+
+        // Map to track how many differences of each type we've seen
+        Map<String, Integer> typeCounts = new HashMap<>();
+
+        for (Difference diff : differences) {
+            // Skip if already has coordinates
+            if (diff.getX() != 0 || diff.getY() != 0) {
+                continue;
+            }
+
+            // Get count for this type
+            int count = typeCounts.getOrDefault(diff.getType(), 0);
+            typeCounts.put(diff.getType(), count + 1);
+
+            // Calculate a relative Y offset based on the count to spread differences vertically
+            double relativeYOffset = count * 0.05;
+            double relativeY = defaultRelativeY + relativeYOffset;
+
+            // Ensure we stay within bounds
+            relativeY = Math.min(0.9, relativeY);
+
+            // Set position and bounds using the estimatePositionForDifference method
+            // which handles coordinates correctly for display space
+            differenceCalculator.estimatePositionForDifference(diff, pageWidth, pageHeight, relativeY);
+        }
+    }
+
+
 
     /**
      * Compare pages for a specific document pair.
