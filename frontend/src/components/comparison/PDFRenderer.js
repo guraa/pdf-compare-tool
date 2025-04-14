@@ -31,7 +31,7 @@ const PDFRenderer = ({
   const [isLoading, setIsLoading] = useState(true);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [scaleFactor, setScaleFactor] = useState(1);
-  const [containerOffset, setContainerOffset] = useState({ x: 0, y: 0 });
+  const [containerOffset, setContainerOffset] = useState({ x: -20, y: -20 });
   const [adjustedCoordinates, setAdjustedCoordinates] = useState([]);
 
   // Store actual coordinates for debugging

@@ -2,7 +2,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* align-items: center; Removed centering */
   min-height: 300px;
   max-width: 100%;
 }
@@ -29,8 +29,9 @@
 
 .canvas-container {
   position: relative;
-  display: inline-block;
+  display: block; /* Changed from inline-block */
   transition: opacity 0.3s ease;
+  margin: 0 auto; /* Center the block container itself */
 }
 
 .pdf-image {

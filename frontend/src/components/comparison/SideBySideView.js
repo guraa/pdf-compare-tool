@@ -344,8 +344,8 @@ const SideBySideView = ({ comparisonId }) => {
             <label style={{ marginRight: '8px', fontWeight: 'bold' }}>X Offset:</label>
             <input 
               type="range" 
-              min="-20" 
-              max="20" 
+              min="-200" 
+              max="200" 
               step="1"
               value={adjustmentParams.xOffset}
               onChange={(e) => updateAdjustmentParam('xOffset', parseInt(e.target.value))}
@@ -360,8 +360,8 @@ const SideBySideView = ({ comparisonId }) => {
             <label style={{ marginRight: '8px', fontWeight: 'bold' }}>Y Offset:</label>
             <input 
               type="range" 
-              min="-20" 
-              max="20" 
+              min="-1000" 
+              max="1000" 
               step="1"
               value={adjustmentParams.yOffset}
               onChange={(e) => updateAdjustmentParam('yOffset', parseInt(e.target.value))}
@@ -376,9 +376,9 @@ const SideBySideView = ({ comparisonId }) => {
             <label style={{ marginRight: '8px', fontWeight: 'bold' }}>Scale:</label>
             <input 
               type="range" 
-              min="0.8" 
-              max="1.2" 
-              step="0.01"
+              min="0.0" 
+              max="1.9" 
+              step="0.001"
               value={adjustmentParams.scaleAdjustment}
               onChange={(e) => updateAdjustmentParam('scaleAdjustment', parseFloat(e.target.value))}
               style={{ width: '100px', verticalAlign: 'middle' }}
