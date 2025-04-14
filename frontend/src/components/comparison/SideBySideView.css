@@ -1,4 +1,4 @@
-/* SideBySideView styles with single scrollbar */
+/* Enhanced SideBySideView styles with continuous scrolling for all document pairs */
 .pdf-comparison-container {
   display: flex;
   flex-direction: column;
@@ -12,7 +12,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
+  padding: var(--spacing-m);
   background-color: var(--surface-color);
   border-bottom: 1px solid var(--border-color);
   z-index: 10;
@@ -58,27 +58,6 @@
   color: var(--text-disabled);
 }
 
-.zoom-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.zoom-controls button {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--primary-light);
-  color: var(--primary-color);
-  border: none;
-  border-radius: 4px;
-  font-size: 16px;
-  font-weight: bold;
-  cursor: pointer;
-}
-
 .comparison-content {
   display: flex;
   flex: 1;
@@ -86,10 +65,10 @@
   position: relative;
 }
 
-/* Single scrollbar container */
+/* Continuous scrolling container */
 .documents-scroll-container {
   flex: 1;
-  overflow-y: auto; /* This is the only scrollbar */
+  overflow-y: auto;
   overflow-x: hidden;
   transition: width 0.3s ease;
 }
@@ -98,13 +77,90 @@
   width: calc(100% - 350px);
 }
 
-/* Wrapper that holds both documents side by side */
-.documents-wrapper {
+/* Continuous PDF view */
+.continuous-pdf-view {
   display: flex;
+  flex-direction: column;
   width: 100%;
 }
 
-.document-view {
+/* Document pair container */
+.document-pair {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--spacing-xl);
+  background-color: var(--surface-color);
+  border-radius: var(--border-radius-m);
+  box-shadow: var(--shadow-light);
+  overflow: hidden;
+  position: relative;
+}
+
+/* Pair header */
+.pair-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-m);
+  background-color: var(--primary-color);
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.pair-header h3 {
+  margin: 0;
+  color: white;
+  font-size: var(--font-size-l);
+  font-weight: 500;
+}
+
+.match-percentage {
+  font-weight: bold;
+  padding: var(--spacing-xs) var(--spacing-s);
+  border-radius: var(--border-radius-s);
+}
+
+/* Individual page container */
+.pdf-page-container {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--spacing-m);
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
+}
+
+.pdf-page-container:last-child {
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+/* Page header */
+.page-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-s);
+  background-color: var(--primary-light);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.page-header h4 {
+  margin: 0;
+  color: var(--primary-dark);
+  font-size: var(--font-size-m);
+  font-weight: 500;
+}
+
+/* Page content with side-by-side PDFs */
+.page-content {
+  display: flex;
+  flex-direction: row;
+}
+
+/* Individual side (base or compare) */
+.page-side {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -112,53 +168,42 @@
   background-color: var(--surface-color);
 }
 
-.document-view:last-child {
+.page-side:last-child {
   border-right: none;
 }
 
+/* Document headers */
 .document-header {
-  padding: 8px 16px;
-  background-color: var(--primary-light);
+  padding: var(--spacing-s) var(--spacing-m);
+  background-color: var(--background-color);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  position: sticky;
-  top: 0;
-  z-index: 5;
 }
 
 .document-header h4 {
   margin: 0;
-  color: var(--primary-dark);
-  font-size: 16px;
+  color: var(--text-primary);
+  font-size: var(--font-size-s);
   font-weight: 500;
 }
 
 .page-info {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
 }
 
 .document-content {
-  padding: 16px;
+  padding: var(--spacing-m);
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  background-color: var(--background-color);
-  position: relative;
-  min-height: 400px;
-  /* No overflow here - scrolling happens at the container level */
-  overflow: visible;
-}
-
-/* Make sure PDFRenderer is visible */
-.document-content .pdf-renderer {
-  display: block;
   min-height: 300px;
-  min-width: 200px;
+  position: relative;
 }
 
+/* Difference panel */
 .difference-panel {
   width: 350px;
   border-left: 1px solid var(--border-color);
@@ -169,7 +214,7 @@
 }
 
 .difference-panel-header {
-  padding: 12px 16px;
+  padding: var(--spacing-m);
   background-color: var(--primary-light);
   border-bottom: 1px solid var(--border-color);
   position: sticky;
@@ -180,10 +225,17 @@
 .difference-panel-header h3 {
   margin: 0;
   color: var(--primary-dark);
-  font-size: 16px;
+  font-size: var(--font-size-m);
   font-weight: 500;
 }
 
+.difference-count {
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-size-s);
+  color: var(--text-secondary);
+}
+
+/* Toggle panel button */
 .toggle-panel-button {
   position: absolute;
   top: 50%;
@@ -194,7 +246,7 @@
   width: 24px;
   height: 80px;
   border: none;
-  border-radius: 4px 0 0 4px;
+  border-radius: var(--border-radius-s) 0 0 var(--border-radius-s);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -207,163 +259,181 @@
   right: 0;
 }
 
+/* Comparison footer */
 .comparison-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
+  justify-content: center;
+  padding: var(--spacing-m);
   background-color: var(--surface-color);
   border-top: 1px solid var(--border-color);
   z-index: 10;
 }
 
-.page-navigation {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.page-navigation button {
-  background-color: var(--primary-color);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-.page-navigation button:disabled {
-  background-color: var(--text-disabled);
-  cursor: not-allowed;
-}
-
-.page-indicator {
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
+/* View controls */
 .view-controls {
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 800px;
+}
+
+.highlight-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.highlight-controls label {
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .highlight-controls select {
-  padding: 6px 8px;
+  padding: var(--spacing-xs) var(--spacing-s);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--border-radius-s);
   background-color: var(--surface-color);
+  color: var(--text-primary);
 }
 
+.page-status {
+  font-size: var(--font-size-s);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* No content placeholder */
 .no-content {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 300px;
-  padding: 16px;
+  padding: var(--spacing-m);
   background-color: var(--background-color);
   border: 1px dashed var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--border-radius-s);
   color: var(--text-secondary);
 }
 
+/* Loading container */
 .loading-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 400px;
-  padding: 16px;
+  padding: var(--spacing-xl);
 }
 
 .loading-container p {
-  margin-top: 16px;
+  margin-top: var(--spacing-m);
   color: var(--text-secondary);
 }
 
-/* Difference highlighting styles */
-.highlight-text {
-  background-color: rgba(255, 82, 82, 0.3) !important;
-  border: 2px solid rgba(255, 82, 82, 0.8) !important;
-}
-
-.highlight-image {
-  background-color: rgba(33, 150, 243, 0.3) !important;
-  border: 2px solid rgba(33, 150, 243, 0.8) !important;
-}
-
-.highlight-font {
-  background-color: rgba(156, 39, 176, 0.3) !important;
-  border: 2px solid rgba(156, 39, 176, 0.8) !important;
-}
-
-.highlight-style {
-  background-color: rgba(255, 152, 0, 0.3) !important;
-  border: 2px solid rgba(255, 152, 0, 0.8) !important;
-}
-
-.highlight-selected {
-  box-shadow: 0 0 0 3px rgba(255, 255, 0, 0.8) !important;
-  animation: pulse 1.5s infinite !important;
-}
-
-@keyframes pulse {
-  0% { opacity: 0.8; }
-  50% { opacity: 1; }
-  100% { opacity: 0.8; }
-}
-
-/* Responsive styles */
+/* Responsive design */
 @media (max-width: 1024px) {
-  .documents-wrapper {
+  .page-content {
     flex-direction: column;
   }
   
-  .document-view {
+  .page-side {
     border-right: none;
     border-bottom: 1px solid var(--border-color);
   }
   
-  .document-view:last-child {
+  .page-side:last-child {
     border-bottom: none;
+  }
+  
+  .documents-scroll-container.with-panel {
+    width: 100%;
+    height: calc(100% - 300px);
+  }
+  
+  .difference-panel {
+    width: 100%;
+    height: 300px;
+    border-left: none;
+    border-top: 1px solid var(--border-color);
   }
   
   .toggle-panel-button {
     top: unset;
     right: 16px;
-    bottom: 16px;
+    bottom: 304px;
     transform: none;
     height: 32px;
     width: 80px;
-    border-radius: 4px;
+    border-radius: var(--border-radius-s);
+  }
+  
+  .toggle-panel-button.hidden {
+    bottom: 16px;
   }
 }
 
 @media (max-width: 768px) {
-  .comparison-content {
+  .comparison-header {
     flex-direction: column;
+    gap: var(--spacing-s);
+    padding: var(--spacing-s) var(--spacing-m);
   }
   
-  .documents-scroll-container.with-panel,
-  .documents-scroll-container {
-    width: 100%;
-    max-height: 60vh;
-  }
-  
-  .difference-panel {
-    width: 100%;
-    height: 40vh;
-    border-left: none;
-    border-top: 1px solid var(--border-color);
-  }
-  
-  .comparison-footer {
-    flex-direction: column;
-    gap: 12px;
+  .back-button {
+    align-self: flex-start;
   }
   
   .view-controls {
-    width: 100%;
-    justify-content: space-between;
+    flex-direction: column;
+    gap: var(--spacing-s);
   }
+  
+  .highlight-controls {
+    width: 100%;
+  }
+  
+  .highlight-controls select {
+    flex: 1;
+  }
+}
+
+/* Special styling for pairs */
+.document-pair:nth-child(odd) .pair-header {
+  background-color: var(--primary-dark);
+}
+
+.document-pair:nth-child(even) .pair-header {
+  background-color: var(--primary-color);
+}
+/* Highlight the current (most visible) document pair */
+.document-pair {
+  border-left: 5px solid transparent;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.document-pair.current-pair {
+  border-left-color: var(--primary-color);
+  box-shadow: var(--shadow-medium);
+}
+
+/* Update the difference panel header to show current document info */
+.difference-panel-header h3 {
+  margin: 0;
+  color: var(--primary-dark);
+  font-size: var(--font-size-m);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+}
+
+.difference-panel-header h3::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  margin-right: var(--spacing-xs);
 }

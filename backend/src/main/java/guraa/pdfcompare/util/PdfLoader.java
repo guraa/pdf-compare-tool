@@ -1,6 +1,7 @@
 package guraa.pdfcompare.util;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.pdfbox.io.MemoryUsageSetting;
 import org.apache.pdfbox.io.RandomAccessBufferedFileInputStream;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
@@ -14,102 +15,78 @@ import java.nio.file.StandardCopyOption;
 
 /**
  * Enhanced utility for loading problematic PDF documents with advanced error recovery.
- * Handles common issues like Ascii85 stream errors, DataFormatExceptions, and bounds issues.
+ * Provides multiple fallback strategies to handle corrupted or problematic PDF files.
  */
 @Slf4j
 public class PdfLoader {
 
+    private static final int MAX_RETRIES = 3;
+
     /**
      * Load a PDF document with maximum error resilience.
-     * Uses multiple fallback strategies for handling problematic files.
+     * Tries multiple fallback strategies when standard loading fails.
      *
      * @param file The PDF file to load
      * @return The loaded PDF document
      * @throws IOException If the document cannot be loaded with any method
      */
     public static PDDocument loadDocumentWithFallbackOptions(File file) throws IOException {
+        // Increase the push back size for better handling of problematic PDFs
         System.setProperty("org.apache.pdfbox.baseParser.pushBackSize", "8192");
+
+        // First attempt: Standard loading
         try {
-            // First try standard loading
             return PDDocument.load(file);
         } catch (InvalidPasswordException e) {
             throw e; // Password protected PDFs need special handling
         } catch (Exception e) {
-            log.warn("Error loading PDF with standard method: {}. Trying with fallback options...", e.getMessage());
-
-            // Check if the error is related to stream issues
-            if (e.getMessage() != null &&
-                    (e.getMessage().contains("Ascii85") ||
-                            e.getMessage().contains("FlateFilter") ||
-                            e.getMessage().contains("DataFormatException") ||
-                            e.getMessage().contains("bounds"))) {
-
-                // Try with the sanitized copy approach
-                return loadWithSanitizedCopy(file);
-            }
-
-            // Try with RandomAccessBufferedFileInputStream
-            try {
-                return PDDocument.load(new RandomAccessBufferedFileInputStream(file));
-            } catch (Exception e2) {
-                log.warn("Error loading PDF with RandomAccessBufferedFileInputStream: {}", e2.getMessage());
-            }
-
-            // Try with direct file input stream
-            try (FileInputStream fis = new FileInputStream(file)) {
-                return PDDocument.load(fis);
-            } catch (Exception e3) {
-                log.error("Failed to load PDF with all fallback options: {}", e3.getMessage());
-                throw new IOException("Could not load PDF document after multiple attempts", e3);
-            }
+            log.warn("Standard PDF loading failed for {}: {}. Trying with fallbacks...",
+                    file.getName(), e.getMessage());
         }
-    }
 
-    /**
-     * Load a PDF by first creating a sanitized copy that may fix some stream issues.
-     * This approach can help with Ascii85 and FlateFilter errors.
-     *
-     * @param file The original PDF file
-     * @return The loaded PDF document
-     * @throws IOException If sanitizing and loading fails
-     */
-    private static PDDocument loadWithSanitizedCopy(File file) throws IOException {
-        File sanitizedFile = null;
+        // Second attempt: Try with RandomAccessBufferedFileInputStream
         try {
-            // Create a sanitized copy in a temporary location
-            sanitizedFile = createSanitizedCopy(file);
-
-            // Try loading with RandomAccessBufferedFileInputStream
-            try {
-                return PDDocument.load(new RandomAccessBufferedFileInputStream(sanitizedFile));
-            } catch (Exception e1) {
-                log.warn("Error loading sanitized PDF with RandomAccessBufferedFileInputStream: {}", e1.getMessage());
-
-                // Fallback to standard loading
-                try {
-                    return PDDocument.load(sanitizedFile);
-                } catch (Exception e2) {
-                    log.warn("Error loading sanitized PDF with standard loading: {}", e2.getMessage());
-
-                    // Last attempt with FileInputStream
-                    try (FileInputStream fis = new FileInputStream(sanitizedFile)) {
-                        return PDDocument.load(fis);
-                    } catch (Exception e3) {
-                        log.error("Failed to load sanitized PDF with all fallback options: {}", e3.getMessage());
-                        throw new IOException("Could not load sanitized PDF document after multiple attempts", e3);
-                    }
-                }
-            }
-        } finally {
-            // Clean up temporary file
-            if (sanitizedFile != null && sanitizedFile.exists()) {
-                try {
-                    Files.delete(sanitizedFile.toPath());
-                } catch (Exception e) {
-                    log.warn("Failed to delete temporary sanitized file: {}", e.getMessage());
-                }
-            }
+            return PDDocument.load(new RandomAccessBufferedFileInputStream(file));
+        } catch (Exception e) {
+            log.warn("RandomAccessBufferedFileInputStream loading failed: {}", e.getMessage());
         }
+
+        // Third attempt: Try with direct FileInputStream
+        try (FileInputStream fis = new FileInputStream(file)) {
+            return PDDocument.load(fis);
+        } catch (Exception e) {
+            log.warn("Direct FileInputStream loading failed: {}", e.getMessage());
+        }
+
+        // Fourth attempt: Create a sanitized copy that may fix stream issues
+        try {
+            File sanitizedFile = createSanitizedCopy(file);
+            try {
+                PDDocument doc = PDDocument.load(sanitizedFile);
+                // If we get here, loading succeeded
+                Files.deleteIfExists(sanitizedFile.toPath()); // Clean up temp file
+                return doc;
+            } catch (Exception e) {
+                log.warn("Loading sanitized copy failed: {}", e.getMessage());
+                Files.deleteIfExists(sanitizedFile.toPath()); // Clean up temp file
+            }
+        } catch (Exception e) {
+            log.warn("Failed to create sanitized copy: {}", e.getMessage());
+        }
+
+        // Fifth attempt: Try with memory usage optimizations
+        try {
+            System.gc(); // Suggest garbage collection before trying again
+            // Set memory-saving options
+            System.setProperty("org.apache.pdfbox.rendering.UsePureJava", "true");
+            return PDDocument.load(file, MemoryUsageSetting.setupTempFileOnly());
+        } catch (Exception e) {
+            log.warn("Memory-optimized loading failed: {}", e.getMessage());
+        }
+
+        // Last resort: Throw a meaningful error message
+        throw new IOException("Failed to load PDF document after trying all available methods. " +
+                "The file may be corrupted or use unsupported features.");
     }
 
     /**
@@ -172,6 +149,43 @@ public class PdfLoader {
         } catch (Exception e) {
             log.error("Failed to create sanitized copy: {}", e.getMessage());
             throw new IOException("Failed to create sanitized copy of PDF", e);
+        }
+    }
+
+    /**
+     * Helper method for determining if PDF loading error indicates a corrupted file.
+     *
+     * @param e The exception to check
+     * @return true if the exception indicates corruption
+     */
+    public static boolean isCorruptionError(Exception e) {
+        if (e == null) return false;
+
+        String message = e.getMessage();
+        if (message == null) return false;
+
+        return message.contains("cross reference") ||
+                message.contains("xref") ||
+                message.contains("corrupt") ||
+                message.contains("trailer") ||
+                message.contains("startxref") ||
+                message.contains("EOF") ||
+                message.contains("expected") ||
+                message.contains("missing");
+    }
+
+    /**
+     * Helper method to check if a PDF document is valid.
+     *
+     * @param file The PDF file to check
+     * @return true if valid, false otherwise
+     */
+    public static boolean isValidPdf(File file) {
+        try (PDDocument ignored = loadDocumentWithFallbackOptions(file)) {
+            return true;
+        } catch (Exception e) {
+            log.debug("PDF validation failed: {}", e.getMessage());
+            return false;
         }
     }
 }

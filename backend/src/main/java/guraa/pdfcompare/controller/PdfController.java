@@ -2,6 +2,7 @@ package guraa.pdfcompare.controller;
 
 import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.service.PdfService;
+import guraa.pdfcompare.service.PdfRenderingService;
 import guraa.pdfcompare.service.ThumbnailService;
 import guraa.pdfcompare.util.PdfPasswordHandler;
 import lombok.RequiredArgsConstructor;
@@ -183,6 +184,7 @@ public class PdfController {
      *
      * @param fileId The file ID
      * @param pageNumber The page number (1-based)
+     * @param forceRerender Whether to force re-rendering of the page
      * @return The page as an image
      */
     @GetMapping("/document/{fileId}/page/{pageNumber}")
@@ -203,14 +205,10 @@ public class PdfController {
                 ));
             }
 
-            // If forcing re-render, regenerate the page
+            // If forcing re-render, delete existing rendered page
             if (forceRerender) {
                 try {
-                    // This will use the PdfService's rendering functionality
-                    File renderedPage = new File(
-                            "uploads/documents/" + fileId + "/pages/page_" + pageNumber + ".png");
-
-                    // Delete existing file if it exists
+                    File renderedPage = new File("uploads/documents/" + fileId + "/pages/page_" + pageNumber + ".png");
                     if (renderedPage.exists()) {
                         renderedPage.delete();
                     }
@@ -219,14 +217,14 @@ public class PdfController {
                 }
             }
 
-            // Get the rendered page image
-            FileSystemResource pageImage = pdfService.getRenderedPage(fileId, pageNumber);
+            // Get the rendered page image using the enhanced rendering service
+            FileSystemResource pageImage = PdfRenderingService.getRenderedPage(document, pageNumber);
 
             return ResponseEntity.ok()
                     .contentType(MediaType.IMAGE_PNG)
                     .body(pageImage);
         } catch (Exception e) {
-            log.error("Failed to get document page", e);
+            log.error("Failed to get document page: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Failed to render page: " + e.getMessage()));
         }
@@ -363,8 +361,11 @@ public class PdfController {
      * @return The thumbnail as an image
      */
     @GetMapping("/document/{fileId}/thumbnail/{pageNumber}")
-    public ResponseEntity<?> getDocumentThumbnail(@PathVariable String fileId,
-                                                  @PathVariable int pageNumber) {
+    public ResponseEntity<?> getDocumentThumbnail(
+            @PathVariable String fileId,
+            @PathVariable int pageNumber,
+            @RequestParam(required = false, defaultValue = "false") boolean forceRegenerate) {
+
         try {
             // Get the document
             PdfDocument document = pdfService.getDocumentById(fileId);
@@ -377,19 +378,29 @@ public class PdfController {
                 ));
             }
 
-            // Get the thumbnail
-            FileSystemResource thumbnailImage = thumbnailService.getThumbnail(document, pageNumber);
-
-            if (thumbnailImage == null || !thumbnailImage.exists()) {
-                return ResponseEntity.notFound().build();
+            // If forcing regeneration, delete existing thumbnail
+            if (forceRegenerate) {
+                try {
+                    File thumbnailFile = new File("uploads/documents/" + fileId +
+                            "/thumbnails/page_" + pageNumber + "_thumbnail.png");
+                    if (thumbnailFile.exists()) {
+                        thumbnailFile.delete();
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to delete existing thumbnail for regeneration: {}", e.getMessage());
+                }
             }
+
+            // Get the thumbnail using the enhanced rendering service
+            FileSystemResource thumbnailImage = PdfRenderingService.getThumbnail(document, pageNumber);
 
             return ResponseEntity.ok()
                     .contentType(MediaType.IMAGE_PNG)
                     .body(thumbnailImage);
         } catch (Exception e) {
-            log.error("Failed to get document thumbnail", e);
-            return ResponseEntity.notFound().build();
+            log.error("Failed to get document thumbnail: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to render thumbnail: " + e.getMessage()));
         }
     }
 

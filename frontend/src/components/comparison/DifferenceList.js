@@ -3,7 +3,7 @@ import { usePreferences } from '../../context/PreferencesContext';
 import './DifferenceList.css';
 
 /**
- * DifferenceList component styled to match the reference images
+ * Enhanced DifferenceList component to show only visible differences
  */
 const DifferenceList = ({
   result, 
@@ -14,6 +14,8 @@ const DifferenceList = ({
   const [allDifferences, setAllDifferences] = useState([]);
   const [filteredDifferences, setFilteredDifferences] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [expandedTypes, setExpandedTypes] = useState({ text: true, image: true, font: true, style: true });
+  const [typeFilters, setTypeFilters] = useState({ text: true, image: true, font: true, style: true });
   
   // Process differences when data changes
   useEffect(() => {
@@ -46,12 +48,45 @@ const DifferenceList = ({
     // Convert map to array
     const combined = Array.from(differencesMap.values());
     
-    setAllDifferences(combined);
-    applyFilters(combined, searchTerm);
+    // Group differences by page if the page property exists
+    const byPage = {};
+    combined.forEach(diff => {
+      const page = diff.page || 1;
+      if (!byPage[page]) {
+        byPage[page] = [];
+      }
+      byPage[page].push(diff);
+    });
+    
+    // Sort differences by page, then by position on the page
+    const sortedByPage = Object.entries(byPage).sort(([pageA], [pageB]) => parseInt(pageA) - parseInt(pageB));
+    
+    const sortedCombined = [];
+    sortedByPage.forEach(([page, diffs]) => {
+      // Sort differences by position (top to bottom)
+      const sortedPageDiffs = diffs.sort((a, b) => {
+        // Get Y position (if available)
+        const aY = a.position?.y || a.y || 0;
+        const bY = b.position?.y || b.y || 0;
+        
+        // Sort by Y first
+        if (aY !== bY) return aY - bY;
+        
+        // Then by X (left to right)
+        const aX = a.position?.x || a.x || 0;
+        const bX = b.position?.x || b.x || 0;
+        return aX - bX;
+      });
+      
+      sortedCombined.push(...sortedPageDiffs);
+    });
+    
+    setAllDifferences(sortedCombined);
+    applyFilters(sortedCombined, searchTerm, typeFilters);
   }, [result, searchTerm]);
 
-  // Filter differences based on search
-  const applyFilters = (diffs, search) => {
+  // Filter differences based on search and type filters
+  const applyFilters = (diffs, search, filters = typeFilters) => {
     if (!diffs || diffs.length === 0) {
       setFilteredDifferences([]);
       return;
@@ -70,51 +105,22 @@ const DifferenceList = ({
       );
     }
     
-    // Group differences by type
-    const byType = {};
-    
-    filtered.forEach(diff => {
-      const type = diff.type || 'other';
-      if (!byType[type]) {
-        byType[type] = [];
-      }
-      byType[type].push(diff);
-    });
-    
-    // Sort them in a specific order that matches the reference images
-    const sortedFiltered = [];
-    
-    // Text differences first (most common)
-    if (byType.text) {
-      sortedFiltered.push(...byType.text);
+    // Apply type filters
+    if (filters) {
+      filtered = filtered.filter(diff => filters[diff.type || 'text']);
     }
     
-    // Image differences next
-    if (byType.image) {
-      sortedFiltered.push(...byType.image);
-    }
-    
-    // Font differences
-    if (byType.font) {
-      sortedFiltered.push(...byType.font);
-    }
-    
-    // Style differences
-    if (byType.style) {
-      sortedFiltered.push(...byType.style);
-    }
-    
-    // All other difference types
-    Object.keys(byType).forEach(type => {
-      if (!['text', 'image', 'font', 'style'].includes(type)) {
-        sortedFiltered.push(...byType[type]);
-      }
-    });
-    
-    setFilteredDifferences(sortedFiltered);
+    setFilteredDifferences(filtered);
   };
 
-  // Group differences by type for categories display
+  // Handle type filter toggle
+  const toggleTypeFilter = (type) => {
+    const newFilters = { ...typeFilters, [type]: !typeFilters[type] };
+    setTypeFilters(newFilters);
+    applyFilters(allDifferences, searchTerm, newFilters);
+  };
+
+  // Group differences by type
   const getDifferencesByType = () => {
     const byType = {
       text: [],
@@ -136,7 +142,13 @@ const DifferenceList = ({
     return byType;
   };
 
-  const differencesByType = getDifferencesByType();
+  // Toggle expansion of a difference type
+  const toggleTypeExpand = (type) => {
+    setExpandedTypes(prev => ({
+      ...prev,
+      [type]: !prev[type]
+    }));
+  };
 
   // Get icon for difference type
   const getTypeIcon = (type) => {
@@ -247,7 +259,14 @@ const DifferenceList = ({
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
-  // Render the difference list to match the reference image
+  // Organize differences by type for the grouped view
+  const differencesByType = getDifferencesByType();
+  const differenceTypes = Object.keys(differencesByType).filter(type => differencesByType[type].length > 0);
+
+  // Calculate total differences count
+  const totalDifferences = filteredDifferences.length;
+
+  // Render an organized list of differences grouped by type
   return (
     <div className="visual-difference-list">
       <div className="diff-list-search">
@@ -267,47 +286,86 @@ const DifferenceList = ({
         )}
       </div>
       
-      <div className="diff-types-header">
-        <span>All Types</span>
-        <svg className="expand-icon" viewBox="0 0 24 24">
-          <path d="M7 10l5 5 5-5z" />
-        </svg>
+      <div className="diff-filters">
+        <div className="filter-label">Filter by type:</div>
+        <div className="filter-buttons">
+          {Object.keys(typeFilters).map(type => (
+            <button
+              key={`filter-${type}`}
+              className={`filter-button ${typeFilters[type] ? 'active' : ''}`}
+              style={{
+                backgroundColor: typeFilters[type] ? getTypeBadgeColor(type) : 'transparent',
+                color: typeFilters[type] ? 'white' : getTypeBadgeColor(type),
+                borderColor: getTypeBadgeColor(type)
+              }}
+              onClick={() => toggleTypeFilter(type)}
+            >
+              {type.charAt(0).toUpperCase() + type.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
       
       <div className="diff-count">
-        {filteredDifferences.length} differences found
+        {totalDifferences} {totalDifferences === 1 ? 'difference' : 'differences'} found in current view
       </div>
       
       <div className="diff-items-container">
-        {filteredDifferences.length === 0 ? (
+        {totalDifferences === 0 ? (
           <div className="no-differences">
-            <p>No differences found.</p>
-            {searchTerm && <p>Try different search terms.</p>}
+            <p>No differences found in current view.</p>
+            {searchTerm && <p>Try clearing your search or changing filters.</p>}
           </div>
         ) : (
-          <ul className="diff-items-list">
-            {filteredDifferences.map(diff => (
-              <li 
-                key={diff.id}
-                className={`diff-item ${selectedDifference && selectedDifference.id === diff.id ? 'selected' : ''}`}
-                onClick={() => onDifferenceClick(diff)}
-              >
-                <div className="diff-item-content">
-                  <div className="diff-badge" style={{ backgroundColor: getTypeBadgeColor(diff.type) }}>
-                    {diff.type.charAt(0).toUpperCase()}
+          <div className="diff-items-by-type">
+            {differenceTypes.map(type => (
+              <div key={`type-${type}`} className="diff-type-group">
+                <div 
+                  className="diff-type-header"
+                  onClick={() => toggleTypeExpand(type)}
+                >
+                  <div className="type-icon" style={{ backgroundColor: getTypeBadgeColor(type) }}>
+                    {getTypeIcon(type)}
                   </div>
-                  <div className="diff-details">
-                    <div className="diff-text">{formatDescription(diff)}</div>
+                  <div className="type-label">
+                    {type.charAt(0).toUpperCase() + type.slice(1)} 
+                    <span className="type-count">({differencesByType[type].length})</span>
                   </div>
-                  <div className="diff-arrow">
-                    <svg viewBox="0 0 24 24">
-                      <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
+                  <div className="type-expand-icon">
+                    <svg viewBox="0 0 24 24" style={{ transform: expandedTypes[type] ? 'rotate(180deg)' : 'none' }}>
+                      <path d="M7 10l5 5 5-5z" />
                     </svg>
                   </div>
                 </div>
-              </li>
+                
+                {expandedTypes[type] && (
+                  <ul className="diff-items-list">
+                    {differencesByType[type].map(diff => (
+                      <li 
+                        key={diff.id}
+                        className={`diff-item ${selectedDifference && selectedDifference.id === diff.id ? 'selected' : ''}`}
+                        onClick={() => onDifferenceClick(diff)}
+                      >
+                        <div className="diff-item-content">
+                          <div className="diff-page-indicator" title={`Page ${diff.page || '?'}`}>
+                            P{diff.page || '?'}
+                          </div>
+                          <div className="diff-details">
+                            <div className="diff-text">{formatDescription(diff)}</div>
+                          </div>
+                          <div className="diff-arrow">
+                            <svg viewBox="0 0 24 24">
+                              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
+                            </svg>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
     </div>

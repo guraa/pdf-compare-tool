@@ -2,6 +2,7 @@ package guraa.pdfcompare.util;
 
 import guraa.pdfcompare.model.difference.Difference;
 import guraa.pdfcompare.model.difference.TextDifference;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -11,17 +12,22 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Utility class for calculating differences between PDF documents with enhanced coordinate handling.
+ * Uses the CoordinateTransformer for consistent coordinate transformations.
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class DifferenceCalculator {
 
     private static final double MINOR_THRESHOLD = 0.1;  // 10% difference
     private static final double MAJOR_THRESHOLD = 0.3;  // 30% difference
     private static final double CRITICAL_THRESHOLD = 0.6; // 60% difference
+
+    private final CoordinateTransformer coordinateTransformer;
 
     /**
      * Set position and bounds for a difference with proper coordinate handling.
@@ -47,6 +53,31 @@ public class DifferenceCalculator {
     }
 
     /**
+     * Set position and bounds for a difference using PDF coordinates.
+     * Automatically transforms from PDF space to display space.
+     *
+     * @param difference The difference to update with position information
+     * @param pdfX X-coordinate of the difference in PDF space
+     * @param pdfY Y-coordinate of the difference in PDF space
+     * @param width Width of the difference
+     * @param height Height of the difference
+     * @param pageHeight Height of the page for coordinate transformation
+     */
+    public void setPdfPositionAndBounds(Difference difference, double pdfX, double pdfY,
+                                        double width, double height, double pageHeight) {
+        // Transform from PDF space to display space
+        CoordinateTransformer.Rectangle displayRect = coordinateTransformer.pdfRectToDisplay(
+                pdfX, pdfY, width, height, pageHeight);
+
+        // Set position in display space
+        setPositionAndBounds(difference,
+                displayRect.getX(),
+                displayRect.getY(),
+                displayRect.getWidth(),
+                displayRect.getHeight());
+    }
+
+    /**
      * Compare text content between two pages.
      *
      * @param baseText Text from base page
@@ -61,7 +92,7 @@ public class DifferenceCalculator {
             if (baseText != null && !baseText.trim().isEmpty()) {
                 // Base has text, compare doesn't - entire text is deleted
                 TextDifference diff = TextDifference.builder()
-                        .id(java.util.UUID.randomUUID().toString())
+                        .id(UUID.randomUUID().toString())
                         .type("text")
                         .changeType("deleted")
                         .severity("major")
@@ -73,7 +104,7 @@ public class DifferenceCalculator {
             } else if (compareText != null && !compareText.trim().isEmpty()) {
                 // Compare has text, base doesn't - entire text is added
                 TextDifference diff = TextDifference.builder()
-                        .id(java.util.UUID.randomUUID().toString())
+                        .id(UUID.randomUUID().toString())
                         .type("text")
                         .changeType("added")
                         .severity("major")
@@ -114,7 +145,6 @@ public class DifferenceCalculator {
         String[] compareWords = compareText.split("\\s+");
 
         // Simple word-by-word comparison
-        // A more sophisticated algorithm would use diff-match-patch or similar
         int i = 0, j = 0;
         while (i < baseWords.length || j < compareWords.length) {
             if (i >= baseWords.length) {
@@ -125,7 +155,7 @@ public class DifferenceCalculator {
                 }
 
                 TextDifference diff = TextDifference.builder()
-                        .id(java.util.UUID.randomUUID().toString())
+                        .id(UUID.randomUUID().toString())
                         .type("text")
                         .changeType("added")
                         .severity("minor")
@@ -143,7 +173,7 @@ public class DifferenceCalculator {
                 }
 
                 TextDifference diff = TextDifference.builder()
-                        .id(java.util.UUID.randomUUID().toString())
+                        .id(UUID.randomUUID().toString())
                         .type("text")
                         .changeType("deleted")
                         .severity("minor")
@@ -165,7 +195,7 @@ public class DifferenceCalculator {
                 if (nextMatchI == -1 && nextMatchJ == -1) {
                     // Modified word
                     TextDifference diff = TextDifference.builder()
-                            .id(java.util.UUID.randomUUID().toString())
+                            .id(UUID.randomUUID().toString())
                             .type("text")
                             .changeType("modified")
                             .severity("minor")
@@ -186,7 +216,7 @@ public class DifferenceCalculator {
                     }
 
                     TextDifference diff = TextDifference.builder()
-                            .id(java.util.UUID.randomUUID().toString())
+                            .id(UUID.randomUUID().toString())
                             .type("text")
                             .changeType("added")
                             .severity("minor")
@@ -204,7 +234,7 @@ public class DifferenceCalculator {
                     }
 
                     TextDifference diff = TextDifference.builder()
-                            .id(java.util.UUID.randomUUID().toString())
+                            .id(UUID.randomUUID().toString())
                             .type("text")
                             .changeType("deleted")
                             .severity("minor")
@@ -261,7 +291,7 @@ public class DifferenceCalculator {
 
                 String added = compareText.substring(j, endJ);
                 TextDifference diff = TextDifference.builder()
-                        .id(java.util.UUID.randomUUID().toString())
+                        .id(UUID.randomUUID().toString())
                         .type("text")
                         .changeType("added")
                         .severity("minor")
@@ -279,7 +309,7 @@ public class DifferenceCalculator {
 
                 String deleted = baseText.substring(i, endI);
                 TextDifference diff = TextDifference.builder()
-                        .id(java.util.UUID.randomUUID().toString())
+                        .id(UUID.randomUUID().toString())
                         .type("text")
                         .changeType("deleted")
                         .severity("minor")
@@ -431,22 +461,31 @@ public class DifferenceCalculator {
     }
 
     /**
-     * Set position and bounds for a difference with explicit page height transformation.
-     * Use this when working with PDF coordinates directly (origin at bottom-left).
+     * Apply consistent adjustment to all differences in a list.
+     * This can be used to align differences when scaling or repositioning is needed.
      *
-     * @param difference The difference to update
-     * @param pdfX X coordinate in PDF space
-     * @param pdfY Y coordinate in PDF space (origin at bottom-left)
-     * @param width Width of the difference
-     * @param height Height of the difference
-     * @param pageHeight Total page height for coordinate transformation
+     * @param differences List of differences to adjust
+     * @param scaleX X scale factor
+     * @param scaleY Y scale factor
+     * @param offsetX X offset
+     * @param offsetY Y offset
      */
-    public void setPdfPositionAndBounds(Difference difference, double pdfX, double pdfY,
-                                        double width, double height, double pageHeight) {
-        // Transform Y from PDF space (bottom-left origin) to display space (top-left origin)
-        double displayY = pageHeight - pdfY - height;
+    public void adjustDifferencePositions(List<Difference> differences,
+                                          double scaleX, double scaleY,
+                                          double offsetX, double offsetY) {
+        if (differences == null || differences.isEmpty()) {
+            return;
+        }
 
-        // Set position and bounds using the transformed coordinates
-        setPositionAndBounds(difference, pdfX, displayY, width, height);
+        for (Difference diff : differences) {
+            // Adjust position
+            double newX = diff.getX() * scaleX + offsetX;
+            double newY = diff.getY() * scaleY + offsetY;
+            double newWidth = diff.getWidth() * scaleX;
+            double newHeight = diff.getHeight() * scaleY;
+
+            // Update position and bounds
+            setPositionAndBounds(diff, newX, newY, newWidth, newHeight);
+        }
     }
 }

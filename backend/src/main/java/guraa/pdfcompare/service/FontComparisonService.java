@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.model.difference.Difference;
 import guraa.pdfcompare.model.difference.FontDifference;
+import guraa.pdfcompare.util.CoordinateTransformer;
 import guraa.pdfcompare.util.DifferenceCalculator;
 import guraa.pdfcompare.util.FontAnalyzer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -19,6 +21,7 @@ import java.util.*;
 
 /**
  * Service for comparing fonts between PDF documents.
+ * Updated to use consistent coordinate transformations.
  */
 @Slf4j
 @Service
@@ -28,6 +31,7 @@ public class FontComparisonService {
     private final FontAnalyzer fontAnalyzer;
     private final DifferenceCalculator differenceCalculator;
     private final ObjectMapper objectMapper;
+    private final CoordinateTransformer coordinateTransformer;
 
     /**
      * Compare fonts on a page between two PDF documents.
@@ -49,6 +53,10 @@ public class FontComparisonService {
             PdfDocument compareDocument,
             Path outputDir) throws IOException {
 
+        PDPage basePage = basePdf.getPage(pageIndex);
+        float pageWidth = basePage.getMediaBox().getWidth();
+        float pageHeight = coordinateTransformer.getPageHeight(basePage);
+
         // Try to use pre-extracted font information first
         List<FontAnalyzer.FontInfo> baseFonts = loadPreExtractedFonts(
                 baseDocument.getFileId(), pageIndex + 1);
@@ -68,7 +76,7 @@ public class FontComparisonService {
                     comparePdf, pageIndex, outputDir.resolve("compare_fonts"));
         }
 
-        return compareFonts(baseFonts, compareFonts);
+        return compareFonts(baseFonts, compareFonts, pageWidth, pageHeight);
     }
 
     /**
@@ -93,6 +101,10 @@ public class FontComparisonService {
             PdfDocument compareDocument,
             Path outputDir) throws IOException {
 
+        PDPage basePage = basePdf.getPage(basePageIndex);
+        float pageWidth = basePage.getMediaBox().getWidth();
+        float pageHeight = coordinateTransformer.getPageHeight(basePage);
+
         // Try to use pre-extracted font information first
         List<FontAnalyzer.FontInfo> baseFonts = loadPreExtractedFonts(
                 baseDocument.getFileId(), basePageIndex + 1);
@@ -112,229 +124,14 @@ public class FontComparisonService {
                     comparePdf, comparePageIndex, outputDir.resolve("compare_fonts"));
         }
 
-        return compareFonts(baseFonts, compareFonts);
-    }
-
-    /**
-     * Compare fonts between two pages.
-     *
-     * @param baseFonts Fonts from base page
-     * @param compareFonts Fonts from comparison page
-     * @return List of differences
-     */
-    private List<Difference> compareFonts(
-            List<FontAnalyzer.FontInfo> baseFonts,
-            List<FontAnalyzer.FontInfo> compareFonts) {
-
-        List<Difference> differences = new ArrayList<>();
-
-        // Match fonts based on name and properties
-        Map<FontAnalyzer.FontInfo, FontAnalyzer.FontInfo> matches =
-                matchFonts(baseFonts, compareFonts);
-
-        // Track fonts that have been matched
-        Set<FontAnalyzer.FontInfo> matchedBaseFonts = new HashSet<>(matches.keySet());
-        Set<FontAnalyzer.FontInfo> matchedCompareFonts = new HashSet<>(matches.values());
-
-        // Find differences in matched fonts
-        for (Map.Entry<FontAnalyzer.FontInfo, FontAnalyzer.FontInfo> match : matches.entrySet()) {
-            FontAnalyzer.FontInfo baseFont = match.getKey();
-            FontAnalyzer.FontInfo compareFont = match.getValue();
-
-            String baseFontName = baseFont.getFontName();
-            String compareFontName = compareFont.getFontName();
-            baseFontName = baseFontName != null && baseFontName.contains("+") ?
-                    baseFontName.substring(baseFontName.indexOf("+") + 1) : baseFontName;
-            compareFontName = compareFontName != null && compareFontName.contains("+") ?
-                    compareFontName.substring(compareFontName.indexOf("+") + 1) : compareFontName;
-
-            String baseFamily = baseFont.getFontFamily();
-            String compareFamily = compareFont.getFontFamily();
-            baseFamily = baseFamily != null && baseFamily.contains("+") ?
-                    baseFamily.substring(baseFamily.indexOf("+") + 1) : baseFamily;
-            compareFamily = compareFamily != null && compareFamily.contains("+") ?
-                    compareFamily.substring(compareFamily.indexOf("+") + 1) : compareFamily;
-
-            // Comparisons
-            boolean nameDifferent = !Objects.equals(baseFontName, compareFontName);
-            boolean familyDifferent = !Objects.equals(baseFamily, compareFamily);
-            boolean embeddingDifferent = baseFont.isEmbedded() != compareFont.isEmbedded();
-            boolean boldDifferent = baseFont.isBold() != compareFont.isBold();
-            boolean italicDifferent = baseFont.isItalic() != compareFont.isItalic();
-
-            if (nameDifferent || familyDifferent || embeddingDifferent ||
-                    boldDifferent || italicDifferent) {
-
-                // Create font difference
-                String diffId = UUID.randomUUID().toString();
-
-                // Create description
-                StringBuilder description = new StringBuilder("Font differs: ");
-
-                if (nameDifferent) {
-                    description.append("Name changed from \"")
-                            .append(baseFont.getFontName())
-                            .append("\" to \"")
-                            .append(compareFont.getFontName())
-                            .append("\". ");
-                }
-
-                if (familyDifferent) {
-                    description.append("Family changed from \"")
-                            .append(baseFont.getFontFamily())
-                            .append("\" to \"")
-                            .append(compareFont.getFontFamily())
-                            .append("\". ");
-                }
-
-                if (embeddingDifferent) {
-                    description.append("Font ")
-                            .append(baseFont.isEmbedded() ? "was" : "was not")
-                            .append(" embedded in base and ")
-                            .append(compareFont.isEmbedded() ? "is" : "is not")
-                            .append(" embedded in comparison. ");
-                }
-
-                if (boldDifferent) {
-                    description.append("Font ")
-                            .append(baseFont.isBold() ? "was" : "was not")
-                            .append(" bold in base and ")
-                            .append(compareFont.isBold() ? "is" : "is not")
-                            .append(" bold in comparison. ");
-                }
-
-                if (italicDifferent) {
-                    description.append("Font ")
-                            .append(baseFont.isItalic() ? "was" : "was not")
-                            .append(" italic in base and ")
-                            .append(compareFont.isItalic() ? "is" : "is not")
-                            .append(" italic in comparison.");
-                }
-
-                // Create font difference
-                FontDifference diff = FontDifference.builder()
-                        .id(diffId)
-                        .type("font")
-                        .changeType("modified")
-                        .severity("minor")
-                        .description(description.toString())
-                        .baseFontName(baseFont.getFontName()) // Corrected method name
-                        .compareFontName(compareFont.getFontName()) // Corrected method name
-                        .baseFontFamily(baseFont.getFontFamily())
-                        .compareFontFamily(compareFont.getFontFamily())
-                        .baseEmbedded(baseFont.isEmbedded()) // Corrected method name
-                        .compareEmbedded(compareFont.isEmbedded()) // Corrected method name
-                        .baseBold(baseFont.isBold()) // Corrected method name
-                        .compareBold(compareFont.isBold()) // Corrected method name
-                        .baseItalic(baseFont.isItalic()) // Corrected method name
-                        .compareItalic(compareFont.isItalic()) // Corrected method name
-                        .build();
-
-                // Use default positioning for fonts (top of the page)
-                double pageWidth = 612; // standard letter size
-                double pageHeight = 792;
-                differenceCalculator.estimatePositionForDifference(diff, pageWidth, pageHeight, 0.1);
-
-                differences.add(diff);
-            }
-        }
-
-        // Fonts only in base document (deleted)
-        for (FontAnalyzer.FontInfo font : baseFonts) {
-            if (!matchedBaseFonts.contains(font)) {
-                // Create font difference for deleted font
-                String diffId = UUID.randomUUID().toString();
-
-                FontDifference diff = FontDifference.builder()
-                        .id(diffId)
-                        .type("font")
-                        .changeType("deleted")
-                        .severity("minor")
-                        .description("Font \"" + font.getFontName() + "\" removed")
-                        .baseFontName(font.getFontName()) // Corrected method name
-                        .baseFontFamily(font.getFontFamily())
-                        .baseEmbedded(font.isEmbedded()) // Corrected method name
-                        .baseBold(font.isBold()) // Corrected method name
-                        .baseItalic(font.isItalic()) // Corrected method name
-                        .build();
-
-                // Use default positioning for fonts (top of the page)
-                double pageWidth = 612; // standard letter size
-                double pageHeight = 792;
-                differenceCalculator.estimatePositionForDifference(diff, pageWidth, pageHeight, 0.15);
-
-                differences.add(diff);
-            }
-        }
-
-        // Fonts only in compare document (added)
-        for (FontAnalyzer.FontInfo font : compareFonts) {
-            if (!matchedCompareFonts.contains(font)) {
-                // Create font difference for added font
-                String diffId = UUID.randomUUID().toString();
-
-                FontDifference diff = FontDifference.builder()
-                        .id(diffId)
-                        .type("font")
-                        .changeType("added")
-                        .severity("minor")
-                        .description("Font \"" + font.getFontName() + "\" added")
-                        .compareFontName(font.getFontName()) // Corrected method name
-                        .compareFontFamily(font.getFontFamily())
-                        .compareEmbedded(font.isEmbedded()) // Corrected method name
-                        .compareBold(font.isBold()) // Corrected method name
-                        .compareItalic(font.isItalic()) // Corrected method name
-                        .build();
-
-                // Use default positioning for fonts (top of the page)
-                double pageWidth = 612; // standard letter size
-                double pageHeight = 792;
-                differenceCalculator.estimatePositionForDifference(diff, pageWidth, pageHeight, 0.2);
-
-                differences.add(diff);
-            }
-        }
-
-        return differences;
-    }
-
-    /**
-     * Set default position for a font difference with proper coordinate transformation.
-     * This method places font differences at consistent locations relative to page size.
-     *
-     * @param diff The font difference
-     * @param pageWidth Width of the page
-     * @param pageHeight Height of the page
-     * @param index Index to vary positioning for multiple differences
-     */
-    private void setFontDifferencePosition(FontDifference diff, double pageWidth, double pageHeight, int index) {
-        // Font differences are typically positioned near the top of the page
-        double x = pageWidth * 0.1;  // 10% from left
-
-        // Offset each font difference vertically to avoid overlap
-        // Start at 10% from top and vary by index
-        double y = pageHeight * (0.1 + (index * 0.03));
-
-        // Ensure y stays within reasonable bounds (top 30% of page)
-        y = Math.min(y, pageHeight * 0.3);
-
-        // Width spans about 70% of page width
-        double width = pageWidth * 0.7;
-
-        // Height is roughly 3% of page height
-        double height = pageHeight * 0.03;
-
-        // These coordinates are already in display space (top-left origin)
-        // so no additional transformation is needed
-        differenceCalculator.setPositionAndBounds(diff, x, y, width, height);
+        return compareFonts(baseFonts, compareFonts, pageWidth, pageHeight);
     }
 
     /**
      * Compare fonts between two pages with proper coordinate handling.
-     * Ensures all font differences have appropriate coordinates for highlighting.
      *
-     * @param baseImages Images from base page
-     * @param compareImages Images from comparison page
+     * @param baseFonts Font info from base page
+     * @param compareFonts Font info from comparison page
      * @param pageWidth Width of the page
      * @param pageHeight Height of the page
      * @return List of differences
@@ -512,6 +309,37 @@ public class FontComparisonService {
         }
 
         return differences;
+    }
+
+    /**
+     * Set position for a font difference with proper coordinate handling.
+     * This method places font differences at consistent locations relative to page size.
+     *
+     * @param diff The font difference
+     * @param pageWidth Width of the page
+     * @param pageHeight Height of the page
+     * @param index Index to vary positioning for multiple differences
+     */
+    private void setFontDifferencePosition(FontDifference diff, double pageWidth, double pageHeight, int index) {
+        // Font differences are typically positioned near the top of the page
+        double x = pageWidth * 0.1;  // 10% from left
+
+        // Offset each font difference vertically to avoid overlap
+        // Start at 10% from top and vary by index
+        double y = pageHeight * (0.1 + (index * 0.03));
+
+        // Ensure y stays within reasonable bounds (top 50% of page)
+        y = Math.min(y, pageHeight * 0.5);
+
+        // Width spans about 80% of page width
+        double width = pageWidth * 0.8;
+
+        // Height is roughly 3% of page height
+        double height = pageHeight * 0.03;
+
+        // These coordinates are already in display space (top-left origin)
+        // so no additional transformation is needed
+        differenceCalculator.setPositionAndBounds(diff, x, y, width, height);
     }
 
     /**

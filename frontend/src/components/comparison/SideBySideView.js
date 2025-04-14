@@ -1,18 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import DocumentMatchingView from './DocumentMatchingView';
 import PDFRenderer from './PDFRenderer';
 import DifferenceList from './DifferenceList';
 import Spinner from '../common/Spinner';
+import ZoomControls from './ZoomControls';
 import { getDocumentPairs, getDocumentPageDetails } from '../../services/api';
 import './SideBySideView.css';
 
 const SideBySideView = ({ comparisonId }) => {
   // Refs
   const containerRef = useRef(null);
+  const scrollContainerRef = useRef(null);
   const fetchingRef = useRef(false);
-  const pairsFetchedRef = useRef(false);
   const didInitialFetchRef = useRef(false);
+  const visibleDifferencesRef = useRef([]);
 
   // Context
   const {
@@ -26,34 +28,26 @@ const SideBySideView = ({ comparisonId }) => {
 
   // State
   const [activeView, setActiveView] = useState('matching');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [baseDifferences, setBaseDifferences] = useState([]);
-  const [compareDifferences, setCompareDifferences] = useState([]);
+  const [pairDifferences, setPairDifferences] = useState({});
+  const [currentVisibleDifferences, setCurrentVisibleDifferences] = useState([]);
   const [highlightMode, setHighlightMode] = useState('all');
   const [showDifferencePanel, setShowDifferencePanel] = useState(true);
   const [zoom, setZoom] = useState(0.750);
-  const [pageMetadata, setPageMetadata] = useState(null);
+  const [pageMetadata, setPageMetadata] = useState({});
+  const [visiblePairIndices, setVisiblePairIndices] = useState([]);
+  const [isScrolling, setIsScrolling] = useState(false);
+  const [loadingPairs, setLoadingPairs] = useState([]);
   
-  // Coordinate adjustment fine-tuning parameters
-  const [adjustmentParams, setAdjustmentParams] = useState({
-    xOffset: 0, // X-axis offset in pixels
-    yOffset: 0, // Y-axis offset in pixels
-    scaleAdjustment: 1.0, // Scale multiplier
-    flipY: true // Whether to flip the Y-coordinate (fixes upside-down canvas)
-  });
+  // Basic coordinate adjustment parameters
+  const adjustmentParams = {
+    xOffset: 0,
+    yOffset: 0,
+    scaleAdjustment: 1.0,
+    flipY: true
+  };
   
-  // Flag to show adjustment controls for debugging
-  const [showAdjustmentControls, setShowAdjustmentControls] = useState(false);
-
-  // Get the currently selected document pair
-  const selectedPair = state.documentPairs?.[state.selectedDocumentPairIndex] || null;
-
-  // Calculate max pages
-  const maxPageCount = selectedPair ? 
-    Math.max(
-      selectedPair.baseEndPage - selectedPair.baseStartPage + 1,
-      selectedPair.compareEndPage - selectedPair.compareStartPage + 1
-    ) : 1;
+  // Get all document pairs from context
+  const documentPairs = state.documentPairs || [];
 
   // CRITICAL FIX: Only fetch document pairs once on initial render
   useEffect(() => {
@@ -80,7 +74,6 @@ const SideBySideView = ({ comparisonId }) => {
         if (pairs && pairs.length > 0) {
           // Store in context
           setDocumentPairs(pairs);
-          pairsFetchedRef.current = true;
           
           // Auto-select the first matched pair
           const matchedPairIndex = pairs.findIndex(pair => pair.matched);
@@ -90,6 +83,10 @@ const SideBySideView = ({ comparisonId }) => {
           
           if (matchedPairIndex >= 0) {
             setActiveView('comparison');
+            
+            // Initialize with all matched pairs visible
+            const matched = pairs.filter(pair => pair.matched);
+            setVisiblePairIndices(matched.map((_, index) => index));
           }
         }
       } catch (err) {
@@ -111,105 +108,199 @@ const SideBySideView = ({ comparisonId }) => {
     };
 
     fetchDocumentPairs();
-    
-    // Cleanup function
-    return () => {
-      // Reset on component unmount, not on dependency change
-      if (!comparisonId) {
-        didInitialFetchRef.current = false;
-        pairsFetchedRef.current = false;
-      }
-    };
   }, [comparisonId]); // Only depend on comparisonId
 
-  // Handle active view changes separately
+  // Effect to fetch differences for visible pairs
   useEffect(() => {
-    if (activeView === 'comparison' && selectedPair) {
-      setCurrentPage(1);
-    }
-  }, [activeView, selectedPair]);
+    const fetchVisiblePairsDifferences = async () => {
+      // Skip if no visible pairs or already fetching
+      if (visiblePairIndices.length === 0 || fetchingRef.current || activeView !== 'comparison') {
+        return;
+      }
+      
+      fetchingRef.current = true;
+      
+      try {
+        // Keep track of loading pairs
+        setLoadingPairs(visiblePairIndices);
+        
+        // For each visible pair, fetch differences if not already loaded
+        for (const pairIndex of visiblePairIndices) {
+          if (!pairDifferences[pairIndex] && documentPairs[pairIndex]?.matched) {
+            console.log(`Fetching differences for pair ${pairIndex}...`);
+            
+            try {
+              const details = await getDocumentPageDetails(
+                comparisonId,
+                pairIndex,
+                1, // Start with page 1
+                state.filters
+              );
+              
+              if (details) {
+                // Save differences for this pair
+                setPairDifferences(prev => ({
+                  ...prev,
+                  [pairIndex]: {
+                    baseDifferences: details.baseDifferences || [],
+                    compareDifferences: details.compareDifferences || [],
+                    baseWidth: details.baseWidth,
+                    baseHeight: details.baseHeight,
+                    compareWidth: details.compareWidth,
+                    compareHeight: details.compareHeight
+                  }
+                }));
+                
+                // Update page metadata
+                setPageMetadata(prev => ({
+                  ...prev,
+                  [pairIndex]: {
+                    baseWidth: details.baseWidth,
+                    baseHeight: details.baseHeight,
+                    compareWidth: details.compareWidth,
+                    compareHeight: details.compareHeight
+                  }
+                }));
+              }
+            } catch (err) {
+              console.error(`Error fetching differences for pair ${pairIndex}:`, err);
+            }
+          }
+        }
+        
+        // Update visible differences
+        updateVisibleDifferences();
+      } finally {
+        fetchingRef.current = false;
+        setLoadingPairs([]);
+      }
+    };
+    
+    fetchVisiblePairsDifferences();
+  }, [visiblePairIndices, activeView, comparisonId]);
 
-  // Fetch page differences
+  // Update visible differences when pairDifferences changes
   useEffect(() => {
-    // Skip if no necessary data or if not in comparison view
-    if (!comparisonId || !selectedPair || activeView !== 'comparison') {
+    updateVisibleDifferences();
+  }, [pairDifferences]);
+
+  // Function to update visible differences
+  const updateVisibleDifferences = useCallback(() => {
+    // Collect all differences from visible pairs
+    let allVisibleDiffs = [];
+    
+    visiblePairIndices.forEach(pairIndex => {
+      const pairData = pairDifferences[pairIndex];
+      if (!pairData) return;
+      
+      // Add pair index to each difference
+      const baseDiffsWithInfo = (pairData.baseDifferences || []).map(diff => ({
+        ...diff,
+        pairIndex
+      }));
+      
+      const compareDiffsWithInfo = (pairData.compareDifferences || []).map(diff => ({
+        ...diff,
+        pairIndex
+      }));
+      
+      allVisibleDiffs = [...allVisibleDiffs, ...baseDiffsWithInfo, ...compareDiffsWithInfo];
+    });
+    
+    // Deduplicate by difference ID
+    const uniqueDiffs = [];
+    const diffIds = new Set();
+    
+    allVisibleDiffs.forEach(diff => {
+      if (!diffIds.has(diff.id)) {
+        diffIds.add(diff.id);
+        uniqueDiffs.push(diff);
+      }
+    });
+    
+    // Sort by pair index
+    uniqueDiffs.sort((a, b) => {
+      if (a.pairIndex !== b.pairIndex) {
+        return a.pairIndex - b.pairIndex;
+      }
+      return 0;
+    });
+    
+    console.log(`Found ${uniqueDiffs.length} visible differences`);
+    
+    // Update state
+    setCurrentVisibleDifferences(uniqueDiffs);
+  }, [visiblePairIndices, pairDifferences]);
+
+  // Handle scroll events to determine visible pairs
+  const handleScroll = useCallback(() => {
+    if (!scrollContainerRef.current || isScrolling || documentPairs.length === 0) return;
+    
+    // Set scrolling state to avoid too many updates
+    setIsScrolling(true);
+    
+    // Get all pair elements
+    const pairElements = document.querySelectorAll('.document-pair');
+    if (!pairElements.length) {
+      setIsScrolling(false);
       return;
     }
     
-    // Create a request ID to track this specific request
-    const requestId = `page_${currentPage}_${Date.now()}`;
-    let isCurrentRequest = true;
+    const scrollContainer = scrollContainerRef.current;
+    const containerRect = scrollContainer.getBoundingClientRect();
     
-    const fetchDifferences = async () => {
-      // Skip if already fetching
-      if (fetchingRef.current) return;
+    // Determine which pairs are visible
+    const visible = [];
+    
+    pairElements.forEach((element, index) => {
+      const rect = element.getBoundingClientRect();
       
-      try {
-        fetchingRef.current = true;
-        console.log(`Fetching differences for page ${currentPage}...`);
-        
-        const details = await getDocumentPageDetails(
-          comparisonId,
-          state.selectedDocumentPairIndex,
-          currentPage,
-          state.filters
-        );
-        
-        // Only update state if this is still the current request
-        if (!isCurrentRequest) {
-          console.log("Ignoring stale response for page", currentPage);
-          return;
-        }
-        
-        if (details) {
-          console.log("Received difference details:", details);
-          
-          // Store base and compare differences
-          setBaseDifferences(details.baseDifferences || []);
-          setCompareDifferences(details.compareDifferences || []);
-          
-          // Store the page metadata for proper coordinate scaling
-          setPageMetadata({
-            baseWidth: details.baseWidth,
-            baseHeight: details.baseHeight,
-            compareWidth: details.compareWidth,
-            compareHeight: details.compareHeight
-          });
-          
-          console.log("Page dimensions:", {
-            baseWidth: details.baseWidth,
-            baseHeight: details.baseHeight,
-            compareWidth: details.compareWidth,
-            compareHeight: details.compareHeight
-          });
-        }
-      } catch (err) {
-        // Only show error if this is the current request
-        if (isCurrentRequest) {
-          console.error("Error fetching differences:", err);
-          setError("Failed to load differences: " + err.message);
-        }
-      } finally {
-        if (isCurrentRequest) {
-          fetchingRef.current = false;
-        }
+      // Check if element is at least partially visible
+      if (rect.bottom >= containerRect.top && rect.top <= containerRect.bottom) {
+        visible.push(index);
       }
-    };
-
-    fetchDifferences();
+    });
     
-    // Cleanup function
-    return () => {
-      isCurrentRequest = false;
-    };
-  }, [comparisonId, currentPage, state.selectedDocumentPairIndex, state.filters, activeView, selectedPair]);
+    // Update visible pairs if changed
+    if (JSON.stringify(visible) !== JSON.stringify(visiblePairIndices)) {
+      setVisiblePairIndices(visible);
+    }
+    
+    // Reset scrolling state after a short delay
+    setTimeout(() => {
+      setIsScrolling(false);
+    }, 100);
+  }, [isScrolling, documentPairs, visiblePairIndices]);
+
+  // Set up scroll event listener
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    
+    if (scrollContainer && activeView === 'comparison') {
+      scrollContainer.addEventListener('scroll', handleScroll);
+      
+      // Initial scroll calculation
+      setTimeout(handleScroll, 100);
+      
+      return () => {
+        scrollContainer.removeEventListener('scroll', handleScroll);
+      };
+    }
+  }, [handleScroll, activeView]);
 
   // Handle document pair selection
   const handleSelectDocumentPair = (pairIndex) => {
     console.log("Selecting document pair:", pairIndex);
     setSelectedDocumentPairIndex(pairIndex);
-    setCurrentPage(1); // Reset to page 1
     setActiveView('comparison');
+    
+    // Scroll to this pair
+    setTimeout(() => {
+      const pairElement = document.getElementById(`document-pair-${pairIndex}`);
+      if (pairElement && scrollContainerRef.current) {
+        pairElement.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 100);
   };
 
   // Handle zoom change
@@ -220,22 +311,6 @@ const SideBySideView = ({ comparisonId }) => {
     if (state.viewSettings?.zoom !== newZoom) {
       state.updateViewSettings?.({ zoom: newZoom });
     }
-  };
-  
-  // Handle adjustment parameter changes
-  const updateAdjustmentParam = (param, value) => {
-    setAdjustmentParams(prev => ({
-      ...prev,
-      [param]: value
-    }));
-    
-    // Log the updated adjustment parameters for reference
-    console.log(`Updated adjustment parameter: ${param} = ${value}`);
-  };
-  
-  // Toggle adjustment controls visibility
-  const toggleAdjustmentControls = () => {
-    setShowAdjustmentControls(!showAdjustmentControls);
   };
 
   // If we're in document matching view
@@ -248,26 +323,28 @@ const SideBySideView = ({ comparisonId }) => {
     );
   }
 
-  // Show loading state if no document pair is selected
-  if (!selectedPair) {
+  // Show loading state if no document pairs
+  if (documentPairs.length === 0) {
     return (
       <div className="loading-container">
         <Spinner size="large" />
-        <p>Loading document comparison...</p>
+        <p>Loading document comparisons...</p>
       </div>
     );
   }
 
-  // Calculate actual page numbers
-  const basePageNum = selectedPair.baseStartPage + currentPage - 1;
-  const comparePageNum = selectedPair.compareStartPage + currentPage - 1;
+  // Helper function to get color based on similarity score
+  const getSimilarityColor = (score) => {
+    if (score >= 0.95) return '#4CAF50'; // Green
+    if (score >= 0.85) return '#8BC34A'; // Light Green
+    if (score >= 0.70) return '#CDDC39'; // Lime
+    if (score >= 0.50) return '#FFC107'; // Amber
+    if (score > 0) return '#FF9800';     // Orange
+    return '#F44336';                    // Red
+  };
   
-  // Check if pages are out of bounds
-  const baseOutOfBounds = basePageNum > selectedPair.baseEndPage;
-  const compareOutOfBounds = comparePageNum > selectedPair.compareEndPage;
-
   return (
-    <div className="pdf-comparison-container">
+    <div className="pdf-comparison-container" ref={containerRef}>
       {/* Header */}
       <div className="comparison-header">
         <button 
@@ -282,234 +359,145 @@ const SideBySideView = ({ comparisonId }) => {
         
         <div className="document-info">
           <h3>Document Comparison</h3>
-          
-          {/* Calibration button - only visible in development mode */}
-          {process.env.NODE_ENV === 'development' && (
-            <button 
-              onClick={toggleAdjustmentControls}
-              style={{
-                marginLeft: '10px',
-                fontSize: '12px',
-                padding: '3px 8px',
-                background: showAdjustmentControls ? '#4caf50' : '#2c6dbd',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              {showAdjustmentControls ? 'Hide Calibration' : 'Calibrate Highlights'}
-            </button>
-          )}
+          <div className="page-ranges">
+            <span>{documentPairs.filter(p => p.matched).length} document pairs matched</span>
+          </div>
         </div>
         
-        <div className="page-ranges">
-          <span>Base: Pages {selectedPair.baseStartPage}-{selectedPair.baseEndPage} - Compare: Pages {selectedPair.compareStartPage}-{selectedPair.compareEndPage}</span>
-        </div>
-        
-        {/* Zoom controls */}
-        <div className="zoom-controls">
-          <button 
-            onClick={() => handleZoomChange(Math.max(0.5, zoom - 0.25))}
-            title="Zoom Out"
-          >
-            -
-          </button>
-          
-          <span>{Math.round(zoom * 100)}%</span>
-          
-          <button 
-            onClick={() => handleZoomChange(Math.min(3.0, zoom + 0.25))}
-            title="Zoom In"
-          >
-            +
-          </button>
-        </div>
+        <ZoomControls
+          zoom={zoom}
+          onZoomIn={() => handleZoomChange(Math.min(2.0, zoom + 0.25))}
+          onZoomOut={() => handleZoomChange(Math.max(0.5, zoom - 0.25))}
+          onZoomReset={() => handleZoomChange(1.0)}
+        />
       </div>
       
-      {/* Adjustment controls for fine-tuning highlight positions */}
-      {showAdjustmentControls && (
-        <div className="adjustment-controls" style={{
-          padding: '10px',
-          backgroundColor: '#f5f5f5',
-          border: '1px solid #ddd',
-          borderRadius: '4px',
-          margin: '10px',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '20px',
-          alignItems: 'center'
-        }}>
-          <div>
-            <label style={{ marginRight: '8px', fontWeight: 'bold' }}>X Offset:</label>
-            <input 
-              type="range" 
-              min="-200" 
-              max="200" 
-              step="1"
-              value={adjustmentParams.xOffset}
-              onChange={(e) => updateAdjustmentParam('xOffset', parseInt(e.target.value))}
-              style={{ width: '100px', verticalAlign: 'middle' }}
-            />
-            <span style={{ marginLeft: '8px', minWidth: '30px', display: 'inline-block' }}>
-              {adjustmentParams.xOffset}px
-            </span>
-          </div>
-          
-          <div>
-            <label style={{ marginRight: '8px', fontWeight: 'bold' }}>Y Offset:</label>
-            <input 
-              type="range" 
-              min="-1000" 
-              max="1000" 
-              step="1"
-              value={adjustmentParams.yOffset}
-              onChange={(e) => updateAdjustmentParam('yOffset', parseInt(e.target.value))}
-              style={{ width: '100px', verticalAlign: 'middle' }}
-            />
-            <span style={{ marginLeft: '8px', minWidth: '30px', display: 'inline-block' }}>
-              {adjustmentParams.yOffset}px
-            </span>
-          </div>
-          
-          <div>
-            <label style={{ marginRight: '8px', fontWeight: 'bold' }}>Scale:</label>
-            <input 
-              type="range" 
-              min="0.0" 
-              max="1.9" 
-              step="0.001"
-              value={adjustmentParams.scaleAdjustment}
-              onChange={(e) => updateAdjustmentParam('scaleAdjustment', parseFloat(e.target.value))}
-              style={{ width: '100px', verticalAlign: 'middle' }}
-            />
-            <span style={{ marginLeft: '8px', minWidth: '50px', display: 'inline-block' }}>
-              {adjustmentParams.scaleAdjustment.toFixed(2)}x
-            </span>
-          </div>
-          
-          <div>
-            <label style={{ marginRight: '8px', fontWeight: 'bold' }}>Flip Y:</label>
-            <input 
-              type="checkbox" 
-              checked={adjustmentParams.flipY}
-              onChange={(e) => updateAdjustmentParam('flipY', e.target.checked)}
-              style={{ verticalAlign: 'middle' }}
-            />
-            <span style={{ marginLeft: '8px' }}>
-              {adjustmentParams.flipY ? 'Enabled' : 'Disabled'}
-            </span>
-          </div>
-          
-          <button
-            onClick={() => setAdjustmentParams({ 
-              xOffset: 0, 
-              yOffset: 0, 
-              scaleAdjustment: 1.0,
-              flipY: false
-            })}
-            style={{
-              padding: '4px 8px',
-              backgroundColor: '#f44336',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Reset
-          </button>
-          
-          <div style={{ flexGrow: 1, textAlign: 'right', fontSize: '12px', color: '#666' }}>
-            These controls help fine-tune highlight positioning. Find the best values, then update code.
-          </div>
-        </div>
-      )}
-      
-      {/* Main content with single scrollbar */}
+      {/* Main content with continuous scroll */}
       <div className="comparison-content">
+        {/* Main scrollable area */}
         <div 
           className={`documents-scroll-container ${showDifferencePanel ? 'with-panel' : ''}`}
-          ref={containerRef}
+          ref={scrollContainerRef}
         >
-          <div className="documents-wrapper">
-            {/* Base document */}
-            <div className="document-view base-document">
-              <div className="document-header">
-                <h4>Base Document</h4>
-                <div className="page-info">
-                  Page {basePageNum} of {selectedPair.baseEndPage}
-                </div>
-              </div>
+          <div className="continuous-pdf-view">
+            {/* Render all matched document pairs */}
+            {documentPairs.map((pair, pairIndex) => {
+              if (!pair.matched) return null;
               
-              <div className="document-content">
-                {baseOutOfBounds ? (
-                  <div className="no-content">
-                    <p>Page {basePageNum} is not available in the base document</p>
-                  </div>
-                ) : state.baseFile?.fileId ? (
-                  <PDFRenderer
-                    fileId={state.baseFile.fileId}
-                    page={basePageNum}
-                    zoom={zoom}
-                    highlightMode={highlightMode}
-                    differences={baseDifferences}
-                    selectedDifference={state.selectedDifference}
-                    onDifferenceSelect={(diff) => setSelectedDifference(diff)}
-                    onZoomChange={handleZoomChange}
-                    isBaseDocument={true}
-                    pageMetadata={pageMetadata}
-                    xOffsetAdjustment={adjustmentParams.xOffset}
-                    yOffsetAdjustment={adjustmentParams.yOffset}
-                    scaleAdjustment={adjustmentParams.scaleAdjustment}
-                    flipY={adjustmentParams.flipY}
-                  />
-                ) : (
-                  <div className="no-content">
-                    <p>Base file not available</p>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Compare document */}
-            <div className="document-view compare-document">
-              <div className="document-header">
-                <h4>Compare Document</h4>
-                <div className="page-info">
-                  Page {comparePageNum} of {selectedPair.compareEndPage}
-                </div>
-              </div>
+              // Get differences for this pair
+              const pairData = pairDifferences[pairIndex] || {
+                baseDifferences: [],
+                compareDifferences: []
+              };
               
-              <div className="document-content">
-                {compareOutOfBounds ? (
-                  <div className="no-content">
-                    <p>Page {comparePageNum} is not available in the compare document</p>
+              // Get metadata for this pair
+              const pairMeta = pageMetadata[pairIndex];
+              
+              // Calculate page ranges
+              const basePageRange = {
+                start: pair.baseStartPage,
+                end: pair.baseEndPage
+              };
+              
+              const comparePageRange = {
+                start: pair.compareStartPage,
+                end: pair.compareEndPage
+              };
+              
+              const isLoading = loadingPairs.includes(pairIndex);
+              
+              return (
+                <div 
+                  className="document-pair" 
+                  key={`pair-${pairIndex}`} 
+                  id={`document-pair-${pairIndex}`}
+                >
+                  <div className="pair-header">
+                    <h3>Document {pairIndex + 1}</h3>
+                    {pair.similarityScore !== undefined && (
+                      <div className="match-percentage" style={{
+                        background: getSimilarityColor(pair.similarityScore),
+                        color: 'white'
+                      }}>
+                        {Math.round(pair.similarityScore * 100)}% Match
+                      </div>
+                    )}
                   </div>
-                ) : state.compareFile?.fileId ? (
-                  <PDFRenderer
-                    fileId={state.compareFile.fileId}
-                    page={comparePageNum}
-                    zoom={zoom}
-                    highlightMode={highlightMode}
-                    differences={compareDifferences}
-                    selectedDifference={state.selectedDifference}
-                    onDifferenceSelect={(diff) => setSelectedDifference(diff)}
-                    onZoomChange={handleZoomChange}
-                    isBaseDocument={false}
-                    pageMetadata={pageMetadata}
-                    xOffsetAdjustment={adjustmentParams.xOffset}
-                    yOffsetAdjustment={adjustmentParams.yOffset}
-                    scaleAdjustment={adjustmentParams.scaleAdjustment}
-                    flipY={adjustmentParams.flipY}
-                  />
-                ) : (
-                  <div className="no-content">
-                    <p>Compare file not available</p>
+                  
+                  <div className="page-content">
+                    <div className="page-side base-side">
+                      <div className="document-header">
+                        <h4>Base Document</h4>
+                        <div className="page-info">
+                          Pages {basePageRange.start} - {basePageRange.end}
+                        </div>
+                      </div>
+                      
+                      <div className="document-content">
+                        {state.baseFile?.fileId ? (
+                          <PDFRenderer
+                            fileId={state.baseFile.fileId}
+                            page={basePageRange.start}
+                            zoom={zoom}
+                            highlightMode={highlightMode}
+                            differences={pairData.baseDifferences || []}
+                            selectedDifference={state.selectedDifference}
+                            onDifferenceSelect={(diff) => setSelectedDifference({...diff, pairIndex})}
+                            onZoomChange={handleZoomChange}
+                            isBaseDocument={true}
+                            loading={isLoading}
+                            pageMetadata={pairMeta}
+                            xOffsetAdjustment={adjustmentParams.xOffset}
+                            yOffsetAdjustment={adjustmentParams.yOffset}
+                            scaleAdjustment={adjustmentParams.scaleAdjustment}
+                            flipY={adjustmentParams.flipY}
+                          />
+                        ) : (
+                          <div className="no-content">
+                            <p>Base file not available</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="page-side compare-side">
+                      <div className="document-header">
+                        <h4>Compare Document</h4>
+                        <div className="page-info">
+                          Pages {comparePageRange.start} - {comparePageRange.end}
+                        </div>
+                      </div>
+                      
+                      <div className="document-content">
+                        {state.compareFile?.fileId ? (
+                          <PDFRenderer
+                            fileId={state.compareFile.fileId}
+                            page={comparePageRange.start}
+                            zoom={zoom}
+                            highlightMode={highlightMode}
+                            differences={pairData.compareDifferences || []}
+                            selectedDifference={state.selectedDifference}
+                            onDifferenceSelect={(diff) => setSelectedDifference({...diff, pairIndex})}
+                            onZoomChange={handleZoomChange}
+                            isBaseDocument={false}
+                            loading={isLoading}
+                            pageMetadata={pairMeta}
+                            xOffsetAdjustment={adjustmentParams.xOffset}
+                            yOffsetAdjustment={adjustmentParams.yOffset}
+                            scaleAdjustment={adjustmentParams.scaleAdjustment}
+                            flipY={adjustmentParams.flipY}
+                          />
+                        ) : (
+                          <div className="no-content">
+                            <p>Compare file not available</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
+              );
+            })}
           </div>
         </div>
         
@@ -517,15 +505,29 @@ const SideBySideView = ({ comparisonId }) => {
         {showDifferencePanel && (
           <div className="difference-panel">
             <div className="difference-panel-header">
-              <h3>Differences</h3>
+              <h3>Visible Differences</h3>
+              <div className="difference-count">
+                {currentVisibleDifferences.length} differences in view
+              </div>
             </div>
+            
             <DifferenceList
               result={{ 
-                baseDifferences, 
-                compareDifferences 
+                baseDifferences: currentVisibleDifferences, 
+                compareDifferences: [] // We're already combining them
               }}
               selectedDifference={state.selectedDifference}
-              onDifferenceClick={(diff) => setSelectedDifference(diff)}
+              onDifferenceClick={(diff) => {
+                setSelectedDifference(diff);
+                
+                // Scroll to the pair containing this difference
+                if (diff.pairIndex !== undefined) {
+                  const pairElement = document.getElementById(`document-pair-${diff.pairIndex}`);
+                  if (pairElement) {
+                    pairElement.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }
+              }}
             />
           </div>
         )}
@@ -541,29 +543,11 @@ const SideBySideView = ({ comparisonId }) => {
       
       {/* Footer */}
       <div className="comparison-footer">
-        <div className="page-navigation">
-          <button 
-            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-            disabled={currentPage <= 1}
-          >
-            Previous Page
-          </button>
-          
-          <span className="page-indicator">
-            Page {currentPage} of {maxPageCount}
-          </span>
-          
-          <button 
-            onClick={() => setCurrentPage(Math.min(maxPageCount, currentPage + 1))}
-            disabled={currentPage >= maxPageCount}
-          >
-            Next Page
-          </button>
-        </div>
-        
         <div className="view-controls">
           <div className="highlight-controls">
+            <label htmlFor="highlightSelect">Highlight: </label>
             <select 
+              id="highlightSelect"
               value={highlightMode}
               onChange={(e) => setHighlightMode(e.target.value)}
             >
@@ -574,6 +558,10 @@ const SideBySideView = ({ comparisonId }) => {
               <option value="style">Styles Only</option>
               <option value="none">No Highlights</option>
             </select>
+          </div>
+          
+          <div className="page-status">
+            Viewing {visiblePairIndices.length} of {documentPairs.filter(p => p.matched).length} document pairs
           </div>
         </div>
       </div>
