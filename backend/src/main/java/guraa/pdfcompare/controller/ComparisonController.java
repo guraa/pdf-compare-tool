@@ -4,6 +4,8 @@ import guraa.pdfcompare.model.ComparisonResult;
 import guraa.pdfcompare.model.DocumentPair;
 import guraa.pdfcompare.model.PageDetails;
 import guraa.pdfcompare.repository.ComparisonRepository;
+import guraa.pdfcompare.service.ComparisonService;
+import guraa.pdfcompare.service.ReportGenerationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
