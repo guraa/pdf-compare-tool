@@ -12,18 +12,14 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Enhanced visual matcher for PDF pages with improved error handling and threading.
+ * Enhanced visual matcher for PDF pages with improved error handling, threading, and caching.
  * This class uses SSIM (Structural Similarity Index) to match pages
  * between two PDF documents based on visual similarity.
  */
@@ -34,10 +30,16 @@ public class EnhancedVisualMatcher implements VisualMatcher {
     private final SSIMCalculator ssimCalculator;
     private final PdfRenderingService pdfRenderingService;
     private final ExecutorService executorService;
-    
+
+    // Cache of rendered pages to avoid repeated file I/O
+    private final ConcurrentHashMap<String, BufferedImage> imageCache = new ConcurrentHashMap<>();
+
+    // Set a maximum size for the cache to avoid memory issues
+    private static final int MAX_CACHE_SIZE = 50;
+
     /**
      * Constructor with qualifiers to specify which beans to use.
-     * 
+     *
      * @param ssimCalculator The SSIM calculator for image comparison
      * @param pdfRenderingService The PDF rendering service
      * @param executorService The executor service for comparison operations
@@ -57,13 +59,13 @@ public class EnhancedVisualMatcher implements VisualMatcher {
     @Value("${app.matching.max-candidates-per-page:5}")
     private int maxCandidatesPerPage;
 
-    @Value("${app.matching.max-concurrent-comparisons:4}")
+    @Value("${app.matching.max-concurrent-comparisons:8}")
     private int maxConcurrentComparisons;
 
     @Value("${app.matching.retry-count:3}")
     private int retryCount;
 
-    @Value("${app.matching.retry-delay-ms:100}")
+    @Value("${app.matching.retry-delay-ms:50}")
     private int retryDelayMs;
 
     // Cache of similarity scores
@@ -74,18 +76,31 @@ public class EnhancedVisualMatcher implements VisualMatcher {
         log.info("Starting visual matching between documents: {} and {}",
                 baseDocument.getFileId(), compareDocument.getFileId());
 
-        try {
-            // Pre-render all pages
-            preRenderPages(baseDocument, compareDocument);
+        long startTime = System.currentTimeMillis();
 
-            // Calculate similarity scores for all page pairs
+        try {
+            // Pre-render all pages - this is done in parallel for both documents
+            CompletableFuture<Void> preRenderingFuture = preRenderPages(baseDocument, compareDocument);
+
+            // Calculate similarity scores for all page pairs - start this while pages are still rendering
             Map<String, Double> similarityScores = calculateSimilarityScores(baseDocument, compareDocument);
+
+            // Wait for pre-rendering to complete if it hasn't already
+            try {
+                preRenderingFuture.get(60, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                log.warn("Timeout waiting for page pre-rendering. Continuing with partial results.");
+            }
 
             // Match pages using the Hungarian algorithm
             List<PagePair> pagePairs = matchPagesUsingHungarian(baseDocument, compareDocument, similarityScores);
 
-            log.info("Completed visual matching between documents: {} and {}",
-                    baseDocument.getFileId(), compareDocument.getFileId());
+            long endTime = System.currentTimeMillis();
+            log.info("Completed visual matching between documents: {} and {} in {}ms",
+                    baseDocument.getFileId(), compareDocument.getFileId(), (endTime - startTime));
+
+            // Clear the image cache after matching to free memory
+            clearImageCache();
 
             return pagePairs;
         } catch (Exception e) {
@@ -99,9 +114,9 @@ public class EnhancedVisualMatcher implements VisualMatcher {
      *
      * @param baseDocument The base document
      * @param compareDocument The compare document
-     * @throws IOException If there is an error rendering the pages
+     * @return A CompletableFuture representing the pre-rendering task
      */
-    private void preRenderPages(PdfDocument baseDocument, PdfDocument compareDocument) throws IOException {
+    private CompletableFuture<Void> preRenderPages(PdfDocument baseDocument, PdfDocument compareDocument) {
         // Submit tasks to pre-render all pages
         CompletableFuture<Void> baseRenderingFuture = CompletableFuture.runAsync(() -> {
             try {
@@ -121,12 +136,8 @@ public class EnhancedVisualMatcher implements VisualMatcher {
             }
         }, executorService);
 
-        // Wait for both tasks to complete
-        try {
-            CompletableFuture.allOf(baseRenderingFuture, compareRenderingFuture).join();
-        } catch (Exception e) {
-            throw new IOException("Failed to pre-render pages", e);
-        }
+        // Combine and return both futures
+        return CompletableFuture.allOf(baseRenderingFuture, compareRenderingFuture);
     }
 
     /**
@@ -135,9 +146,8 @@ public class EnhancedVisualMatcher implements VisualMatcher {
      * @param baseDocument The base document
      * @param compareDocument The compare document
      * @return A map of page pair keys to similarity scores
-     * @throws IOException If there is an error calculating the scores
      */
-    private Map<String, Double> calculateSimilarityScores(PdfDocument baseDocument, PdfDocument compareDocument) throws IOException {
+    private Map<String, Double> calculateSimilarityScores(PdfDocument baseDocument, PdfDocument compareDocument) {
         Map<String, Double> similarityScores = new ConcurrentHashMap<>();
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
@@ -208,9 +218,9 @@ public class EnhancedVisualMatcher implements VisualMatcher {
 
         // Wait for all tasks to complete with timeout handling
         try {
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get(2, TimeUnit.MINUTES);
         } catch (Exception e) {
-            log.error("Error waiting for similarity calculations to complete", e);
+            log.error("Error or timeout waiting for similarity calculations to complete", e);
             // Continue with partial results rather than failing completely
         }
 
@@ -235,39 +245,17 @@ public class EnhancedVisualMatcher implements VisualMatcher {
 
         for (int attempt = 0; attempt < retryCount; attempt++) {
             try {
-                // Get the rendered pages
-                File basePageFile = pdfRenderingService.renderPage(baseDocument, basePageNum);
-                File comparePageFile = pdfRenderingService.renderPage(compareDocument, comparePageNum);
-
-                // Ensure files exist and are readable
-                if (!basePageFile.exists() || !basePageFile.canRead()) {
-                    throw new IOException("Base page file does not exist or is not readable: " + basePageFile.getPath());
-                }
-
-                if (!comparePageFile.exists() || !comparePageFile.canRead()) {
-                    throw new IOException("Compare page file does not exist or is not readable: " + comparePageFile.getPath());
-                }
-
-                // Check file sizes to avoid empty files
-                if (basePageFile.length() == 0) {
-                    throw new IOException("Base page file is empty: " + basePageFile.getPath());
-                }
-
-                if (comparePageFile.length() == 0) {
-                    throw new IOException("Compare page file is empty: " + comparePageFile.getPath());
-                }
-
-                // Load the images with exclusive file access
-                BufferedImage baseImage = loadImageSafely(basePageFile);
-                BufferedImage compareImage = loadImageSafely(comparePageFile);
+                // Get the rendered page images
+                BufferedImage baseImage = getPageImage(baseDocument, basePageNum);
+                BufferedImage compareImage = getPageImage(compareDocument, comparePageNum);
 
                 // Check if images were loaded successfully
                 if (baseImage == null) {
-                    throw new IOException("Failed to load base image: " + basePageFile.getPath());
+                    throw new IOException("Failed to load base image for page " + basePageNum);
                 }
 
                 if (compareImage == null) {
-                    throw new IOException("Failed to load compare image: " + comparePageFile.getPath());
+                    throw new IOException("Failed to load compare image for page " + comparePageNum);
                 }
 
                 // Calculate the similarity score
@@ -294,29 +282,56 @@ public class EnhancedVisualMatcher implements VisualMatcher {
     }
 
     /**
-     * Load an image with proper error handling and resource management.
+     * Get the rendered page image with caching.
      *
-     * @param imageFile The image file to load
-     * @return The loaded image, or null if loading failed
+     * @param document The document
+     * @param pageNumber The page number
+     * @return The rendered page image
+     * @throws IOException If there is an error loading the image
      */
-    private BufferedImage loadImageSafely(File imageFile) {
-        // Use a synchronized block to ensure exclusive file access
-        synchronized (imageFile.getAbsolutePath().intern()) {
-            try {
-                // Create a copy of the file in a temporary location to avoid concurrent access issues
-                File tempFile = File.createTempFile("image_", ".png");
-                tempFile.deleteOnExit();
+    private BufferedImage getPageImage(PdfDocument document, int pageNumber) throws IOException {
+        String cacheKey = document.getFileId() + "_" + pageNumber;
 
-                Files.copy(imageFile.toPath(), tempFile.toPath(),
-                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-
-                // Load the image from the temporary file
-                return ImageIO.read(tempFile);
-            } catch (Exception e) {
-                log.error("Error loading image {}: {}", imageFile.getPath(), e.getMessage());
-                return null;
-            }
+        // Check if the image is already in the cache
+        BufferedImage cachedImage = imageCache.get(cacheKey);
+        if (cachedImage != null) {
+            return cachedImage;
         }
+
+        // Get the rendered page
+        File pageFile = pdfRenderingService.renderPage(document, pageNumber);
+
+        // Ensure file exists and is readable
+        if (!pageFile.exists() || !pageFile.canRead()) {
+            throw new IOException("Page file does not exist or is not readable: " + pageFile.getPath());
+        }
+
+        // Check file size to avoid empty files
+        if (pageFile.length() == 0) {
+            throw new IOException("Page file is empty: " + pageFile.getPath());
+        }
+
+        // Load the image
+        BufferedImage image = ImageIO.read(pageFile);
+
+        // Check if the image was loaded successfully
+        if (image == null) {
+            throw new IOException("Failed to load image: " + pageFile.getPath());
+        }
+
+        // Cache the image if there's room in the cache
+        if (imageCache.size() < MAX_CACHE_SIZE) {
+            imageCache.put(cacheKey, image);
+        }
+
+        return image;
+    }
+
+    /**
+     * Clear the image cache to free memory.
+     */
+    private void clearImageCache() {
+        imageCache.clear();
     }
 
     /**

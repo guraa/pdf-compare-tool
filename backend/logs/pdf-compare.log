@@ -2068,3 +2068,15 @@ Caused by: org.springframework.beans.factory.NoSuchBeanDefinitionException: No q
 2025-04-15 16:02:34 [http-nio-3010-exec-8] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: e6521c7b-795d-430f-888b-ec2ea10ef9e6
 2025-04-15 16:02:34 [http-nio-3010-exec-9] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: e6521c7b-795d-430f-888b-ec2ea10ef9e6, trying file storage
 2025-04-15 16:02:34 [http-nio-3010-exec-9] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: e6521c7b-795d-430f-888b-ec2ea10ef9e6
+2025-04-15 16:02:50 [pool-1-thread-4] WARN  g.p.service.PdfRenderingService - Failed to set Windows directory permissions: uploads\documents\13f4e7b3-e2e7-4feb-9a13-f7a928d718d8\pages
+2025-04-15 16:02:50 [pool-1-thread-2] WARN  g.p.service.PdfRenderingService - Failed to set Windows directory permissions: uploads\documents\13f4e7b3-e2e7-4feb-9a13-f7a928d718d8\pages
+2025-04-15 16:02:50 [pool-1-thread-3] WARN  g.p.service.PdfRenderingService - Failed to set Windows directory permissions: uploads\documents\13f4e7b3-e2e7-4feb-9a13-f7a928d718d8\pages
+2025-04-15 16:04:59 [pool-1-thread-2] WARN  g.p.service.PdfRenderingService - Failed to set Windows directory permissions: uploads\documents\e0cce5e5-6713-4cd8-a937-f98026c2dae5\pages
+2025-04-15 16:05:00 [pool-1-thread-3] WARN  g.p.service.PdfRenderingService - Failed to set Windows directory permissions: uploads\documents\e0cce5e5-6713-4cd8-a937-f98026c2dae5\pages
+2025-04-15 16:05:01 [pool-1-thread-4] WARN  g.p.service.PdfRenderingService - Failed to set Windows directory permissions: uploads\documents\e0cce5e5-6713-4cd8-a937-f98026c2dae5\pages
+2025-04-15 16:05:02 [pool-1-thread-3] WARN  g.p.service.PdfRenderingService - Failed to set Windows directory permissions: uploads\documents\13f4e7b3-e2e7-4feb-9a13-f7a928d718d8\pages
+2025-04-15 16:05:03 [pool-1-thread-4] WARN  g.p.service.PdfRenderingService - Failed to set Windows directory permissions: uploads\documents\13f4e7b3-e2e7-4feb-9a13-f7a928d718d8\pages
+2025-04-15 16:05:03 [pool-1-thread-2] WARN  g.p.service.PdfRenderingService - Failed to set Windows directory permissions: uploads\documents\13f4e7b3-e2e7-4feb-9a13-f7a928d718d8\pages
+2025-04-15 16:06:21 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 16:06:21 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 16:06:21 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.

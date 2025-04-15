@@ -3,6 +3,7 @@ package guraa.pdfcompare.config;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,12 +13,13 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Configuration for thread pools and concurrency settings.
+ * Optimized configuration for thread pools and concurrency settings.
  * This class provides centralized management of thread pools with improved
- * error handling and monitoring.
+ * error handling, monitoring, and adaptive scaling based on system resources.
  */
 @Slf4j
 @Configuration
@@ -25,77 +27,93 @@ import java.util.concurrent.ThreadPoolExecutor;
 @ConfigurationProperties(prefix = "app.concurrency")
 public class ConcurrencyConfig {
 
-    /**
-     * Core pool size for the thread pools.
-     */
-    private int corePoolSize = Runtime.getRuntime().availableProcessors();
+    // System information for adaptive scaling
+    private final int availableProcessors = Runtime.getRuntime().availableProcessors();
+    private final long totalMemory = Runtime.getRuntime().maxMemory() / (1024 * 1024); // in MB
 
-    /**
-     * Maximum pool size for the thread pools.
-     */
-    private int maxPoolSize = Runtime.getRuntime().availableProcessors() * 2;
+    // Default values based on system resources
+    @Getter @Setter
+    private int corePoolSize = calculateOptimalCorePoolSize();
 
-    /**
-     * Queue capacity for the thread pools.
-     */
+    @Getter @Setter
+    private int maxPoolSize = calculateOptimalMaxPoolSize();
+
+    @Getter @Setter
     private int queueCapacity = 100;
 
-    /**
-     * Number of threads for PDF comparison operations.
-     */
-    private int comparisonThreads = 4;
+    @Getter @Setter
+    private int comparisonThreads = calculateOptimalComparisonThreads();
+
+    @Getter @Setter
+    private int pageProcessingThreads = calculateOptimalPageProcessingThreads();
+
+    @Getter @Setter
+    private int renderingThreads = calculateOptimalRenderingThreads();
+
+    @Getter @Setter
+    private int shutdownTimeoutSeconds = 30;
+
+    @Value("${app.concurrency.memory-per-thread:256}")
+    private int memoryPerThreadMB = 256; // Estimated memory usage per thread in MB
 
     /**
-     * Number of threads for PDF page processing operations.
-     */
-    private int pageProcessingThreads = 8;
-
-    /**
-     * Number of threads for PDF rendering operations.
-     * -- SETTER --
-     *  Setter for rendering threads configuration.
+     * Calculate optimal core pool size based on system resources.
      *
+     * @return The optimal core pool size
+     */
+    private int calculateOptimalCorePoolSize() {
+        // Use available processors as a baseline, with a minimum of 2
+        return Math.max(2, availableProcessors / 2);
+    }
+
+    /**
+     * Calculate optimal maximum pool size based on system resources.
      *
-     * -- GETTER --
-     *  Getter for rendering threads configuration.
+     * @return The optimal maximum pool size
+     */
+    private int calculateOptimalMaxPoolSize() {
+        // Use available processors and memory as constraints
+        int byProcessor = availableProcessors;
+
+        // Prevent division by zero
+        int memoryLimit = (memoryPerThreadMB <= 0) ? 256 : memoryPerThreadMB;
+
+        // Calculate based on available memory (protect against zero or very low values)
+        int byMemory = (totalMemory <= 0) ? 4 : (int) Math.max(2, totalMemory / memoryLimit);
+
+        // Return the minimum of the two constraints, with a minimum of 2 threads
+        return Math.max(2, Math.min(byProcessor, byMemory));
+    }
+
+    /**
+     * Calculate optimal comparison threads based on system resources.
      *
-     @param renderingThreads Number of threads for rendering
-      * @return The number of rendering threads
-
+     * @return The optimal number of comparison threads
      */
-    @Getter
-    @Setter
-    private int renderingThreads = 4;
-
-    /**
-     * Timeout in seconds for thread termination during shutdown.
-     */
-    private int shutdownTimeoutSeconds = 10;
+    private int calculateOptimalComparisonThreads() {
+        // PDF comparison is CPU and memory intensive
+        return Math.max(2, availableProcessors / 2);
+    }
 
     /**
-     * Maximum concurrent image comparisons.
+     * Calculate optimal page processing threads based on system resources.
+     *
+     * @return The optimal number of page processing threads
      */
-    private int maxConcurrentImageComparisons = 4;
+    private int calculateOptimalPageProcessingThreads() {
+        // Page processing can be parallelized more
+        return Math.max(4, availableProcessors);
+    }
 
     /**
-     * Maximum concurrent PDF renderings.
+     * Calculate optimal rendering threads based on system resources.
+     *
+     * @return The optimal number of rendering threads
      */
-    private int maxConcurrentRenderings = 2;
-
-    /**
-     * Retry count for failed operations.
-     */
-    private int retryCount = 3;
-
-    /**
-     * Delay between retry attempts in milliseconds.
-     */
-    private int retryDelayMs = 100;
-
-    /**
-     * Timeout for acquiring locks in seconds.
-     */
-    private int lockTimeoutSeconds = 10;
+    private int calculateOptimalRenderingThreads() {
+        // Rendering is very memory-intensive
+        return Math.max(2, availableProcessors / 2);
+    }
 
     /**
      * Task executor for processing PDFs asynchronously.
@@ -104,27 +122,7 @@ public class ConcurrencyConfig {
      */
     @Bean(name = "pdfProcessingExecutor")
     public ThreadPoolTaskExecutor pdfProcessingExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(corePoolSize);
-        executor.setMaxPoolSize(maxPoolSize);
-        executor.setQueueCapacity(queueCapacity);
-        executor.setThreadNamePrefix("pdf-proc-");
-        executor.setAwaitTerminationSeconds(shutdownTimeoutSeconds);
-        executor.setWaitForTasksToCompleteOnShutdown(true);
-
-        // Use CallerRunsPolicy to avoid rejection when queue is full
-        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
-
-        // Monitor rejected tasks
-        executor.setRejectedExecutionHandler((r, e) -> {
-            log.warn("Task rejected by PDF processing executor. Current queue size: {}", e.getQueue().size());
-            // Use caller runs policy
-            if (!e.isShutdown()) {
-                r.run();
-            }
-        });
-
-        executor.initialize();
+        ThreadPoolTaskExecutor executor = createBaseExecutor("pdf-proc-");
         return executor;
     }
 
@@ -137,39 +135,24 @@ public class ConcurrencyConfig {
     @Bean(name = "pdfPageProcessingExecutor")
     @Primary
     public ExecutorService pdfPageProcessingExecutor() {
-        // Use the number of available processors, but limit to a reasonable number
-        // to avoid excessive resource usage
-        int numThreads = Math.min(Runtime.getRuntime().availableProcessors(), pageProcessingThreads);
+        int numThreads = pageProcessingThreads;
         log.info("Creating PDF page processing executor with {} threads", numThreads);
-        return Executors.newFixedThreadPool(numThreads, r -> {
-            Thread thread = new Thread(r);
-            thread.setName("pdf-page-" + thread.getId());
-            thread.setUncaughtExceptionHandler((t, e) -> {
-                log.error("Uncaught exception in PDF page processing thread {}: {}", t.getName(), e.getMessage(), e);
-            });
-            return thread;
-        });
+
+        return Executors.newFixedThreadPool(numThreads, createThreadFactory("pdf-page-"));
     }
 
     /**
      * Task executor for comparing PDFs asynchronously.
      *
-     * @return The thread pool task executor
+     * @return The thread pool executor
      */
     @Bean(name = "comparisonExecutor")
     public ExecutorService comparisonExecutor() {
-        // Using a fixed thread pool with the configured number of threads
-        log.info("Creating comparison executor with {} threads", comparisonThreads);
-        return Executors.newFixedThreadPool(comparisonThreads, r -> {
-            Thread thread = new Thread(r);
-            thread.setName("compare-" + thread.getId());
-            thread.setUncaughtExceptionHandler((t, e) -> {
-                log.error("Uncaught exception in comparison thread {}: {}", t.getName(), e.getMessage(), e);
-            });
-            return thread;
-        });
-    }
+        int numThreads = comparisonThreads;
+        log.info("Creating comparison executor with {} threads", numThreads);
 
+        return Executors.newFixedThreadPool(numThreads, createThreadFactory("compare-"));
+    }
 
     /**
      * Rendering executor specifically for PDF rendering operations.
@@ -178,18 +161,10 @@ public class ConcurrencyConfig {
      */
     @Bean(name = "renderingExecutor")
     public ExecutorService renderingExecutor() {
-        int numThreads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
+        int numThreads = renderingThreads;
         log.info("Creating rendering executor with {} threads", numThreads);
 
-        return Executors.newFixedThreadPool(numThreads, r -> {
-            Thread thread = new Thread(r);
-            thread.setName("render-" + thread.getId());
-            thread.setUncaughtExceptionHandler((t, e) -> {
-                log.error("Uncaught exception in rendering thread {}: {}",
-                        t.getName(), e.getMessage(), e);
-            });
-            return thread;
-        });
+        return Executors.newFixedThreadPool(numThreads, createThreadFactory("render-"));
     }
 
     /**
@@ -199,19 +174,34 @@ public class ConcurrencyConfig {
      */
     @Bean(name = "taskExecutor")
     public ThreadPoolTaskExecutor taskExecutor() {
+        ThreadPoolTaskExecutor executor = createBaseExecutor("task-exec-");
+        return executor;
+    }
+
+    /**
+     * Create a base ThreadPoolTaskExecutor with common settings.
+     *
+     * @param threadNamePrefix The prefix for thread names
+     * @return The configured executor
+     */
+    private ThreadPoolTaskExecutor createBaseExecutor(String threadNamePrefix) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(corePoolSize);
         executor.setMaxPoolSize(maxPoolSize);
         executor.setQueueCapacity(queueCapacity);
-        executor.setThreadNamePrefix("task-exec-");
+        executor.setThreadNamePrefix(threadNamePrefix);
         executor.setAwaitTerminationSeconds(shutdownTimeoutSeconds);
         executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAllowCoreThreadTimeOut(true); // Allow idle threads to time out
 
         // Monitor rejected tasks
         executor.setRejectedExecutionHandler((r, e) -> {
-            log.warn("Task rejected by general task executor. Current queue size: {}", e.getQueue().size());
-            // Use caller runs policy
+            log.warn("Task rejected by executor {}. Current queue size: {} of {}",
+                    threadNamePrefix, e.getQueue().size(), queueCapacity);
+
+            // Use caller runs policy if not shutdown
             if (!e.isShutdown()) {
+                log.info("Executing rejected task in caller thread");
                 r.run();
             }
         });
@@ -220,17 +210,29 @@ public class ConcurrencyConfig {
         return executor;
     }
 
-    // Getters and setters
+    /**
+     * Create a thread factory with proper naming and error handling.
+     *
+     * @param prefix The prefix for thread names
+     * @return The thread factory
+     */
+    private ThreadFactory createThreadFactory(String prefix) {
+        return new ThreadFactory() {
+            private final AtomicInteger threadNumber = new AtomicInteger(1);
 
-    public int getCorePoolSize() {
-        return corePoolSize;
-    }
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread thread = new Thread(r);
+                thread.setName(prefix + threadNumber.getAndIncrement());
+                thread.setDaemon(false); // Use non-daemon threads
 
-    public void setCorePoolSize(int corePoolSize) {
-        this.corePoolSize = corePoolSize;
-    }
+                // Handle uncaught exceptions
+                thread.setUncaughtExceptionHandler((t, e) -> {
+                    log.error("Uncaught exception in thread {}: {}", t.getName(), e.getMessage(), e);
+                });
 
-    public int getMaxPoolSize() {
-        return maxPoolSize;
+                return thread;
+            }
+        };
     }
 }
