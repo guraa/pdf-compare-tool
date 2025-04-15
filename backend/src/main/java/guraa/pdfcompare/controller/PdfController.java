@@ -1,6 +1,8 @@
 package guraa.pdfcompare.controller;
 
 import guraa.pdfcompare.model.PdfDocument;
+import guraa.pdfcompare.service.PdfRenderingService;
+import guraa.pdfcompare.service.PdfService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.http.fileupload.FileItemIterator;
@@ -31,9 +33,7 @@ import java.util.Map;
 public class PdfController {
 
     private final PdfService pdfService;
-    private final ThumbnailService thumbnailService;
-    private final PdfPasswordHandler pdfPasswordHandler;
-    private final PdfRenderingService pdfRenderingService; // Added dependency
+    private final PdfRenderingService pdfRenderingService;
 
     /**
      * Upload a PDF file.
@@ -52,22 +52,12 @@ public class PdfController {
                 return ResponseEntity.badRequest().body(Map.of("error", "Only PDF files are allowed"));
             }
 
-            // Create a temporary file to check if it's password protected
+            // Create a temporary file to store the upload
             Path tempFile = Files.createTempFile("pdf-upload", ".pdf");
             file.transferTo(tempFile.toFile());
 
-            if (pdfPasswordHandler.isPasswordProtected(tempFile.toFile())) {
-                // Return special response for password-protected PDFs
-                Map<String, Object> response = new HashMap<>();
-                response.put("requiresPassword", true);
-                response.put("message", "PDF is password protected. Please provide a password.");
-                response.put("tempFilePath", tempFile.toString());
-
-                return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED).body(response);
-            }
-
-            // If not password protected, process normally
-            PdfDocument document = pdfService.storePdf(file);
+            // Process the PDF
+            PdfDocument document = pdfService.processPdfFile(tempFile.toFile(), file.getOriginalFilename());
 
             Map<String, Object> response = new HashMap<>();
             response.put("fileId", document.getFileId());
@@ -85,70 +75,6 @@ public class PdfController {
         } catch (IOException e) {
             log.error("Failed to upload PDF", e);
             return ResponseEntity.internalServerError().body(Map.of("error", "Failed to upload PDF: " + e.getMessage()));
-        }
-    }
-
-    /**
-     * Handle password-protected PDF upload.
-     *
-     * @param tempFilePath Path to the temporary file
-     * @param password The password for the PDF
-     * @param fileName Original file name (optional)
-     * @return Information about the uploaded file
-     */
-    @PostMapping("/upload/password")
-    public ResponseEntity<?> uploadPasswordProtectedPdf(
-            @RequestParam("tempFilePath") String tempFilePath,
-            @RequestParam("password") String password,
-            @RequestParam(value = "fileName", required = false) String fileName) {
-
-        try {
-            File tempFile = new File(tempFilePath);
-
-            // Verify the file exists and is in the temp directory
-            if (!tempFile.exists() || !tempFile.getCanonicalPath().startsWith(System.getProperty("java.io.tmpdir"))) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Invalid temporary file path"));
-            }
-
-            // Verify it's actually password protected
-            if (!pdfPasswordHandler.isPasswordProtected(tempFile)) {
-                return ResponseEntity.badRequest().body(Map.of("error", "File is not password protected"));
-            }
-
-            // Try to unlock the PDF
-            File unlockedFile = pdfPasswordHandler.unlockPdf(tempFile, password);
-
-            if (unlockedFile == null) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Invalid password"));
-            }
-
-            // Use the provided filename or extract from temp file
-            String finalFileName = (fileName != null && !fileName.isEmpty()) ?
-                    fileName : tempFile.getName().replaceFirst("pdf-upload.*\\.pdf$", "document.pdf");
-
-            // Process the unlocked PDF
-            PdfDocument document = pdfService.processPdfFile(unlockedFile, finalFileName);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("fileId", document.getFileId());
-            response.put("fileName", document.getFileName());
-            response.put("pageCount", document.getPageCount());
-            response.put("fileSize", document.getFileSize());
-            response.put("wasPasswordProtected", true);
-
-            // Clean up temp files
-            try {
-                Files.deleteIfExists(tempFile.toPath());
-                Files.deleteIfExists(unlockedFile.toPath());
-            } catch (IOException e) {
-                log.warn("Failed to delete temporary files: {}", e.getMessage());
-            }
-
-            return ResponseEntity.ok().body(response);
-        } catch (IOException e) {
-            log.error("Failed to process password-protected PDF", e);
-            return ResponseEntity.internalServerError().body(
-                    Map.of("error", "Failed to process password-protected PDF: " + e.getMessage()));
         }
     }
 
@@ -179,8 +105,8 @@ public class PdfController {
     /**
      * Get a specific page from a PDF document as an image.
      *
-     * @param fileId The file ID
-     * @param pageNumber The page number (1-based)
+     * @param fileId        The file ID
+     * @param pageNumber    The page number (1-based)
      * @param forceRerender Whether to force re-rendering of the page
      * @return The page as an image
      */
@@ -205,7 +131,7 @@ public class PdfController {
             // If forcing re-render, delete existing rendered page
             if (forceRerender) {
                 try {
-                    File renderedPage = new File("uploads/documents/" + fileId + "/pages/page_" + pageNumber + ".png");
+                    File renderedPage = new File(document.getRenderedPagePath(pageNumber));
                     if (renderedPage.exists()) {
                         renderedPage.delete();
                     }
@@ -214,8 +140,8 @@ public class PdfController {
                 }
             }
 
-            // Get the rendered page image using the enhanced rendering service
-            FileSystemResource pageImage = pdfRenderingService.getRenderedPage(document, pageNumber); // Use instance
+            // Get the rendered page image using the rendering service
+            FileSystemResource pageImage = pdfRenderingService.getRenderedPage(document, pageNumber);
 
             return ResponseEntity.ok()
                     .contentType(MediaType.IMAGE_PNG)
@@ -308,19 +234,7 @@ public class PdfController {
                     return ResponseEntity.badRequest().body(Map.of("error", "Only PDF files are allowed"));
                 }
 
-                // Check if it's password protected
-                if (pdfPasswordHandler.isPasswordProtected(tempFile)) {
-                    // Return special response for password-protected PDFs
-                    Map<String, Object> response = new HashMap<>();
-                    response.put("requiresPassword", true);
-                    response.put("message", "PDF is password protected. Please provide a password.");
-                    response.put("tempFilePath", tempFile.getAbsolutePath());
-                    response.put("fileName", fileName);
-
-                    return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED).body(response);
-                }
-
-                // Process the PDF - this will now check for existing documents with the same content hash
+                // Process the PDF
                 PdfDocument document = pdfService.processPdfFile(tempFile, fileName);
 
                 // Create response
@@ -353,7 +267,7 @@ public class PdfController {
     /**
      * Get a thumbnail for a specific page from a PDF document.
      *
-     * @param fileId The file ID
+     * @param fileId     The file ID
      * @param pageNumber The page number (1-based)
      * @return The thumbnail as an image
      */
@@ -378,8 +292,7 @@ public class PdfController {
             // If forcing regeneration, delete existing thumbnail
             if (forceRegenerate) {
                 try {
-                    File thumbnailFile = new File("uploads/documents/" + fileId +
-                            "/thumbnails/page_" + pageNumber + "_thumbnail.png");
+                    File thumbnailFile = new File(document.getThumbnailPath(pageNumber));
                     if (thumbnailFile.exists()) {
                         thumbnailFile.delete();
                     }
@@ -388,8 +301,8 @@ public class PdfController {
                 }
             }
 
-            // Get the thumbnail using the enhanced rendering service
-            FileSystemResource thumbnailImage = pdfRenderingService.getThumbnail(document, pageNumber); // Use instance
+            // Get the thumbnail using the rendering service
+            FileSystemResource thumbnailImage = pdfRenderingService.getThumbnail(document, pageNumber);
 
             return ResponseEntity.ok()
                     .contentType(MediaType.IMAGE_PNG)
@@ -401,22 +314,4 @@ public class PdfController {
         }
     }
 
-    /**
-     * Request object for PDF comparison.
-     */
-    public static class CompareRequest {
-        private String baseFileId;
-        private String compareFileId;
-        private Map<String, Object> options;
-
-        // Getters and setters
-        public String getBaseFileId() { return baseFileId; }
-        public void setBaseFileId(String baseFileId) { this.baseFileId = baseFileId; }
-
-        public String getCompareFileId() { return compareFileId; }
-        public void setCompareFileId(String compareFileId) { this.compareFileId = compareFileId; }
-
-        public Map<String, Object> getOptions() { return options; }
-        public void setOptions(Map<String, Object> options) { this.options = options; }
-    }
 }
