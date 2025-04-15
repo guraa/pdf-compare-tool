@@ -2,34 +2,32 @@ package guraa.pdfcompare.service;
 
 import guraa.pdfcompare.model.PdfDocument;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.stereotype.Service;
 
 import javax.imageio.ImageIO;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.List;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.TimeUnit;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.CompletionException;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 
 /**
  * Service for rendering PDF pages as images with enhanced concurrency control.
@@ -40,13 +38,14 @@ import java.awt.RenderingHints;
 public class PdfRenderingService {
 
     private final ExecutorService executorService;
-    
+
     /**
      * Constructor with qualifier to specify which executor service to use.
      * 
      * @param executorService The executor service for rendering operations
      */
-    public PdfRenderingService(@Qualifier("renderingExecutor") ExecutorService executorService) {
+    public PdfRenderingService(
+            @Qualifier("renderingExecutor") ExecutorService executorService) {
         this.executorService = executorService;
     }
 
@@ -117,6 +116,19 @@ public class PdfRenderingService {
         return new FileSystemResource(renderedPage);
     }
 
+    private void checkSystemResources() throws InterruptedException {
+        Runtime runtime = Runtime.getRuntime();
+        long maxMemory = runtime.maxMemory();
+        long usedMemory = runtime.totalMemory() - runtime.freeMemory();
+        double memoryUsageRatio = (double) usedMemory / maxMemory;
+
+        if (memoryUsageRatio > 0.9) {
+            log.warn("High memory usage ({}%), throttling rendering", memoryUsageRatio * 100);
+            // Potential implementation of backpressure or task queuing
+            Thread.sleep(500); // Brief pause to allow memory to free up
+        }
+    }
+
     /**
      * Get the thumbnail image for a document page.
      *
@@ -159,96 +171,98 @@ public class PdfRenderingService {
     public File renderPage(PdfDocument document, int pageNumber) throws IOException {
         File renderedPage = new File(document.getRenderedPagePath(pageNumber));
 
-        // Create parent directories if they don't exist
-        Path renderedPageDir = renderedPage.getParentFile().toPath();
-        if (!Files.exists(renderedPageDir)) {
+        try {
+            // Create parent directories with proper permissions
+            Path renderedPageDir = renderedPage.getParentFile().toPath();
             Files.createDirectories(renderedPageDir);
-        }
 
-        // Get or create a lock for this PDF file
-        ReentrantLock pdfLock = pdfLocks.computeIfAbsent(document.getFilePath(), k -> new ReentrantLock());
+            // Ensure writable permissions
+            setDirectoryPermissions(renderedPageDir);
 
-        // Implement retry logic
-        IOException lastException = null;
-        for (int attempt = 0; attempt < retryCount; attempt++) {
-            try {
-                // Acquire semaphore to limit concurrent renders
-                if (!renderSemaphore.tryAcquire(renderTimeoutSeconds, TimeUnit.SECONDS)) {
-                    throw new IOException("Timed out waiting for rendering resources");
-                }
-
+            return retryWithCircuitBreaker(() -> {
+                Path tempFile = null;
                 try {
-                    // Use a temporary file first to avoid partial writes
-                    Path tempFile = Files.createTempFile("render_", "." + renderingFormat);
+                    tempFile = Files.createTempFile("render_", ".png");
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
 
-                    // Try to acquire the lock for this PDF
-                    if (!pdfLock.tryLock(renderTimeoutSeconds, TimeUnit.SECONDS)) {
-                        throw new IOException("Timed out waiting for PDF file access");
+                try (PDDocument pdDocument = PDDocument.load(new File(document.getFilePath()))) {
+                    PDFRenderer renderer = new PDFRenderer(pdDocument);
+
+                    if (pageNumber < 1 || pageNumber > pdDocument.getNumberOfPages()) {
+                        throw new IllegalArgumentException("Invalid page number: " + pageNumber);
                     }
 
+                    BufferedImage image = renderer.renderImageWithDPI(
+                            pageNumber - 1,
+                            renderingDpi,
+                            getImageType()
+                    );
+
+                    // Write to temp file
+                    ImageIO.write(image, "png", tempFile.toFile());
+
+                    // Attempt to move with explicit options to handle potential permission issues
                     try {
-                        // Open the PDF document
-                        try (PDDocument pdDocument = PDDocument.load(new File(document.getFilePath()))) {
-                            log.debug("Rendering page {} of document {}", pageNumber, document.getFileId());
-
-                            PDFRenderer renderer = new PDFRenderer(pdDocument);
-
-                            // Check if the page number is valid
-                            if (pageNumber < 1 || pageNumber > pdDocument.getNumberOfPages()) {
-                                throw new IOException("Invalid page number: " + pageNumber +
-                                        ". Document has " + pdDocument.getNumberOfPages() + " pages.");
-                            }
-
-                            // Render the page
-                            BufferedImage image = renderer.renderImageWithDPI(pageNumber - 1, renderingDpi, getImageType());
-
-                            // Save the image to the temporary file
-                            if (!ImageIO.write(image, renderingFormat, tempFile.toFile())) {
-                                throw new IOException("Failed to write image in " + renderingFormat + " format");
-                            }
-
-                            // Move the temp file to the final location
-                            Files.move(tempFile, renderedPage.toPath(), StandardCopyOption.REPLACE_EXISTING);
-
-                            log.debug("Successfully rendered page {} of document {}", pageNumber, document.getFileId());
-
-                            return renderedPage;
-                        }
-                    } finally {
-                        pdfLock.unlock();
-
-                        // Clean up temp file if it still exists
-                        try {
-                            Files.deleteIfExists(tempFile);
-                        } catch (Exception e) {
-                            log.warn("Failed to delete temporary file: {}", e.getMessage());
-                        }
+                        Files.move(tempFile, renderedPage.toPath(),
+                                StandardCopyOption.REPLACE_EXISTING,
+                                StandardCopyOption.ATOMIC_MOVE
+                        );
+                    } catch (FileSystemException e) {
+                        // Fallback to copy if move fails
+                        log.warn("Move failed, falling back to copy: {}", e.getMessage());
+                        Files.copy(tempFile, renderedPage.toPath(),
+                                StandardCopyOption.REPLACE_EXISTING
+                        );
                     }
+
+                    return renderedPage;
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
                 } finally {
-                    renderSemaphore.release();
-                }
-            } catch (IOException e) {
-                lastException = e;
-                log.warn("Attempt {} failed to render page {} of document {}: {}",
-                        attempt + 1, pageNumber, document.getFileId(), e.getMessage());
-
-                if (attempt < retryCount - 1) {
+                    // Ensure temp file is deleted
                     try {
-                        Thread.sleep(retryDelayMs * (attempt + 1));
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw new IOException("Thread interrupted during retry delay", ie);
+                        Files.deleteIfExists(tempFile);
+                    } catch (IOException deleteEx) {
+                        log.warn("Failed to delete temporary file: {}", deleteEx.getMessage());
                     }
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IOException("Thread interrupted while waiting for rendering resources", e);
-            }
+            }, 3, 500);
+        } catch (IOException e) {
+            log.error("Failed to render page {}: {}", pageNumber, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Set directory permissions to ensure writability.
+     *
+     * @param directory The directory path
+     */
+    private void setDirectoryPermissions(Path directory) {
+        try {
+            // Attempt to set full read/write permissions
+            Set<PosixFilePermission> permissions = PosixFilePermissions.fromString("rwxrwxrwx");
+            Files.setPosixFilePermissions(directory, permissions);
+        } catch (IOException | UnsupportedOperationException e) {
+            // Log but don't fail if permission setting is not supported
+            log.warn("Could not set directory permissions: {}", e.getMessage());
+        }
+    }
+
+    private File retryWithCircuitBreaker(Supplier<File> renderTask, int maxRetries, int delayMs) throws IOException {
+        int attempts = 0;
+        IOException lastException = null;
+
+        while (attempts < maxRetries) {
+            return renderTask.get();
         }
 
-    // All retries failed
-        throw new IOException("Failed to render page after " + retryCount + " attempts", lastException);
+        throw new IOException("Rendering failed due to unexpected error", lastException);
     }
+
+
 
     /**
      * Pre-render all pages of a PDF document in parallel.

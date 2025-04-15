@@ -1,11 +1,13 @@
 package guraa.pdfcompare.config;
 
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.context.annotation.Primary;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.ExecutorService;
@@ -50,8 +52,20 @@ public class ConcurrencyConfig {
 
     /**
      * Number of threads for PDF rendering operations.
+     * -- SETTER --
+     *  Setter for rendering threads configuration.
+     *
+     *
+     * -- GETTER --
+     *  Getter for rendering threads configuration.
+     *
+     @param renderingThreads Number of threads for rendering
+      * @return The number of rendering threads
+
      */
-    private int renderingThreads = 2;
+    @Getter
+    @Setter
+    private int renderingThreads = 4;
 
     /**
      * Timeout in seconds for thread termination during shutdown.
@@ -156,19 +170,23 @@ public class ConcurrencyConfig {
         });
     }
 
+
     /**
-     * Task executor for PDF rendering operations.
+     * Rendering executor specifically for PDF rendering operations.
      *
-     * @return The thread pool executor
+     * @return The executor service for rendering
      */
     @Bean(name = "renderingExecutor")
     public ExecutorService renderingExecutor() {
-        log.info("Creating rendering executor with {} threads", renderingThreads);
-        return Executors.newFixedThreadPool(renderingThreads, r -> {
+        int numThreads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
+        log.info("Creating rendering executor with {} threads", numThreads);
+
+        return Executors.newFixedThreadPool(numThreads, r -> {
             Thread thread = new Thread(r);
             thread.setName("render-" + thread.getId());
             thread.setUncaughtExceptionHandler((t, e) -> {
-                log.error("Uncaught exception in rendering thread {}: {}", t.getName(), e.getMessage(), e);
+                log.error("Uncaught exception in rendering thread {}: {}",
+                        t.getName(), e.getMessage(), e);
             });
             return thread;
         });
