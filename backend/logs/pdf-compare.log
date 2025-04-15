@@ -2020,3 +2020,51 @@ Caused by: org.springframework.beans.factory.NoSuchBeanDefinitionException: No q
 2025-04-15 15:58:24 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
 2025-04-15 15:58:24 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
 2025-04-15 15:58:24 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2025-04-15 16:02:01 [main] INFO  g.pdfcompare.PDFCompareApplication - Starting PDFCompareApplication using Java 17.0.10 on GUSTAV with PID 34480 (C:\projects\pdfCompare\backend\target\classes started by GustavTullberg in C:\projects\pdfCompare\backend)
+2025-04-15 16:02:01 [main] DEBUG g.pdfcompare.PDFCompareApplication - Running with Spring Boot v2.7.10, Spring v5.3.26
+2025-04-15 16:02:01 [main] INFO  g.pdfcompare.PDFCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-04-15 16:02:04 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-04-15 16:02:04 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 155 ms. Found 2 JPA repository interfaces.
+2025-04-15 16:02:06 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port(s): 3010 (http)
+2025-04-15 16:02:06 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-04-15 16:02:06 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.73]
+2025-04-15 16:02:06 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-04-15 16:02:06 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 4891 ms
+2025-04-15 16:02:06 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2025-04-15 16:02:07 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2025-04-15 16:02:07 [main] INFO  o.s.b.a.h.H2ConsoleAutoConfiguration - H2 console available at '/h2-console'. Database available at 'jdbc:h2:file:./pdfcompare-db'
+2025-04-15 16:02:07 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-04-15 16:02:07 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 5.6.15.Final
+2025-04-15 16:02:08 [main] INFO  o.h.annotations.common.Version - HCANN000001: Hibernate Commons Annotations {5.1.2.Final}
+2025-04-15 16:02:08 [main] INFO  org.hibernate.dialect.Dialect - HHH000400: Using dialect: org.hibernate.dialect.H2Dialect
+2025-04-15 16:02:10 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000490: Using JtaPlatform implementation: [org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform]
+2025-04-15 16:02:10 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 16:02:10 [main] INFO  g.p.config.ConcurrencyConfig - Creating rendering executor with 8 threads
+2025-04-15 16:02:11 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2025-04-15 16:02:13 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint(s) beneath base path '/actuator'
+2025-04-15 16:02:13 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port(s): 3010 (http) with context path ''
+2025-04-15 16:02:13 [main] INFO  g.pdfcompare.PDFCompareApplication - Started PDFCompareApplication in 13.633 seconds (JVM running for 15.862)
+2025-04-15 16:02:13 [RMI TCP Connection(3)-192.168.68.121] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-04-15 16:02:13 [RMI TCP Connection(3)-192.168.68.121] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-04-15 16:02:13 [RMI TCP Connection(3)-192.168.68.121] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 4 ms
+2025-04-15 16:02:33 [pool-1-thread-1] INFO  guraa.pdfcompare.PDFComparisonEngine - Starting comparison between documents: e0cce5e5-6713-4cd8-a937-f98026c2dae5 and 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 16:02:33 [pool-1-thread-1] INFO  g.p.core.SmartDocumentMatcher - Starting smart document matching between documents: e0cce5e5-6713-4cd8-a937-f98026c2dae5 and 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 16:02:33 [pool-1-thread-1] INFO  g.p.visual.EnhancedVisualMatcher - Starting visual matching between documents: e0cce5e5-6713-4cd8-a937-f98026c2dae5 and 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 16:02:33 [pool-1-thread-2] INFO  g.p.service.PdfRenderingService - Pre-rendering all pages for document: e0cce5e5-6713-4cd8-a937-f98026c2dae5
+2025-04-15 16:02:33 [pool-1-thread-3] INFO  g.p.service.PdfRenderingService - Pre-rendering all pages for document: 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 16:02:33 [pool-1-thread-3] INFO  g.p.service.PdfRenderingService - Pre-rendering progress for document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: 4/4 pages (100 %)
+2025-04-15 16:02:33 [pool-1-thread-3] INFO  g.p.service.PdfRenderingService - Successfully pre-rendered all 4 pages for document: 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 16:02:33 [pool-1-thread-2] INFO  g.p.service.PdfRenderingService - Pre-rendering progress for document e0cce5e5-6713-4cd8-a937-f98026c2dae5: 5/8 pages (62 %)
+2025-04-15 16:02:33 [pool-1-thread-2] INFO  g.p.service.PdfRenderingService - Pre-rendering progress for document e0cce5e5-6713-4cd8-a937-f98026c2dae5: 8/8 pages (100 %)
+2025-04-15 16:02:33 [pool-1-thread-2] INFO  g.p.service.PdfRenderingService - Successfully pre-rendered all 8 pages for document: e0cce5e5-6713-4cd8-a937-f98026c2dae5
+2025-04-15 16:02:33 [pool-1-thread-3] WARN  g.p.service.PdfRenderingService - Failed to set Windows directory permissions: uploads\documents\e0cce5e5-6713-4cd8-a937-f98026c2dae5\pages
+2025-04-15 16:02:33 [pool-1-thread-2] WARN  g.p.service.PdfRenderingService - Failed to set Windows directory permissions: uploads\documents\e0cce5e5-6713-4cd8-a937-f98026c2dae5\pages
+2025-04-15 16:02:33 [pool-1-thread-4] WARN  g.p.service.PdfRenderingService - Failed to set Windows directory permissions: uploads\documents\e0cce5e5-6713-4cd8-a937-f98026c2dae5\pages
+2025-04-15 16:02:33 [http-nio-3010-exec-6] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: e6521c7b-795d-430f-888b-ec2ea10ef9e6, trying file storage
+2025-04-15 16:02:33 [http-nio-3010-exec-6] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: e6521c7b-795d-430f-888b-ec2ea10ef9e6
+2025-04-15 16:02:34 [http-nio-3010-exec-7] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: e6521c7b-795d-430f-888b-ec2ea10ef9e6, trying file storage
+2025-04-15 16:02:34 [http-nio-3010-exec-7] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: e6521c7b-795d-430f-888b-ec2ea10ef9e6
+2025-04-15 16:02:34 [http-nio-3010-exec-8] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: e6521c7b-795d-430f-888b-ec2ea10ef9e6, trying file storage
+2025-04-15 16:02:34 [http-nio-3010-exec-8] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: e6521c7b-795d-430f-888b-ec2ea10ef9e6
+2025-04-15 16:02:34 [http-nio-3010-exec-9] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: e6521c7b-795d-430f-888b-ec2ea10ef9e6, trying file storage
+2025-04-15 16:02:34 [http-nio-3010-exec-9] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: e6521c7b-795d-430f-888b-ec2ea10ef9e6

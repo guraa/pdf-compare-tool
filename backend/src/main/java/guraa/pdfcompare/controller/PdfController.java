@@ -264,6 +264,8 @@ public class PdfController {
         }
     }
 
+
+
     /**
      * Get a thumbnail for a specific page from a PDF document.
      *

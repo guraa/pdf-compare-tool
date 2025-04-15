@@ -11,11 +11,18 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.stereotype.Service;
 
 import javax.imageio.ImageIO;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.*;
-import java.nio.file.attribute.*;
+import java.nio.file.FileSystemException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.nio.file.attribute.UserPrincipal;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
@@ -247,6 +254,99 @@ public class PdfRenderingService {
             log.debug("Successfully set POSIX permissions for directory: {}", directory);
         } catch (IOException e) {
             log.warn("Failed to set POSIX directory permissions: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Generate a thumbnail for a specific page of a PDF document.
+     *
+     * @param document   The document
+     * @param pageNumber The page number (1-based)
+     * @return The thumbnail as a FileSystemResource
+     * @throws IOException If there is an error generating the thumbnail
+     */
+    public FileSystemResource getThumbnail(PdfDocument document, int pageNumber) throws IOException {
+        // Check if the thumbnail already exists
+        File thumbnailFile = new File(document.getThumbnailPath(pageNumber));
+
+        // If the file doesn't exist or is empty, generate it
+        if (!thumbnailFile.exists() || thumbnailFile.length() == 0) {
+            // Ensure the directory exists
+            Path thumbnailDir = thumbnailFile.getParentFile().toPath();
+            Files.createDirectories(thumbnailDir);
+
+            // Generate the thumbnail
+            generateThumbnail(document, pageNumber);
+        }
+
+        // Verify the thumbnail was generated successfully
+        if (!thumbnailFile.exists() || thumbnailFile.length() == 0) {
+            throw new IOException("Failed to generate thumbnail for page " + pageNumber + " of document " + document.getFileId());
+        }
+
+        return new FileSystemResource(thumbnailFile);
+    }
+
+    /**
+     * Generate a thumbnail for a specific page of a PDF document.
+     *
+     * @param document   The document
+     * @param pageNumber The page number (1-based)
+     * @throws IOException If there is an error generating the thumbnail
+     */
+    private void generateThumbnail(PdfDocument document, int pageNumber) throws IOException {
+        File thumbnailFile = new File(document.getThumbnailPath(pageNumber));
+
+        try (PDDocument pdDocument = PDDocument.load(new File(document.getFilePath()))) {
+            PDFRenderer renderer = new PDFRenderer(pdDocument);
+
+            // Check if the page number is valid
+            if (pageNumber < 1 || pageNumber > pdDocument.getNumberOfPages()) {
+                throw new IOException("Invalid page number: " + pageNumber +
+                        ". Document has " + pdDocument.getNumberOfPages() + " pages.");
+            }
+
+            // Render the page at a lower DPI
+            BufferedImage image = renderer.renderImageWithDPI(pageNumber - 1, thumbnailDpi, getImageType());
+
+            // Resize to the desired thumbnail dimensions
+            BufferedImage thumbnailImage = resizeImage(image, thumbnailWidth, thumbnailHeight);
+
+            // Ensure the parent directory exists
+            Files.createDirectories(thumbnailFile.getParentFile().toPath());
+
+            // Save the thumbnail
+            if (!ImageIO.write(thumbnailImage, renderingFormat, thumbnailFile)) {
+                throw new IOException("Failed to write thumbnail in " + renderingFormat + " format");
+            }
+        }
+    }
+
+    /**
+     * Resize an image to the specified dimensions.
+     *
+     * @param image  The image to resize
+     * @param width  The target width
+     * @param height The target height
+     * @return The resized image
+     * @throws IOException If there is an error resizing the image
+     */
+    private BufferedImage resizeImage(BufferedImage image, int width, int height) throws IOException {
+        BufferedImage resizedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = resizedImage.createGraphics();
+
+        try {
+            // Set rendering hints for better quality
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            // Draw the original image scaled to the new dimensions
+            g.drawImage(image, 0, 0, width, height, null);
+
+            return resizedImage;
+        } finally {
+            g.dispose();
         }
     }
 
