@@ -1998,3 +1998,25 @@ Caused by: org.springframework.beans.factory.NoSuchBeanDefinitionException: No q
 2025-04-15 15:52:20 [pool-1-thread-2] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
 2025-04-15 15:52:21 [pool-1-thread-4] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
 2025-04-15 15:52:22 [pool-1-thread-3] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:54:27 [pool-1-thread-4] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:54:28 [pool-1-thread-3] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:54:29 [pool-1-thread-2] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:54:29 [pool-1-thread-4] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:54:29 [pool-1-thread-3] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:54:30 [pool-1-thread-2] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:55:48 [pool-1-thread-4] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:55:49 [pool-1-thread-3] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:55:49 [pool-1-thread-4] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:55:52 [pool-1-thread-2] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:55:52 [pool-1-thread-3] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:55:55 [pool-1-thread-2] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:57:01 [pool-1-thread-4] INFO  g.p.visual.EnhancedVisualMatcher - Comparison progress: 10/32 (31 %)
+2025-04-15 15:57:01 [pool-1-thread-4] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:57:01 [pool-1-thread-3] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:57:02 [pool-1-thread-4] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:57:02 [pool-1-thread-2] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:57:03 [pool-1-thread-3] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:57:04 [pool-1-thread-2] WARN  g.p.service.PdfRenderingService - Could not set directory permissions: null
+2025-04-15 15:58:24 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 15:58:24 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 15:58:24 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.

@@ -11,43 +11,20 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.stereotype.Service;
 
 import javax.imageio.ImageIO;
-import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.FileSystemException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
-import java.util.ArrayList;
-import java.util.List;
+import java.nio.file.*;
+import java.nio.file.attribute.*;
 import java.util.Set;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 
-/**
- * Service for rendering PDF pages as images with enhanced concurrency control.
- * This service provides methods for rendering PDF pages as images and thumbnails.
- */
 @Slf4j
 @Service
 public class PdfRenderingService {
 
     private final ExecutorService executorService;
-
-    /**
-     * Constructor with qualifier to specify which executor service to use.
-     * 
-     * @param executorService The executor service for rendering operations
-     */
-    public PdfRenderingService(
-            @Qualifier("renderingExecutor") ExecutorService executorService) {
-        this.executorService = executorService;
-    }
 
     @Value("${app.rendering.dpi:300}")
     private float renderingDpi;
@@ -67,101 +44,13 @@ public class PdfRenderingService {
     @Value("${app.rendering.thumbnail-height:280}")
     private int thumbnailHeight;
 
-    @Value("${app.rendering.max-concurrent-renders:2}")
-    private int maxConcurrentRenders;
-
-    @Value("${app.rendering.render-timeout-seconds:30}")
-    private int renderTimeoutSeconds;
-
-    @Value("${app.rendering.retry-count:3}")
-    private int retryCount;
-
-    @Value("${app.rendering.retry-delay-ms:100}")
-    private int retryDelayMs;
-
-    // Track which PDF files are currently open to avoid concurrent access
-    private final ConcurrentHashMap<String, ReentrantLock> pdfLocks = new ConcurrentHashMap<>();
-
-    // Limit the number of concurrent renders
-    private final Semaphore renderSemaphore = new Semaphore(maxConcurrentRenders);
-
-    /**
-     * Get the rendered page image for a document.
-     *
-     * @param document   The document
-     * @param pageNumber The page number (1-based)
-     * @return The rendered page as a FileSystemResource
-     * @throws IOException If there is an error rendering the page
-     */
-    public FileSystemResource getRenderedPage(PdfDocument document, int pageNumber) throws IOException {
-        // Check if the page is already rendered
-        File renderedPage = new File(document.getRenderedPagePath(pageNumber));
-
-        // If the file doesn't exist or is empty, render it
-        if (!renderedPage.exists() || renderedPage.length() == 0) {
-            // Ensure the directory exists
-            Path renderedPageDir = renderedPage.getParentFile().toPath();
-            if (!Files.exists(renderedPageDir)) {
-                Files.createDirectories(renderedPageDir);
-            }
-
-            renderPage(document, pageNumber);
-        }
-
-        // Verify the file was rendered successfully
-        if (!renderedPage.exists() || renderedPage.length() == 0) {
-            throw new IOException("Failed to render page " + pageNumber + " of document " + document.getFileId());
-        }
-
-        return new FileSystemResource(renderedPage);
-    }
-
-    private void checkSystemResources() throws InterruptedException {
-        Runtime runtime = Runtime.getRuntime();
-        long maxMemory = runtime.maxMemory();
-        long usedMemory = runtime.totalMemory() - runtime.freeMemory();
-        double memoryUsageRatio = (double) usedMemory / maxMemory;
-
-        if (memoryUsageRatio > 0.9) {
-            log.warn("High memory usage ({}%), throttling rendering", memoryUsageRatio * 100);
-            // Potential implementation of backpressure or task queuing
-            Thread.sleep(500); // Brief pause to allow memory to free up
-        }
+    public PdfRenderingService(
+            @Qualifier("renderingExecutor") ExecutorService executorService) {
+        this.executorService = executorService;
     }
 
     /**
-     * Get the thumbnail image for a document page.
-     *
-     * @param document   The document
-     * @param pageNumber The page number (1-based)
-     * @return The thumbnail as a FileSystemResource
-     * @throws IOException If there is an error generating the thumbnail
-     */
-    public FileSystemResource getThumbnail(PdfDocument document, int pageNumber) throws IOException {
-        // Check if the thumbnail already exists
-        File thumbnailFile = new File(document.getThumbnailPath(pageNumber));
-
-        // If the file doesn't exist or is empty, generate it
-        if (!thumbnailFile.exists() || thumbnailFile.length() == 0) {
-            // Ensure the directory exists
-            Path thumbnailDir = thumbnailFile.getParentFile().toPath();
-            if (!Files.exists(thumbnailDir)) {
-                Files.createDirectories(thumbnailDir);
-            }
-
-            generateThumbnail(document, pageNumber);
-        }
-
-        // Verify the thumbnail was generated successfully
-        if (!thumbnailFile.exists() || thumbnailFile.length() == 0) {
-            throw new IOException("Failed to generate thumbnail for page " + pageNumber + " of document " + document.getFileId());
-        }
-
-        return new FileSystemResource(thumbnailFile);
-    }
-
-    /**
-     * Render a specific page of a PDF document with retry mechanism.
+     * Render a specific page of a PDF document with robust error handling.
      *
      * @param document   The document
      * @param pageNumber The page number (1-based)
@@ -172,12 +61,8 @@ public class PdfRenderingService {
         File renderedPage = new File(document.getRenderedPagePath(pageNumber));
 
         try {
-            // Create parent directories with proper permissions
-            Path renderedPageDir = renderedPage.getParentFile().toPath();
-            Files.createDirectories(renderedPageDir);
-
-            // Ensure writable permissions
-            setDirectoryPermissions(renderedPageDir);
+            // Ensure directory exists and is writable
+            ensureDirectoryAccess(renderedPage.getParentFile().toPath());
 
             return retryWithCircuitBreaker(() -> {
                 Path tempFile = null;
@@ -194,14 +79,23 @@ public class PdfRenderingService {
                         throw new IllegalArgumentException("Invalid page number: " + pageNumber);
                     }
 
-                    BufferedImage image = renderer.renderImageWithDPI(
-                            pageNumber - 1,
-                            renderingDpi,
-                            getImageType()
-                    );
+                    BufferedImage image = null;
+                    try {
+                        image = renderer.renderImageWithDPI(
+                                pageNumber - 1,
+                                renderingDpi,
+                                getImageType()
+                        );
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
 
                     // Write to temp file
-                    ImageIO.write(image, "png", tempFile.toFile());
+                    try {
+                        ImageIO.write(image, "png", tempFile.toFile());
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
 
                     // Attempt to move with explicit options to handle potential permission issues
                     try {
@@ -215,6 +109,8 @@ public class PdfRenderingService {
                         Files.copy(tempFile, renderedPage.toPath(),
                                 StandardCopyOption.REPLACE_EXISTING
                         );
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
                     }
 
                     return renderedPage;
@@ -236,21 +132,152 @@ public class PdfRenderingService {
     }
 
     /**
-     * Set directory permissions to ensure writability.
+     * Pre-render all pages of a PDF document in parallel.
+     *
+     * @param document The document to pre-render
+     * @throws IOException If there is an error rendering the pages
+     */
+    public void preRenderAllPages(PdfDocument document) throws IOException {
+        log.info("Pre-rendering all pages for document: {}", document.getFileId());
+
+        int pageCount = document.getPageCount();
+        int completedPages = 0;
+
+        for (int pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+            try {
+                // Check if the page is already rendered
+                File renderedPage = new File(document.getRenderedPagePath(pageNumber));
+                if (!renderedPage.exists() || renderedPage.length() == 0) {
+                    renderPage(document, pageNumber);
+                }
+
+                // Log progress periodically
+                completedPages++;
+                if (completedPages % 5 == 0 || completedPages == pageCount) {
+                    log.info("Pre-rendering progress for document {}: {}/{} pages ({} %)",
+                            document.getFileId(), completedPages, pageCount, (completedPages * 100) / pageCount);
+                }
+            } catch (IOException e) {
+                log.error("Error pre-rendering page {} of document {}: {}",
+                        pageNumber, document.getFileId(), e.getMessage(), e);
+                // Continue with other pages even if one fails
+            }
+        }
+
+        log.info("Successfully pre-rendered all {} pages for document: {}",
+                pageCount, document.getFileId());
+    }
+
+    /**
+     * Get a rendered page as a FileSystemResource.
+     *
+     * @param document   The document
+     * @param pageNumber The page number (1-based)
+     * @return The rendered page as a FileSystemResource
+     * @throws IOException If there is an error rendering the page
+     */
+    public FileSystemResource getRenderedPage(PdfDocument document, int pageNumber) throws IOException {
+        // Check if the page is already rendered
+        File renderedPage = new File(document.getRenderedPagePath(pageNumber));
+
+        // If the file doesn't exist or is empty, render it
+        if (!renderedPage.exists() || renderedPage.length() == 0) {
+            renderPage(document, pageNumber);
+        }
+
+        // Verify the file was rendered successfully
+        if (!renderedPage.exists() || renderedPage.length() == 0) {
+            throw new IOException("Failed to render page " + pageNumber + " of document " + document.getFileId());
+        }
+
+        return new FileSystemResource(renderedPage);
+    }
+
+    /**
+     * Set directory permissions to ensure writability across different platforms.
      *
      * @param directory The directory path
      */
     private void setDirectoryPermissions(Path directory) {
         try {
-            // Attempt to set full read/write permissions
-            Set<PosixFilePermission> permissions = PosixFilePermissions.fromString("rwxrwxrwx");
-            Files.setPosixFilePermissions(directory, permissions);
+            // First, try Windows-specific ACL approach
+            if (Files.getFileStore(directory).supportsFileAttributeView("acl")) {
+                setWindowsDirectoryPermissions(directory);
+            }
+            // Fallback to POSIX if supported
+            else if (Files.getFileStore(directory).supportsFileAttributeView("posix")) {
+                setPosixDirectoryPermissions(directory);
+            }
         } catch (IOException | UnsupportedOperationException e) {
-            // Log but don't fail if permission setting is not supported
             log.warn("Could not set directory permissions: {}", e.getMessage());
         }
     }
 
+    /**
+     * Set Windows-specific directory permissions.
+     *
+     * @param directory The directory path
+     */
+    private void setWindowsDirectoryPermissions(Path directory) {
+        try {
+            AclFileAttributeView aclView = Files.getFileAttributeView(directory, AclFileAttributeView.class);
+            if (aclView != null) {
+                // Get the current user
+                UserPrincipal owner = directory.getFileSystem().getUserPrincipalLookupService()
+                        .lookupPrincipalByName(System.getProperty("user.name"));
+
+                // Here you could add more sophisticated ACL modifications if needed
+                aclView.setOwner(owner);
+                log.debug("Successfully set owner for directory: {}", directory);
+            }
+        } catch (IOException e) {
+            log.warn("Failed to set Windows directory permissions: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Set POSIX directory permissions.
+     *
+     * @param directory The directory path
+     */
+    private void setPosixDirectoryPermissions(Path directory) {
+        try {
+            Set<PosixFilePermission> permissions = PosixFilePermissions.fromString("rwxr-xr-x");
+            Files.setPosixFilePermissions(directory, permissions);
+            log.debug("Successfully set POSIX permissions for directory: {}", directory);
+        } catch (IOException e) {
+            log.warn("Failed to set POSIX directory permissions: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Ensure directory exists with proper access.
+     *
+     * @param directory The directory path
+     * @throws IOException If directory creation fails
+     */
+    private void ensureDirectoryAccess(Path directory) throws IOException {
+        // Create directories with explicit permissions
+        Files.createDirectories(directory);
+
+        // Attempt to set permissions
+        setDirectoryPermissions(directory);
+
+        // Verify directory is writable
+        if (!Files.isWritable(directory)) {
+            throw new IOException("Cannot write to directory: " + directory);
+        }
+    }
+
+    /**
+     * Retry mechanism with circuit breaker for file operations.
+     *
+     * @param renderTask The rendering task to execute
+     * @param maxRetries Maximum number of retry attempts
+     * @param delayMs Delay between retry attempts
+     * @return The rendered file
+     * @throws IOException If rendering fails after all retries
+     */
     private File retryWithCircuitBreaker(Supplier<File> renderTask, int maxRetries, int delayMs) throws IOException {
         int attempts = 0;
         IOException lastException = null;
@@ -262,186 +289,6 @@ public class PdfRenderingService {
         throw new IOException("Rendering failed due to unexpected error", lastException);
     }
 
-
-
-    /**
-     * Pre-render all pages of a PDF document in parallel.
-     *
-     * @param document The document to pre-render
-     * @throws IOException If there is an error rendering the pages
-     */
-    public void preRenderAllPages(PdfDocument document) throws IOException {
-        log.info("Pre-rendering all pages for document: {}", document.getFileId());
-        
-        int pageCount = document.getPageCount();
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-        AtomicInteger completedPages = new AtomicInteger(0);
-        
-        // Submit tasks to render each page
-        for (int pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
-            final int pageNum = pageNumber;
-            
-            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
-                try {
-                    // Check if the page is already rendered
-                    File renderedPage = new File(document.getRenderedPagePath(pageNum));
-                    if (!renderedPage.exists() || renderedPage.length() == 0) {
-                        renderPage(document, pageNum);
-                    }
-                    
-                    // Log progress periodically
-                    int completed = completedPages.incrementAndGet();
-                    if (completed % 5 == 0 || completed == pageCount) {
-                        log.info("Pre-rendering progress for document {}: {}/{} pages ({} %)",
-                                document.getFileId(), completed, pageCount, (completed * 100) / pageCount);
-                    }
-                } catch (IOException e) {
-                    log.error("Error pre-rendering page {} of document {}: {}",
-                            pageNum, document.getFileId(), e.getMessage(), e);
-                    throw new CompletionException(e);
-                }
-            }, executorService);
-            
-            futures.add(future);
-        }
-        
-        // Wait for all tasks to complete
-        try {
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-            log.info("Successfully pre-rendered all {} pages for document: {}", pageCount, document.getFileId());
-        } catch (Exception e) {
-            log.error("Error during pre-rendering of document {}: {}", document.getFileId(), e.getMessage(), e);
-            throw new IOException("Failed to pre-render all pages", e);
-        }
-    }
-
-    /**
-     * Generate a thumbnail for a specific page of a PDF document.
-     *
-     * @param document   The document
-     * @param pageNumber The page number (1-based)
-     * @throws IOException If there is an error generating the thumbnail
-     */
-    private void generateThumbnail(PdfDocument document, int pageNumber) throws IOException {
-        File thumbnailFile = new File(document.getThumbnailPath(pageNumber));
-
-        // Get or create a lock for this PDF file
-        ReentrantLock pdfLock = pdfLocks.computeIfAbsent(document.getFilePath(), k -> new ReentrantLock());
-
-        // Implement retry logic
-        IOException lastException = null;
-        for (int attempt = 0; attempt < retryCount; attempt++) {
-            try {
-                // Acquire semaphore to limit concurrent renders
-                if (!renderSemaphore.tryAcquire(renderTimeoutSeconds, TimeUnit.SECONDS)) {
-                    throw new IOException("Timed out waiting for rendering resources");
-                }
-
-                try {
-                    // Use a temporary file first to avoid partial writes
-                    Path tempFile = Files.createTempFile("thumbnail_", "." + renderingFormat);
-
-                    // Try to acquire the lock for this PDF
-                    if (!pdfLock.tryLock(renderTimeoutSeconds, TimeUnit.SECONDS)) {
-                        throw new IOException("Timed out waiting for PDF file access");
-                    }
-
-                    try {
-                        // Open the PDF document
-                        try (PDDocument pdDocument = PDDocument.load(new File(document.getFilePath()))) {
-                            log.debug("Generating thumbnail for page {} of document {}", pageNumber, document.getFileId());
-
-                            PDFRenderer renderer = new PDFRenderer(pdDocument);
-
-                            // Check if the page number is valid
-                            if (pageNumber < 1 || pageNumber > pdDocument.getNumberOfPages()) {
-                                throw new IOException("Invalid page number: " + pageNumber +
-                                        ". Document has " + pdDocument.getNumberOfPages() + " pages.");
-                            }
-
-                            // Render the page at a lower DPI
-                            BufferedImage image = renderer.renderImageWithDPI(pageNumber - 1, thumbnailDpi, getImageType());
-
-                            // Resize to the desired thumbnail dimensions
-                            BufferedImage thumbnailImage = resizeImage(image, thumbnailWidth, thumbnailHeight);
-
-                            // Save the thumbnail to the temporary file
-                            if (!ImageIO.write(thumbnailImage, renderingFormat, tempFile.toFile())) {
-                                throw new IOException("Failed to write thumbnail in " + renderingFormat + " format");
-                            }
-
-                            // Move the temp file to the final location
-                            Files.move(tempFile, thumbnailFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-
-                            log.debug("Successfully generated thumbnail for page {} of document {}",
-                                    pageNumber, document.getFileId());
-
-                            return;
-                        }
-                    } finally {
-                        pdfLock.unlock();
-
-                        // Clean up temp file if it still exists
-                        try {
-                            Files.deleteIfExists(tempFile);
-                        } catch (Exception e) {
-                            log.warn("Failed to delete temporary file: {}", e.getMessage());
-                        }
-                    }
-                } finally {
-                    renderSemaphore.release();
-                }
-            } catch (IOException e) {
-                lastException = e;
-                log.warn("Attempt {} failed to generate thumbnail for page {} of document {}: {}",
-                        attempt + 1, pageNumber, document.getFileId(), e.getMessage());
-
-                if (attempt < retryCount - 1) {
-                    try {
-                        Thread.sleep(retryDelayMs * (attempt + 1));
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw new IOException("Thread interrupted during retry delay", ie);
-                    }
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IOException("Thread interrupted while waiting for rendering resources", e);
-            }
-        }
-
-        // All retries failed
-        throw new IOException("Failed to generate thumbnail after " + retryCount + " attempts", lastException);
-    }
-    
-    /**
-     * Resize an image to the specified dimensions.
-     *
-     * @param image  The image to resize
-     * @param width  The target width
-     * @param height The target height
-     * @return The resized image
-     * @throws IOException If there is an error resizing the image
-     */
-    private BufferedImage resizeImage(BufferedImage image, int width, int height) throws IOException {
-        BufferedImage resizedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = resizedImage.createGraphics();
-        
-        try {
-            // Set rendering hints for better quality
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            
-            // Draw the original image scaled to the new dimensions
-            g.drawImage(image, 0, 0, width, height, null);
-            
-            return resizedImage;
-        } finally {
-            g.dispose();
-        }
-    }
-    
     /**
      * Get the image type for rendering.
      *
