@@ -1,170 +1,275 @@
 package guraa.pdfcompare.model.difference;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * Represents a text difference between documents.
- * This class extends the base Difference class with text-specific properties.
+ * Represents a difference between text content in two PDF documents.
+ * This class stores information about the text content and
+ * how it differs between the documents.
  */
 @Data
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(callSuper = true)
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public class TextDifference extends Difference {
 
+    /**
+     * The text content in the base document.
+     */
     private String baseText;
+
+    /**
+     * The text content in the compare document.
+     */
     private String compareText;
-    private String text;
+
+    /**
+     * The start index of the difference in the base text.
+     */
     private int startIndex;
+
+    /**
+     * The end index of the difference in the base text.
+     */
     private int endIndex;
+
+    /**
+     * The length of the difference.
+     */
     private int length;
-    private String context;
 
     /**
-     * Get the text from the base document.
-     *
-     * @return The base text
+     * The x-coordinate in the base document.
      */
-    public String getBaseText() {
-        return baseText;
+    private double baseX;
+
+    /**
+     * The y-coordinate in the base document.
+     */
+    private double baseY;
+
+    /**
+     * The width in the base document.
+     */
+    private double baseWidth;
+
+    /**
+     * The height in the base document.
+     */
+    private double baseHeight;
+
+    /**
+     * The x-coordinate in the compare document.
+     */
+    private double compareX;
+
+    /**
+     * The y-coordinate in the compare document.
+     */
+    private double compareY;
+
+    /**
+     * The width in the compare document.
+     */
+    private double compareWidth;
+
+    /**
+     * The height in the compare document.
+     */
+    private double compareHeight;
+
+    /**
+     * The font name in the base document.
+     */
+    private String baseFont;
+
+    /**
+     * The font name in the compare document.
+     */
+    private String compareFont;
+
+    /**
+     * The font size in the base document.
+     */
+    private float baseFontSize;
+
+    /**
+     * The font size in the compare document.
+     */
+    private float compareFontSize;
+
+    /**
+     * The text color in the base document.
+     */
+    private String baseColor;
+
+    /**
+     * The text color in the compare document.
+     */
+    private String compareColor;
+
+    /**
+     * Get the length of the base text.
+     *
+     * @return The length of the base text, or 0 if the base text is null
+     */
+    public int getBaseTextLength() {
+        return baseText != null ? baseText.length() : 0;
     }
 
     /**
-     * Set the text from the base document.
+     * Get the length of the compare text.
      *
-     * @param baseText The base text
+     * @return The length of the compare text, or 0 if the compare text is null
      */
-    public void setBaseText(String baseText) {
-        this.baseText = baseText;
+    public int getCompareTextLength() {
+        return compareText != null ? compareText.length() : 0;
     }
 
     /**
-     * Get the text from the compare document.
+     * Get the maximum text length.
      *
-     * @return The compare text
+     * @return The maximum of the base text length and the compare text length
      */
-    public String getCompareText() {
-        return compareText;
+    public int getMaxTextLength() {
+        return Math.max(getBaseTextLength(), getCompareTextLength());
     }
 
     /**
-     * Set the text from the compare document.
+     * Get the minimum text length.
      *
-     * @param compareText The compare text
+     * @return The minimum of the base text length and the compare text length
      */
-    public void setCompareText(String compareText) {
-        this.compareText = compareText;
+    public int getMinTextLength() {
+        return Math.min(getBaseTextLength(), getCompareTextLength());
     }
 
     /**
-     * Get the display text.
-     * This is a convenience method that returns the appropriate text
-     * based on the change type.
+     * Get the text length difference.
      *
-     * @return The display text
+     * @return The absolute difference between the base text length and the compare text length
      */
-    public String getText() {
-        // If text is already set, return it
-        if (text != null) {
-            return text;
+    public int getTextLengthDifference() {
+        return Math.abs(getBaseTextLength() - getCompareTextLength());
+    }
+
+    /**
+     * Get the text length difference percentage.
+     *
+     * @return The text length difference as a percentage of the maximum text length
+     */
+    public double getTextLengthDifferencePercentage() {
+        int maxLength = getMaxTextLength();
+        if (maxLength == 0) {
+            return 0.0;
         }
+        return (double) getTextLengthDifference() / maxLength;
+    }
 
-        // Otherwise derive it from base or compare text
-        if ("deleted".equals(getChangeType())) {
-            return baseText;
-        } else if ("added".equals(getChangeType())) {
-            return compareText;
-        } else {
-            // For modified, prefer base text if available
-            return baseText != null ? baseText : compareText;
+    /**
+     * Check if the font has changed.
+     *
+     * @return true if the font has changed, false otherwise
+     */
+    public boolean hasFontChanged() {
+        return baseFont != null && compareFont != null &&
+                !baseFont.equals(compareFont);
+    }
+
+    /**
+     * Check if the font size has changed.
+     *
+     * @return true if the font size has changed, false otherwise
+     */
+    public boolean hasFontSizeChanged() {
+        return baseFontSize != compareFontSize;
+    }
+
+    /**
+     * Check if the color has changed.
+     *
+     * @return true if the color has changed, false otherwise
+     */
+    public boolean hasColorChanged() {
+        return baseColor != null && compareColor != null &&
+                !baseColor.equals(compareColor);
+    }
+
+    /**
+     * Check if the position has changed.
+     *
+     * @return true if the position has changed, false otherwise
+     */
+    public boolean hasPositionChanged() {
+        return baseX != compareX || baseY != compareY;
+    }
+
+    /**
+     * Check if the size has changed.
+     *
+     * @return true if the size has changed, false otherwise
+     */
+    public boolean hasSizeChanged() {
+        return baseWidth != compareWidth || baseHeight != compareHeight;
+    }
+
+    /**
+     * Get the font size difference.
+     *
+     * @return The font size difference
+     */
+    public float getFontSizeDifference() {
+        return compareFontSize - baseFontSize;
+    }
+
+    /**
+     * Get the font size difference percentage.
+     *
+     * @return The font size difference as a percentage
+     */
+    public float getFontSizeDifferencePercentage() {
+        if (baseFontSize == 0) {
+            return 0;
         }
+        return (compareFontSize - baseFontSize) / baseFontSize * 100;
     }
 
     /**
-     * Set the display text.
+     * Get the x-coordinate difference.
      *
-     * @param text The display text
+     * @return The x-coordinate difference
      */
-    public void setText(String text) {
-        this.text = text;
+    public double getXDifference() {
+        return compareX - baseX;
     }
 
     /**
-     * Get the start index.
+     * Get the y-coordinate difference.
      *
-     * @return The start index
+     * @return The y-coordinate difference
      */
-    public int getStartIndex() {
-        return startIndex;
+    public double getYDifference() {
+        return compareY - baseY;
     }
 
     /**
-     * Set the start index.
+     * Get the width difference.
      *
-     * @param startIndex The start index
+     * @return The width difference
      */
-    public void setStartIndex(int startIndex) {
-        this.startIndex = startIndex;
+    public double getWidthDifference() {
+        return compareWidth - baseWidth;
     }
 
     /**
-     * Get the end index.
+     * Get the height difference.
      *
-     * @return The end index
+     * @return The height difference
      */
-    public int getEndIndex() {
-        return endIndex;
-    }
-
-    /**
-     * Set the end index.
-     *
-     * @param endIndex The end index
-     */
-    public void setEndIndex(int endIndex) {
-        this.endIndex = endIndex;
-    }
-
-    /**
-     * Get the length.
-     *
-     * @return The length
-     */
-    public int getLength() {
-        return length;
-    }
-
-    /**
-     * Set the length.
-     *
-     * @param length The length
-     */
-    public void setLength(int length) {
-        this.length = length;
-    }
-
-    /**
-     * Get the context.
-     *
-     * @return The context
-     */
-    public String getContext() {
-        return context;
-    }
-
-    /**
-     * Set the context.
-     *
-     * @param context The context
-     */
-    public void setContext(String context) {
-        this.context = context;
+    public double getHeightDifference() {
+        return compareHeight - baseHeight;
     }
 }

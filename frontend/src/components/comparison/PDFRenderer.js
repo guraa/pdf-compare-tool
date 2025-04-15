@@ -19,7 +19,7 @@ const PDFRenderer = ({
   // Calibration parameters
   xOffsetAdjustment = 0,
   yOffsetAdjustment = 0,
-  scaleAdjustment = 1,
+  scaleAdjustment = 1.0,
   flipY = true
 }) => {
   // State
@@ -33,6 +33,7 @@ const PDFRenderer = ({
   const [scaleFactor, setScaleFactor] = useState(1);
   const [containerOffset, setContainerOffset] = useState({ x: 0, y: 0 });
   const [adjustedCoordinates, setAdjustedCoordinates] = useState([]);
+  const [debugMode, setDebugMode] = useState(true); // Set to true to show coordinate values
 
   // Refs
   const imageRef = useRef(null);
@@ -82,6 +83,7 @@ const PDFRenderer = ({
       if (pdfWidth && pdfHeight) {
         // Calculate the scale factor between the rendered image and actual PDF
         const calculatedScaleFactor = (imageNaturalWidth / pdfWidth) * scaleAdjustment;
+        console.log(`PDFRenderer: PDF dimensions: ${pdfWidth}x${pdfHeight}, Scale factor: ${calculatedScaleFactor}`);
         setScaleFactor(calculatedScaleFactor);
         
         // Measure the container to get offsets
@@ -93,6 +95,7 @@ const PDFRenderer = ({
           const offsetX = imageRect.left - containerRect.left + xOffsetAdjustment;
           const offsetY = imageRect.top - containerRect.top + yOffsetAdjustment;
           
+          console.log(`PDFRenderer: Container offsets: (${offsetX}, ${offsetY})`);
           setContainerOffset({ x: offsetX, y: offsetY });
         }
       } else {
@@ -104,88 +107,96 @@ const PDFRenderer = ({
 
   // Pre-calculate and store adjusted coordinates when scale factor changes
   useEffect(() => {
-    if (!differences || !scaleFactor) return;
+    if (!differences || !scaleFactor || !canvasRef.current) return;
+    
+    // Log original differences for debugging
+    if (differences.length > 0) {
+      console.log(`Processing ${differences.length} differences for rendering`);
+      console.log('Sample original difference:', differences[0]);
+    }
+    
+    const canvas = canvasRef.current;
+    const canvasHeight = canvas.height;
     
     // Transform all difference coordinates
-    const transformed = differences
-      .map(diff => {
-        // Get coordinates based on the available format
-        let x, y, width, height, id, type, changeType, text;
-        
-        if (diff.x !== undefined && diff.y !== undefined) {
-          x = diff.x;
-          y = diff.y;
-          width = diff.width || 10;
-          height = diff.height || 10;
-        } else if (diff.position && diff.bounds) {
-          x = diff.position.x;
-          y = diff.position.y;
-          width = diff.bounds.width || 10;
-          height = diff.bounds.height || 10;
-        } else {
-          return null; // Skip if missing coordinate data
-        }
-        
-        // Keep other important properties
-        id = diff.id;
-        type = diff.type || 'text';
-        changeType = diff.changeType;
-        text = diff.text || diff.baseText || diff.compareText;
-        
-        // Apply scaling and adjustments
-        const displayX = x * scaleFactor * zoom + containerOffset.x;
-        
-        // Apply Y-flip if enabled
-        let displayY;
-        if (flipY && canvasRef.current) {
-          // Flip Y-coordinate (bottom-left to top-left)
-          displayY = canvasRef.current.height - 
-                    (y * scaleFactor * zoom) - 
-                    (height * scaleFactor * zoom) + 
-                    containerOffset.y;
-        } else {
-          // Regular Y-coordinate (already in top-left origin)
-          displayY = y * scaleFactor * zoom + containerOffset.y;
-        }
-        
-        const displayWidth = width * scaleFactor * zoom;
-        const displayHeight = height * scaleFactor * zoom;
-        
-        // Apply type-specific adjustments
-        let adjustedX = displayX;
-        let adjustedY = displayY;
-        let adjustedWidth = displayWidth;
-        let adjustedHeight = displayHeight;
-        
-        // Text elements might need special handling
-        if (type === 'text') {
-          // Ensure text highlights have minimum height
-          adjustedHeight = Math.max(displayHeight, 14 * zoom);
-          
-          // Adjust vertical position to better match text baseline
-          adjustedY = displayY - 2 * zoom;
-        }
-        
-        return {
-          id,
-          type,
-          changeType,
-          text,
-          x: adjustedX,
-          y: adjustedY,
-          width: adjustedWidth,
-          height: adjustedHeight,
-          originalX: x,
-          originalY: y,
-          originalWidth: width,
-          originalHeight: height,
-          originalDiff: diff // Keep reference to original difference
-        };
-      })
-      .filter(Boolean);
+    const transformed = differences.map(diff => {
+      // Skip if missing key properties
+      if (!diff.id) return null;
+      
+      // Get coordinates based on the available format
+      let x, y, width, height, id, type, changeType, text;
+      let originalX, originalY, originalWidth, originalHeight;
+      
+      if (diff.x !== undefined && diff.y !== undefined) {
+        // Format with direct x,y coordinates
+        originalX = diff.x;
+        originalY = diff.y;
+        originalWidth = diff.width || 10;
+        originalHeight = diff.height || 10;
+      } else if (diff.position && diff.bounds) {
+        // Format with position and bounds objects
+        originalX = diff.position.x;
+        originalY = diff.position.y;
+        originalWidth = diff.bounds.width || 10;
+        originalHeight = diff.bounds.height || 10;
+      } else {
+        return null; // Skip if missing coordinate data
+      }
+      
+      // Keep other important properties
+      id = diff.id;
+      type = diff.type || 'text';
+      changeType = diff.changeType;
+      text = diff.text || diff.baseText || diff.compareText;
+      
+      // FIXED COORDINATE TRANSFORMATION:
+      
+      // 1. Apply scaling to get pixel dimensions
+      const scaledX = originalX * scaleFactor * zoom;
+      const scaledY = originalY * scaleFactor * zoom;
+      const scaledWidth = originalWidth * scaleFactor * zoom;
+      const scaledHeight = originalHeight * scaleFactor * zoom;
+      
+      // 2. Apply container offset to position correctly within the view
+      let displayX = scaledX + containerOffset.x;
+      
+      // 3. Handle Y coordinate flip properly
+      // In PDF coordinates, Y=0 is at the bottom. In canvas, Y=0 is at the top.
+      let displayY;
+      if (flipY) {
+        // This is the critical fix - properly flip Y coordinate
+        displayY = canvasHeight - scaledY - scaledHeight + containerOffset.y;
+      } else {
+        displayY = scaledY + containerOffset.y;
+      }
+      
+      // 4. Create the transformed coordinates object with both original and display values
+      return {
+        id,
+        type,
+        changeType,
+        text,
+        // Display coordinates (for rendering)
+        x: displayX,
+        y: displayY,
+        width: scaledWidth,
+        height: scaledHeight,
+        // Original coordinates (for reference/debugging)
+        originalX,
+        originalY,
+        originalWidth,
+        originalHeight,
+        // Original difference object
+        originalDiff: diff
+      };
+    }).filter(Boolean); // Remove any null items
+    
+    if (transformed.length > 0) {
+      console.log('Transformed coordinates:', transformed[0]);
+    }
     
     setAdjustedCoordinates(transformed);
-  }, [differences, scaleFactor, zoom, containerOffset, flipY]);
+  }, [differences, scaleFactor, zoom, containerOffset, flipY, dimensions]);
 
   // Draw highlights on canvas
   useEffect(() => {
@@ -209,8 +220,8 @@ const PDFRenderer = ({
         return;
       }
       
-      // Get the pre-calculated adjusted coordinates
-      const { x, y, width, height, type } = diff;
+      // Get the transformed coordinates
+      const { x, y, width, height, type, originalX, originalY, originalWidth, originalHeight } = diff;
       
       // Generate highlight color based on difference type
       let fillColor;
@@ -269,10 +280,38 @@ const PDFRenderer = ({
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+        
+        // Add coordinate values in debug mode
+        if (debugMode) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.font = '10px monospace';
+          
+          // Format the coordinate values
+          const coordText = `PDF: (${Math.round(originalX)},${Math.round(originalY)}) ${Math.round(originalWidth)}x${Math.round(originalHeight)}`;
+          const displayText = `Canvas: (${Math.round(x)},${Math.round(y)}) ${Math.round(width)}x${Math.round(height)}`;
+          
+          // Position the coordinate text
+          ctx.fillText(coordText, x + 5, y + height + 12);
+          ctx.fillText(displayText, x + 5, y + height + 24);
+        }
       } else {
         // For other differences, use standard rectangle
         ctx.fillRect(x, y, width, height);
         ctx.strokeRect(x, y, width, height);
+        
+        // Add coordinate values in debug mode
+        if (debugMode && width > 50 && height > 30) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.font = '10px monospace';
+          
+          // Format the coordinate values
+          const coordText = `PDF: (${Math.round(originalX)},${Math.round(originalY)}) ${Math.round(originalWidth)}x${Math.round(originalHeight)}`;
+          const displayText = `Canvas: (${Math.round(x)},${Math.round(y)}) ${Math.round(width)}x${Math.round(height)}`;
+          
+          // Position the coordinate text
+          ctx.fillText(coordText, x + 5, y + height - 22);
+          ctx.fillText(displayText, x + 5, y + height - 10);
+        }
       }
       
       // If this is the selected difference, add a more visible indicator
@@ -280,17 +319,9 @@ const PDFRenderer = ({
         ctx.strokeStyle = 'rgba(255, 255, 0, 0.9)';
         ctx.lineWidth = 3;
         ctx.strokeRect(x - 3, y - 3, width + 6, height + 6);
-        
-        // Add a label for the selected difference if it has text
-        if (diff.text && width > 50) {
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-          ctx.font = `${Math.max(10, Math.min(14, width / 10))}px Arial`;
-          const textToShow = diff.text.substring(0, 20) + (diff.text.length > 20 ? '...' : '');
-          ctx.fillText(textToShow, x + 5, y - 5);
-        }
       }
     });
-  }, [adjustedCoordinates, highlightMode, dimensions, selectedDifference, imageLoaded]);
+  }, [adjustedCoordinates, highlightMode, dimensions, selectedDifference, imageLoaded, debugMode]);
 
   // Handle image load
   const handleImageLoad = (e) => {
@@ -302,6 +333,8 @@ const PDFRenderer = ({
     
     const scaledWidth = naturalWidth * zoom;
     const scaledHeight = naturalHeight * zoom;
+    
+    console.log(`Image loaded with dimensions: ${naturalWidth}x${naturalHeight}`);
     
     setDimensions({
       width: scaledWidth,
@@ -392,6 +425,11 @@ const PDFRenderer = ({
     }
   };
 
+  // Toggle debug mode
+  const toggleDebugMode = () => {
+    setDebugMode(!debugMode);
+  };
+
   // Update dimensions when zoom changes
   useEffect(() => {
     if (imageLoaded && imageRef.current) {
@@ -422,6 +460,52 @@ const PDFRenderer = ({
 
   return (
     <div className="pdf-renderer" ref={containerRef}>
+      {/* Debug mode toggle */}
+      <button 
+        className="debug-toggle"
+        onClick={toggleDebugMode}
+        style={{
+          position: 'absolute',
+          top: '5px',
+          right: '5px',
+          zIndex: 20,
+          background: debugMode ? 'rgba(76, 175, 80, 0.7)' : 'rgba(0, 0, 0, 0.5)',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          padding: '4px 8px',
+          fontSize: '12px',
+          cursor: 'pointer'
+        }}
+      >
+        {debugMode ? 'Debug: ON' : 'Debug: OFF'}
+      </button>
+      
+      {/* Debug info */}
+      {debugMode && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '30px',
+            right: '5px',
+            background: 'rgba(0,0,0,0.7)',
+            color: 'white',
+            padding: '8px',
+            borderRadius: '4px',
+            fontSize: '10px',
+            maxWidth: '200px',
+            zIndex: 20
+          }}
+        >
+          <div>Page: {page}</div>
+          <div>Scale: {scaleFactor.toFixed(3)}</div>
+          <div>Zoom: {zoom.toFixed(2)}</div>
+          <div>Offset: ({Math.round(containerOffset.x)}, {Math.round(containerOffset.y)})</div>
+          <div>FlipY: {flipY ? 'Yes' : 'No'}</div>
+          <div>Differences: {adjustedCoordinates.length}</div>
+        </div>
+      )}
+      
       {/* Loading indicator */}
       {(isLoading || loading) && (
         <div className="renderer-loading">

@@ -1,9 +1,9 @@
-package guraa.pdfcompare.model.difference;
+package guraa.pdfcompare.comparison;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.experimental.SuperBuilder;
 
 /**
  * Represents a difference between images in two PDF documents.
@@ -11,10 +11,35 @@ import lombok.experimental.SuperBuilder;
  * how they differ between the documents.
  */
 @Data
-@SuperBuilder
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ImageDifference extends Difference {
+public class ImageDifference {
+
+    /**
+     * Unique identifier for this difference.
+     */
+    private String id;
+
+    /**
+     * The type of difference (image).
+     */
+    private String type;
+
+    /**
+     * The change type (added, deleted, modified).
+     */
+    private String changeType;
+
+    /**
+     * The severity of the difference (major, minor, cosmetic).
+     */
+    private String severity;
+
+    /**
+     * A description of the difference.
+     */
+    private String description;
 
     /**
      * The x-coordinate of the image.
@@ -82,9 +107,73 @@ public class ImageDifference extends Difference {
     private double similarityScore;
 
     /**
+     * The page number in the base document (1-based).
+     */
+    private int basePageNumber;
+
+    /**
+     * The page number in the compare document (1-based).
+     */
+    private int comparePageNumber;
+
+    /**
      * The path to the difference image.
      */
     private String differenceImagePath;
+
+    /**
+     * Check if this difference is an addition.
+     *
+     * @return true if this difference is an addition, false otherwise
+     */
+    public boolean isAddition() {
+        return "added".equals(changeType);
+    }
+
+    /**
+     * Check if this difference is a deletion.
+     *
+     * @return true if this difference is a deletion, false otherwise
+     */
+    public boolean isDeletion() {
+        return "deleted".equals(changeType);
+    }
+
+    /**
+     * Check if this difference is a modification.
+     *
+     * @return true if this difference is a modification, false otherwise
+     */
+    public boolean isModification() {
+        return "modified".equals(changeType);
+    }
+
+    /**
+     * Check if this difference is a major difference.
+     *
+     * @return true if this difference is a major difference, false otherwise
+     */
+    public boolean isMajor() {
+        return "major".equals(severity);
+    }
+
+    /**
+     * Check if this difference is a minor difference.
+     *
+     * @return true if this difference is a minor difference, false otherwise
+     */
+    public boolean isMinor() {
+        return "minor".equals(severity);
+    }
+
+    /**
+     * Check if this difference is a cosmetic difference.
+     *
+     * @return true if this difference is a cosmetic difference, false otherwise
+     */
+    public boolean isCosmetic() {
+        return "cosmetic".equals(severity);
+    }
 
     /**
      * Get the area of the image.

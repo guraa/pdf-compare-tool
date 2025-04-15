@@ -1,19 +1,20 @@
-package guraa.pdfcompare.model.difference;
+package guraa.pdfcompare.service;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.experimental.SuperBuilder;
 
 /**
- * Base class for all types of differences between PDF documents.
- * This class provides common properties and methods for all difference types.
+ * Represents a difference between two pages.
+ * This class stores summary information about a difference,
+ * such as its type, severity, and description.
  */
 @Data
-@SuperBuilder
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public abstract class Difference {
+public class PageDifference {
 
     /**
      * Unique identifier for this difference.
@@ -24,11 +25,6 @@ public abstract class Difference {
      * The type of difference (text, image, font, style, metadata, etc.).
      */
     private String type;
-
-    /**
-     * The change type (added, deleted, modified).
-     */
-    private String changeType;
 
     /**
      * The severity of the difference (major, minor, cosmetic).
@@ -51,31 +47,24 @@ public abstract class Difference {
     private int comparePageNumber;
 
     /**
-     * Check if this difference is an addition.
-     *
-     * @return true if this difference is an addition, false otherwise
+     * The x-coordinate of the difference.
      */
-    public boolean isAddition() {
-        return "added".equals(changeType);
-    }
+    private double x;
 
     /**
-     * Check if this difference is a deletion.
-     *
-     * @return true if this difference is a deletion, false otherwise
+     * The y-coordinate of the difference.
      */
-    public boolean isDeletion() {
-        return "deleted".equals(changeType);
-    }
+    private double y;
 
     /**
-     * Check if this difference is a modification.
-     *
-     * @return true if this difference is a modification, false otherwise
+     * The width of the difference.
      */
-    public boolean isModification() {
-        return "modified".equals(changeType);
-    }
+    private double width;
+
+    /**
+     * The height of the difference.
+     */
+    private double height;
 
     /**
      * Check if this difference is a major difference.

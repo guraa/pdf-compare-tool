@@ -1,10 +1,6 @@
 package guraa.pdfcompare.controller;
 
 import guraa.pdfcompare.model.PdfDocument;
-import guraa.pdfcompare.service.PdfService;
-import guraa.pdfcompare.service.PdfRenderingService;
-import guraa.pdfcompare.service.ThumbnailService;
-import guraa.pdfcompare.util.PdfPasswordHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.http.fileupload.FileItemIterator;
@@ -37,6 +33,7 @@ public class PdfController {
     private final PdfService pdfService;
     private final ThumbnailService thumbnailService;
     private final PdfPasswordHandler pdfPasswordHandler;
+    private final PdfRenderingService pdfRenderingService; // Added dependency
 
     /**
      * Upload a PDF file.
@@ -218,7 +215,7 @@ public class PdfController {
             }
 
             // Get the rendered page image using the enhanced rendering service
-            FileSystemResource pageImage = PdfRenderingService.getRenderedPage(document, pageNumber);
+            FileSystemResource pageImage = pdfRenderingService.getRenderedPage(document, pageNumber); // Use instance
 
             return ResponseEntity.ok()
                     .contentType(MediaType.IMAGE_PNG)
@@ -392,7 +389,7 @@ public class PdfController {
             }
 
             // Get the thumbnail using the enhanced rendering service
-            FileSystemResource thumbnailImage = PdfRenderingService.getThumbnail(document, pageNumber);
+            FileSystemResource thumbnailImage = pdfRenderingService.getThumbnail(document, pageNumber); // Use instance
 
             return ResponseEntity.ok()
                     .contentType(MediaType.IMAGE_PNG)

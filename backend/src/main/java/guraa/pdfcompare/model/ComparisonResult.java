@@ -1,80 +1,143 @@
 package guraa.pdfcompare.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import guraa.pdfcompare.model.difference.Difference;
+import guraa.pdfcompare.service.PageLevelComparisonSummary;
+import guraa.pdfcompare.service.PagePair;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Result of a PDF comparison.
+ * This class contains all the information about the comparison,
+ * including the matched pages and the differences found.
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ComparisonResult {
 
+    /**
+     * Unique identifier for this comparison result.
+     */
     private String id;
-    private String mode; // "standard" or "smart"
 
-    private String baseFileId;
-    private String baseFileName;
-    private int basePageCount;
+    /**
+     * The ID of the base document.
+     */
+    private String baseDocumentId;
 
-    private String compareFileId;
-    private String compareFileName;
-    private int comparePageCount;
+    /**
+     * The ID of the compare document.
+     */
+    private String compareDocumentId;
 
-    private boolean pageCountDifferent;
-    private int totalDifferences;
-    private int totalTextDifferences;
-    private int totalImageDifferences;
-    private int totalFontDifferences;
-    private int totalStyleDifferences;
+    /**
+     * The list of page pairs.
+     */
+    private List<PagePair> pagePairs;
 
-    private Map<String, Object> metadataDifferences = new HashMap<>();
+    /**
+     * The comparison summary.
+     */
+    private PageLevelComparisonSummary summary;
 
-    @Builder.Default
-    private List<PageDifference> pageDifferences = new ArrayList<>();
+    /**
+     * The differences by page.
+     */
+    private Map<String, List<Difference>> differencesByPage;
 
-    @Builder.Default
-    private List<DocumentPair> documentPairs = new ArrayList<>();
-
-    private LocalDateTime createdAt;
-    private LocalDateTime completedAt;
-
-    @JsonIgnore
-    private String resultFilePath;
-
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class PageDifference {
-        private int pageNumber;
-        private boolean onlyInBase;
-        private boolean onlyInCompare;
-        private boolean dimensionsDifferent;
-        private TextDifferences textDifferences;
-        private List<Difference> textElementDifferences;
-        private List<Difference> imageDifferences;
-        private List<Difference> fontDifferences;
+    /**
+     * Get the total number of differences.
+     *
+     * @return The total number of differences
+     */
+    public int getTotalDifferences() {
+        return differencesByPage.values().stream()
+                .mapToInt(List::size)
+                .sum();
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class TextDifferences {
-        private String baseText;
-        private String compareText;
-        private List<Difference> differences;
+    /**
+     * Get the number of differences by type.
+     *
+     * @param type The type of difference
+     * @return The count of differences of the specified type
+     */
+    public int getDifferenceCountByType(String type) {
+        return (int) differencesByPage.values().stream()
+                .flatMap(List::stream)
+                .filter(diff -> type.equals(diff.getType()))
+                .count();
+    }
+
+    /**
+     * Get the number of differences by severity.
+     *
+     * @param severity The severity level
+     * @return The count of differences with the specified severity
+     */
+    public int getDifferenceCountBySeverity(String severity) {
+        return (int) differencesByPage.values().stream()
+                .flatMap(List::stream)
+                .filter(diff -> severity.equals(diff.getSeverity()))
+                .count();
+    }
+
+    /**
+     * Get the number of differences by change type.
+     *
+     * @param changeType The change type
+     * @return The count of differences with the specified change type
+     */
+    public int getDifferenceCountByChangeType(String changeType) {
+        return (int) differencesByPage.values().stream()
+                .flatMap(List::stream)
+                .filter(diff -> changeType.equals(diff.getChangeType()))
+                .count();
+    }
+
+    /**
+     * Get the number of differences by page.
+     *
+     * @param pageId The page ID
+     * @return The count of differences on the specified page
+     */
+    public int getDifferenceCountByPage(String pageId) {
+        List<Difference> differences = differencesByPage.get(pageId);
+        return differences != null ? differences.size() : 0;
+    }
+
+    /**
+     * Get the overall similarity score.
+     *
+     * @return The overall similarity score
+     */
+    public double getOverallSimilarityScore() {
+        return summary != null ? summary.getOverallSimilarityScore() : 0.0;
+    }
+
+    /**
+     * Check if the documents are identical.
+     *
+     * @return true if the documents are identical, false otherwise
+     */
+    public boolean areDocumentsIdentical() {
+        return getTotalDifferences() == 0;
+    }
+
+    /**
+     * Check if the documents are similar.
+     *
+     * @param threshold The similarity threshold
+     * @return true if the documents are similar, false otherwise
+     */
+    public boolean areDocumentsSimilar(double threshold) {
+        return getOverallSimilarityScore() >= threshold;
     }
 }

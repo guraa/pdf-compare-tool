@@ -3,7 +3,6 @@ package guraa.pdfcompare.controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import guraa.pdfcompare.service.ComparisonService;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
