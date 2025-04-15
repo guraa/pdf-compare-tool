@@ -19,7 +19,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
+import java.util.Calendar;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -235,9 +237,22 @@ public class PdfService {
      * @return The document, if found
      */
     private Optional<PdfDocument> findDocumentByContentHash(String contentHash) {
-        // In a real implementation, this would query the database
-        // For now, we'll just return an empty result
-        return Optional.empty();
+        // Query the repository for documents with the given content hash
+        return pdfRepository.findByContentHash(contentHash).stream().findFirst();
+    }
+
+    /**
+     * Format a Calendar object as a string.
+     *
+     * @param calendar The Calendar object to format
+     * @return The formatted date string
+     */
+    private String formatCalendarDate(Calendar calendar) {
+        if (calendar == null) {
+            return null;
+        }
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        return sdf.format(calendar.getTime());
     }
 
     /**
@@ -259,10 +274,14 @@ public class PdfService {
                 document.setKeywords(pdDocument.getDocumentInformation().getKeywords());
                 document.setCreator(pdDocument.getDocumentInformation().getCreator());
                 document.setProducer(pdDocument.getDocumentInformation().getProducer());
-                document.setCreationDate(pdDocument.getDocumentInformation().getCreationDate() != null ?
-                        pdDocument.getDocumentInformation().getCreationDate().toString() : null);
-                document.setModificationDate(pdDocument.getDocumentInformation().getModificationDate() != null ?
-                        pdDocument.getDocumentInformation().getModificationDate().toString() : null);
+
+                // Format dates properly to avoid database column length issues
+                document.setCreationDate(
+                        formatCalendarDate(pdDocument.getDocumentInformation().getCreationDate())
+                );
+                document.setModificationDate(
+                        formatCalendarDate(pdDocument.getDocumentInformation().getModificationDate())
+                );
             }
 
             document.setEncrypted(pdDocument.isEncrypted());
@@ -279,8 +298,13 @@ public class PdfService {
      * @param document The document to save
      */
     private void saveDocument(PdfDocument document) {
-        // In a real implementation, this would save the document to a database
-        // For now, we'll just log that we're saving the document
-        log.info("Saving document: {}", document.getFileId());
+        try {
+            log.info("Saving document: {}", document.getFileId());
+            // Actually save the document to the repository
+            pdfRepository.save(document);
+        } catch (Exception e) {
+            log.error("Error saving document to repository: {}", e.getMessage(), e);
+            throw e; // Re-throw to allow calling code to handle the error
+        }
     }
 }

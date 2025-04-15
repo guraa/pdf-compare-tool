@@ -5,14 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.Id;
-import javax.persistence.Lob;
-import javax.persistence.Table;
-import javax.persistence.Transient;
+import javax.persistence.*;
 import java.time.LocalDateTime;
 
 /**
@@ -87,6 +80,78 @@ public class Comparison {
         COMPLETED,
         FAILED,
         CANCELLED
+    }
+
+    /**
+     * Get the ID of this comparison.
+     *
+     * @return The ID
+     */
+    public String getId() {
+        return id;
+    }
+
+    /**
+     * Set the ID of this comparison.
+     *
+     * @param id The ID
+     */
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    /**
+     * Get the ID of the base document.
+     *
+     * @return The base document ID
+     */
+    public String getBaseDocumentId() {
+        return baseDocumentId;
+    }
+
+    /**
+     * Set the ID of the base document.
+     *
+     * @param baseDocumentId The base document ID
+     */
+    public void setBaseDocumentId(String baseDocumentId) {
+        this.baseDocumentId = baseDocumentId;
+    }
+
+    /**
+     * Get the ID of the compare document.
+     *
+     * @return The compare document ID
+     */
+    public String getCompareDocumentId() {
+        return compareDocumentId;
+    }
+
+    /**
+     * Set the ID of the compare document.
+     *
+     * @param compareDocumentId The compare document ID
+     */
+    public void setCompareDocumentId(String compareDocumentId) {
+        this.compareDocumentId = compareDocumentId;
+    }
+
+    /**
+     * Get the result of the comparison.
+     *
+     * @return The comparison result
+     */
+    public ComparisonResult getResult() {
+        return result;
+    }
+
+    /**
+     * Set the result of the comparison.
+     *
+     * @param result The comparison result
+     */
+    public void setResult(ComparisonResult result) {
+        this.result = result;
     }
 
     /**

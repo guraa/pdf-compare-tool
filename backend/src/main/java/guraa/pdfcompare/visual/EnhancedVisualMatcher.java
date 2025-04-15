@@ -13,15 +13,12 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.PriorityQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.stream.Collectors;
 
 /**
  * Enhanced visual matcher for PDF pages.
@@ -48,7 +45,7 @@ public class EnhancedVisualMatcher implements VisualMatcher {
 
     @Override
     public List<PagePair> matchPages(PdfDocument baseDocument, PdfDocument compareDocument) throws IOException {
-        log.info("Starting visual matching between documents: {} and {}", 
+        log.info("Starting visual matching between documents: {} and {}",
                 baseDocument.getFileId(), compareDocument.getFileId());
 
         // Pre-render all pages
@@ -60,7 +57,7 @@ public class EnhancedVisualMatcher implements VisualMatcher {
         // Match pages using the Hungarian algorithm
         List<PagePair> pagePairs = matchPagesUsingHungarian(baseDocument, compareDocument, similarityScores);
 
-        log.info("Completed visual matching between documents: {} and {}", 
+        log.info("Completed visual matching between documents: {} and {}",
                 baseDocument.getFileId(), compareDocument.getFileId());
 
         return pagePairs;
@@ -170,22 +167,22 @@ public class EnhancedVisualMatcher implements VisualMatcher {
     private List<PagePair> matchPagesUsingHungarian(
             PdfDocument baseDocument, PdfDocument compareDocument,
             Map<String, Double> similarityScores) {
-        
+
         int basePageCount = baseDocument.getPageCount();
         int comparePageCount = compareDocument.getPageCount();
-        
+
         // Create a cost matrix for the Hungarian algorithm
         double[][] costMatrix = new double[basePageCount][comparePageCount];
-        
+
         // Fill the cost matrix with the negative similarity scores
         // (Hungarian algorithm minimizes cost, but we want to maximize similarity)
         for (int i = 0; i < basePageCount; i++) {
             for (int j = 0; j < comparePageCount; j++) {
                 String key = baseDocument.getFileId() + "_" + (i + 1) + "_" +
                         compareDocument.getFileId() + "_" + (j + 1);
-                
+
                 double similarity = similarityScores.getOrDefault(key, 0.0);
-                
+
                 // If the similarity is below the threshold, set a high cost
                 if (similarity < visualSimilarityThreshold) {
                     costMatrix[i][j] = 1.0;
@@ -194,56 +191,56 @@ public class EnhancedVisualMatcher implements VisualMatcher {
                 }
             }
         }
-        
+
         // Run the Hungarian algorithm
         HungarianAlgorithm hungarian = new HungarianAlgorithm(costMatrix);
         int[] assignments = hungarian.execute();
-        
+
         // Create page pairs based on the assignments
         List<PagePair> pagePairs = new ArrayList<>();
-        
+
         for (int i = 0; i < basePageCount; i++) {
             int j = assignments[i];
-            
+
             // Create a page pair
             PagePair.PagePairBuilder builder = PagePair.builder()
                     .baseDocumentId(baseDocument.getFileId())
                     .compareDocumentId(compareDocument.getFileId())
                     .basePageNumber(i + 1);
-            
+
             // If the page is matched
             if (j != -1 && j < comparePageCount) {
                 String key = baseDocument.getFileId() + "_" + (i + 1) + "_" +
                         compareDocument.getFileId() + "_" + (j + 1);
-                
+
                 double similarity = similarityScores.getOrDefault(key, 0.0);
-                
+
                 // If the similarity is above the threshold, mark as matched
                 if (similarity >= visualSimilarityThreshold) {
                     builder.comparePageNumber(j + 1)
-                           .matched(true)
-                           .similarityScore(similarity);
+                            .matched(true)
+                            .similarityScore(similarity);
                 } else {
                     builder.matched(false);
                 }
             } else {
                 builder.matched(false);
             }
-            
+
             pagePairs.add(builder.build());
         }
-        
+
         // Add unmatched pages from the compare document
         for (int j = 0; j < comparePageCount; j++) {
             boolean matched = false;
-            
+
             for (int i = 0; i < basePageCount; i++) {
                 if (assignments[i] == j) {
                     matched = true;
                     break;
                 }
             }
-            
+
             if (!matched) {
                 pagePairs.add(PagePair.builder()
                         .baseDocumentId(baseDocument.getFileId())
@@ -253,7 +250,7 @@ public class EnhancedVisualMatcher implements VisualMatcher {
                         .build());
             }
         }
-        
+
         return pagePairs;
     }
 

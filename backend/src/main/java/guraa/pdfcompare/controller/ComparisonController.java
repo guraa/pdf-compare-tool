@@ -205,16 +205,16 @@ public class ComparisonController {
         try {
             // Log the request for debugging
             log.info("Filtering by types: {}", types);
-            
+
             // Create a map for logging that handles null values
             Map<String, Object> logFilters = new HashMap<>();
             logFilters.put("types", types);
             logFilters.put("severity", severity);
             logFilters.put("search", search);
-            
-            log.info("Received request for page {} of document pair {} in comparison {} with filters: {}", 
-                pageNumber, pairIndex, comparisonId, logFilters);
-            
+
+            log.info("Received request for page {} of document pair {} in comparison {} with filters: {}",
+                    pageNumber, pairIndex, comparisonId, logFilters);
+
             // Create filter map from query parameters
             Map<String, Object> filters = new HashMap<>();
             if (types != null && !types.isEmpty()) {
@@ -235,12 +235,12 @@ public class ComparisonController {
                 response.put("error", "Document pair not found");
                 return ResponseEntity.status(404).body(response);
             }
-            
+
             DocumentPair pair = documentPairs.get(pairIndex);
             int basePageCount = pair.getBaseEndPage() - pair.getBaseStartPage() + 1;
             int comparePageCount = pair.getCompareEndPage() - pair.getCompareStartPage() + 1;
             int maxPageCount = Math.max(basePageCount, comparePageCount);
-            
+
             if (pageNumber > maxPageCount) {
                 log.warn("Page {} not found in document pair {} of comparison {}", pageNumber, pairIndex, comparisonId);
                 Map<String, Object> response = new HashMap<>();
@@ -261,8 +261,8 @@ public class ComparisonController {
                     return ResponseEntity.accepted().body(response);
                 }
 
-                log.warn("Page details not found for page {} of document pair {} in comparison {}", 
-                    pageNumber, pairIndex, comparisonId);
+                log.warn("Page details not found for page {} of document pair {} in comparison {}",
+                        pageNumber, pairIndex, comparisonId);
                 Map<String, Object> response = new HashMap<>();
                 response.put("error", "Page details not found");
                 return ResponseEntity.status(404).body(response);
@@ -330,8 +330,6 @@ public class ComparisonController {
             return ResponseEntity.internalServerError().body(response);
         }
     }
-
-
 
     /**
      * Request object for report generation.

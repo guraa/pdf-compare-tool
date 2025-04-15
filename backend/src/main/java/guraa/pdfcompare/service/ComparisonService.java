@@ -1,21 +1,16 @@
 package guraa.pdfcompare.service;
 
 import guraa.pdfcompare.PDFComparisonEngine;
-import guraa.pdfcompare.model.Comparison;
-import guraa.pdfcompare.model.ComparisonResult;
-import guraa.pdfcompare.model.PdfDocument;
+import guraa.pdfcompare.model.*;
 import guraa.pdfcompare.repository.ComparisonRepository;
 import guraa.pdfcompare.repository.PdfRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-
 import java.io.IOException;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -50,10 +45,10 @@ public class ComparisonService {
         // Get the documents
         PdfDocument baseDocument = pdfRepository.findById(baseDocumentId)
                 .orElseThrow(() -> new IllegalArgumentException("Base document not found: " + baseDocumentId));
-        
+
         PdfDocument compareDocument = pdfRepository.findById(compareDocumentId)
                 .orElseThrow(() -> new IllegalArgumentException("Compare document not found: " + compareDocumentId));
-        
+
         // Create a new comparison
         Comparison comparison = Comparison.builder()
                 .id(UUID.randomUUID().toString())
@@ -63,10 +58,10 @@ public class ComparisonService {
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
-        
+
         // Save the comparison
         comparison = comparisonRepository.save(comparison);
-        
+
         // Start the comparison in the background
         final String comparisonId = comparison.getId();
         comparisonTasks.computeIfAbsent(comparisonId, key -> {
@@ -75,38 +70,38 @@ public class ComparisonService {
                     // Update the status to "processing"
                     Comparison updatedComparison = comparisonRepository.findById(comparisonId)
                             .orElseThrow(() -> new IllegalArgumentException("Comparison not found: " + comparisonId));
-                    updatedComparison.status = Comparison.ComparisonStatus.PROCESSING;
+                    updatedComparison.setStatus("processing");
                     comparisonRepository.save(updatedComparison);
-                    
+
                     // Perform the comparison
                     ComparisonResult result = comparisonEngine.compareDocuments(baseDocument, compareDocument);
-                    
+
                     // Update the status to "completed"
                     updatedComparison = comparisonRepository.findById(comparisonId)
                             .orElseThrow(() -> new IllegalArgumentException("Comparison not found: " + comparisonId));
-                    updatedComparison.status = Comparison.ComparisonStatus.COMPLETED;
+                    updatedComparison.setStatus("completed");
                     updatedComparison.setResult(result);
                     comparisonRepository.save(updatedComparison);
-                    
+
                     return result;
                 } catch (Exception e) {
                     // Update the status to "failed"
                     try {
                         Comparison updatedComparison = comparisonRepository.findById(comparisonId)
                                 .orElseThrow(() -> new IllegalArgumentException("Comparison not found: " + comparisonId));
-                        updatedComparison.status = Comparison.ComparisonStatus.FAILED;
+                        updatedComparison.setStatus("failed");
                         updatedComparison.setErrorMessage(e.getMessage());
                         comparisonRepository.save(updatedComparison);
                     } catch (Exception ex) {
                         log.error("Error updating comparison status: {}", ex.getMessage(), ex);
                     }
-                    
+
                     log.error("Error comparing documents: {}", e.getMessage(), e);
                     throw new RuntimeException("Error comparing documents", e);
                 }
             }, executorService);
         });
-        
+
         return comparison;
     }
 
@@ -145,11 +140,12 @@ public class ComparisonService {
      * Get the result of a comparison.
      *
      * @param id The comparison ID
-     * @return The comparison result
+     * @return The comparison result, or null if not found
      */
-    public Optional<ComparisonResult> getComparisonResult(String id) {
+    public ComparisonResult getComparisonResult(String id) {
         return comparisonRepository.findById(id)
-                .map(Comparison::getResult);
+                .map(Comparison::getResult)
+                .orElse(null);
     }
 
     /**
@@ -170,22 +166,179 @@ public class ComparisonService {
     public boolean cancelComparison(String id) {
         // Get the comparison task
         CompletableFuture<ComparisonResult> task = comparisonTasks.get(id);
-        
+
         if (task != null && !task.isDone()) {
             // Cancel the task
             boolean cancelled = task.cancel(true);
-            
+
             if (cancelled) {
                 // Update the status to "cancelled"
                 comparisonRepository.findById(id).ifPresent(comparison -> {
-                    comparison.status = Comparison.ComparisonStatus.CANCELLED;
+                    comparison.setStatus("cancelled");
                     comparisonRepository.save(comparison);
                 });
             }
-            
+
             return cancelled;
         }
-        
+
         return false;
+    }
+
+    /**
+     * Check if a comparison is in progress.
+     *
+     * @param id The comparison ID
+     * @return true if the comparison is in progress, false otherwise
+     */
+    public boolean isComparisonInProgress(String id) {
+        return comparisonRepository.findById(id)
+                .map(comparison -> comparison.getStatusAsString().equals("processing"))
+                .orElse(false);
+    }
+
+    /**
+     * Check if a comparison is completed.
+     *
+     * @param id The comparison ID
+     * @return true if the comparison is completed, false otherwise
+     */
+    public boolean isComparisonCompleted(String id) {
+        return comparisonRepository.findById(id)
+                .map(comparison -> comparison.getStatusAsString().equals("completed"))
+                .orElse(false);
+    }
+
+    /**
+     * Get page details for a specific page in a comparison.
+     *
+     * @param comparisonId The comparison ID
+     * @param pageNumber The page number
+     * @param filters Filters to apply to the results
+     * @return The page details, or null if not found
+     */
+    public PageDetails getPageDetails(String comparisonId, int pageNumber, Map<String, Object> filters) {
+        ComparisonResult result = getComparisonResult(comparisonId);
+        if (result == null) {
+            return null;
+        }
+
+        // In a real implementation, this would extract the page details from the result
+        // For now, we'll just create a dummy page details object
+        PageDetails pageDetails = PageDetails.builder()
+                .pageNumber(pageNumber)
+                .pageId(UUID.randomUUID().toString())
+                .pageExistsInBase(true)
+                .pageExistsInCompare(true)
+                .build();
+
+        // Apply filters if any
+        if (filters != null && !filters.isEmpty()) {
+            // Filter the differences based on the provided filters
+            // This is just a placeholder for the actual filtering logic
+        }
+
+        return pageDetails;
+    }
+
+    /**
+     * Get document pairs for a comparison.
+     *
+     * @param comparisonId The comparison ID
+     * @return A list of document pairs, or null if not found
+     */
+    public List<DocumentPair> getDocumentPairs(String comparisonId) {
+        ComparisonResult result = getComparisonResult(comparisonId);
+        if (result == null) {
+            return null;
+        }
+
+        // In a real implementation, this would extract the document pairs from the result
+        // For now, we'll just create a dummy list
+        List<DocumentPair> pairs = new ArrayList<>();
+        DocumentPair pair = DocumentPair.builder()
+                .pairIndex(0)
+                .matched(true)
+                .baseStartPage(1)
+                .baseEndPage(result.getPagePairs().size())
+                .basePageCount(result.getPagePairs().size())
+                .compareStartPage(1)
+                .compareEndPage(result.getPagePairs().size())
+                .comparePageCount(result.getPagePairs().size())
+                .hasBaseDocument(true)
+                .hasCompareDocument(true)
+                .similarityScore(0.85)
+                .build();
+
+        pairs.add(pair);
+        return pairs;
+    }
+
+    /**
+     * Get the comparison result for a specific document pair.
+     *
+     * @param comparisonId The comparison ID
+     * @param pairIndex The pair index
+     * @return The comparison result, or null if not found
+     */
+    public ComparisonResult getDocumentPairResult(String comparisonId, int pairIndex) {
+        ComparisonResult result = getComparisonResult(comparisonId);
+        if (result == null) {
+            return null;
+        }
+
+        List<DocumentPair> pairs = getDocumentPairs(comparisonId);
+        if (pairs == null || pairIndex >= pairs.size()) {
+            return null;
+        }
+
+        // In a real implementation, this would extract the result for the specific pair
+        // For now, we'll just return the overall result
+        return result;
+    }
+
+    /**
+     * Get page details for a specific page in a document pair.
+     *
+     * @param comparisonId The comparison ID
+     * @param pairIndex The pair index
+     * @param pageNumber The page number
+     * @param filters Filters to apply to the results
+     * @return The page details, or null if not found
+     */
+    public PageDetails getDocumentPairPageDetails(String comparisonId, int pairIndex, int pageNumber, Map<String, Object> filters) {
+        ComparisonResult result = getComparisonResult(comparisonId);
+        if (result == null) {
+            return null;
+        }
+
+        List<DocumentPair> pairs = getDocumentPairs(comparisonId);
+        if (pairs == null || pairIndex >= pairs.size()) {
+            return null;
+        }
+
+        DocumentPair pair = pairs.get(pairIndex);
+
+        // Check if the page is within the range for this pair
+        if (pageNumber < 1 || pageNumber > Math.max(pair.getBasePageCount(), pair.getComparePageCount())) {
+            return null;
+        }
+
+        // In a real implementation, this would extract the page details from the result for the specific pair
+        // For now, we'll just create a dummy page details object
+        PageDetails pageDetails = PageDetails.builder()
+                .pageNumber(pageNumber)
+                .pageId(UUID.randomUUID().toString())
+                .pageExistsInBase(pageNumber <= pair.getBasePageCount())
+                .pageExistsInCompare(pageNumber <= pair.getComparePageCount())
+                .build();
+
+        // Apply filters if any
+        if (filters != null && !filters.isEmpty()) {
+            // Filter the differences based on the provided filters
+            // This is just a placeholder for the actual filtering logic
+        }
+
+        return pageDetails;
     }
 }

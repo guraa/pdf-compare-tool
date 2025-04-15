@@ -104,10 +104,17 @@ public class PdfRenderingService {
      *
      * @param document The document
      * @param pageNumber The page number (1-based)
+     * @return The rendered page file
      * @throws IOException If there is an error rendering the page
      */
-    private void renderPage(PdfDocument document, int pageNumber) throws IOException {
+    public File renderPage(PdfDocument document, int pageNumber) throws IOException {
         File renderedPage = new File(document.getRenderedPagePath(pageNumber));
+
+        // Create parent directories if they don't exist
+        Path renderedPageDir = renderedPage.getParentFile().toPath();
+        if (!Files.exists(renderedPageDir)) {
+            Files.createDirectories(renderedPageDir);
+        }
 
         // Open the PDF document
         try (PDDocument pdDocument = PDDocument.load(new File(document.getFilePath()))) {
@@ -119,6 +126,8 @@ public class PdfRenderingService {
             // Save the image
             ImageIO.write(image, renderingFormat, renderedPage);
         }
+
+        return renderedPage;
     }
 
     /**
@@ -187,7 +196,7 @@ public class PdfRenderingService {
      */
     public void preRenderAllPages(PdfDocument document) throws IOException {
         for (int pageNumber = 1; pageNumber <= document.getPageCount(); pageNumber++) {
-            getRenderedPage(document, pageNumber);
+            renderPage(document, pageNumber);
         }
     }
 }
