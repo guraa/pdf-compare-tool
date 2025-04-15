@@ -628,3 +628,911 @@ insert into pdf_documents (author, content_hash, creation_date, creator, encrypt
 2025-04-15 11:41:54 [pool-1-thread-1] INFO  guraa.pdfcompare.PDFComparisonEngine - Starting comparison between documents: c0681500-96a4-446f-b6dc-83b4b856c0a7 and 6ae0240b-81b9-4878-bf6a-4276f6ccee72
 2025-04-15 11:41:54 [pool-1-thread-1] INFO  g.p.core.SmartDocumentMatcher - Starting smart document matching between documents: c0681500-96a4-446f-b6dc-83b4b856c0a7 and 6ae0240b-81b9-4878-bf6a-4276f6ccee72
 2025-04-15 11:41:54 [pool-1-thread-1] INFO  g.p.visual.EnhancedVisualMatcher - Starting visual matching between documents: c0681500-96a4-446f-b6dc-83b4b856c0a7 and 6ae0240b-81b9-4878-bf6a-4276f6ccee72
+2025-04-15 11:47:13 [pool-1-thread-2] ERROR g.p.visual.EnhancedVisualMatcher - Error calculating similarity score: Caught exception during read: 
+javax.imageio.IIOException: Caught exception during read: 
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.read(PNGImageReader.java:1854)
+	at java.desktop/javax.imageio.ImageIO.read(ImageIO.java:1470)
+	at java.desktop/javax.imageio.ImageIO.read(ImageIO.java:1317)
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.lambda$2(EnhancedVisualMatcher.java:135)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.lang.IndexOutOfBoundsException: null
+	at java.base/java.io.RandomAccessFile.readBytes(Native Method)
+	at java.base/java.io.RandomAccessFile.read(RandomAccessFile.java:405)
+	at java.desktop/javax.imageio.stream.FileImageInputStream.read(FileImageInputStream.java:117)
+	at java.desktop/com.sun.imageio.plugins.common.SubImageInputStream.read(SubImageInputStream.java:61)
+	at java.desktop/com.sun.imageio.plugins.common.InputStreamAdapter.read(InputStreamAdapter.java:47)
+	at java.base/java.io.SequenceInputStream.read(SequenceInputStream.java:198)
+	at java.base/java.util.zip.InflaterInputStream.fill(InflaterInputStream.java:242)
+	at java.base/java.util.zip.InflaterInputStream.read(InflaterInputStream.java:158)
+	at java.base/java.io.BufferedInputStream.fill(BufferedInputStream.java:244)
+	at java.base/java.io.BufferedInputStream.read1(BufferedInputStream.java:284)
+	at java.base/java.io.BufferedInputStream.read(BufferedInputStream.java:343)
+	at java.base/java.io.DataInputStream.readFully(DataInputStream.java:201)
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.decodePass(PNGImageReader.java:1245)
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.decodeImage(PNGImageReader.java:1381)
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.readImage(PNGImageReader.java:1521)
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.read(PNGImageReader.java:1847)
+	... 7 common frames omitted
+2025-04-15 11:48:35 [pool-1-thread-3] ERROR g.p.visual.EnhancedVisualMatcher - Error calculating similarity score: Caught exception during read: 
+javax.imageio.IIOException: Caught exception during read: 
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.read(PNGImageReader.java:1854)
+	at java.desktop/javax.imageio.ImageIO.read(ImageIO.java:1470)
+	at java.desktop/javax.imageio.ImageIO.read(ImageIO.java:1317)
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.lambda$2(EnhancedVisualMatcher.java:135)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.lang.IndexOutOfBoundsException: null
+	at java.base/java.io.RandomAccessFile.readBytes(Native Method)
+	at java.base/java.io.RandomAccessFile.read(RandomAccessFile.java:405)
+	at java.desktop/javax.imageio.stream.FileImageInputStream.read(FileImageInputStream.java:117)
+	at java.desktop/com.sun.imageio.plugins.common.SubImageInputStream.read(SubImageInputStream.java:61)
+	at java.desktop/com.sun.imageio.plugins.common.InputStreamAdapter.read(InputStreamAdapter.java:47)
+	at java.base/java.io.SequenceInputStream.read(SequenceInputStream.java:198)
+	at java.base/java.util.zip.InflaterInputStream.fill(InflaterInputStream.java:242)
+	at java.base/java.util.zip.InflaterInputStream.read(InflaterInputStream.java:158)
+	at java.base/java.io.BufferedInputStream.fill(BufferedInputStream.java:244)
+	at java.base/java.io.BufferedInputStream.read1(BufferedInputStream.java:284)
+	at java.base/java.io.BufferedInputStream.read(BufferedInputStream.java:343)
+	at java.base/java.io.DataInputStream.readFully(DataInputStream.java:201)
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.decodePass(PNGImageReader.java:1245)
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.decodeImage(PNGImageReader.java:1381)
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.readImage(PNGImageReader.java:1521)
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.read(PNGImageReader.java:1847)
+	... 7 common frames omitted
+2025-04-15 11:49:48 [pool-1-thread-1] INFO  g.p.visual.EnhancedVisualMatcher - Completed visual matching between documents: c0681500-96a4-446f-b6dc-83b4b856c0a7 and 6ae0240b-81b9-4878-bf6a-4276f6ccee72
+2025-04-15 11:49:48 [pool-1-thread-1] INFO  g.p.core.SmartDocumentMatcher - Completed smart document matching between documents: c0681500-96a4-446f-b6dc-83b4b856c0a7 and 6ae0240b-81b9-4878-bf6a-4276f6ccee72
+2025-04-15 13:04:36 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:04:36 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 13:04:36 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2025-04-15 13:14:40 [main] INFO  g.pdfcompare.PDFCompareApplication - Starting PDFCompareApplication using Java 17.0.10 on GUSTAV with PID 42292 (C:\projects\pdfCompare\backend\target\classes started by GustavTullberg in C:\projects\pdfCompare\backend)
+2025-04-15 13:14:40 [main] DEBUG g.pdfcompare.PDFCompareApplication - Running with Spring Boot v2.7.10, Spring v5.3.26
+2025-04-15 13:14:40 [main] INFO  g.pdfcompare.PDFCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-04-15 13:14:43 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-04-15 13:14:43 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 169 ms. Found 2 JPA repository interfaces.
+2025-04-15 13:14:45 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port(s): 3010 (http)
+2025-04-15 13:14:45 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-04-15 13:14:45 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.73]
+2025-04-15 13:14:45 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-04-15 13:14:45 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 4974 ms
+2025-04-15 13:14:46 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2025-04-15 13:14:46 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2025-04-15 13:14:46 [main] INFO  o.s.b.a.h.H2ConsoleAutoConfiguration - H2 console available at '/h2-console'. Database available at 'jdbc:h2:file:./pdfcompare-db'
+2025-04-15 13:14:47 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-04-15 13:14:47 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 5.6.15.Final
+2025-04-15 13:14:47 [main] INFO  o.h.annotations.common.Version - HCANN000001: Hibernate Commons Annotations {5.1.2.Final}
+2025-04-15 13:14:47 [main] INFO  org.hibernate.dialect.Dialect - HHH000400: Using dialect: org.hibernate.dialect.H2Dialect
+2025-04-15 13:14:53 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000490: Using JtaPlatform implementation: [org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform]
+2025-04-15 13:14:53 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:14:53 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'PDFComparisonEngine' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\PDFComparisonEngine.class]: Unsatisfied dependency expressed through constructor parameter 0; nested exception is org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'smartDocumentMatcher' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\core\SmartDocumentMatcher.class]: Unsatisfied dependency expressed through constructor parameter 0; nested exception is org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'enhancedVisualMatcher' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\visual\EnhancedVisualMatcher.class]: Unsatisfied dependency expressed through constructor parameter 1; nested exception is org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'pdfRenderingService' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\service\PdfRenderingService.class]: Unsatisfied dependency expressed through constructor parameter 0; nested exception is org.springframework.beans.factory.NoUniqueBeanDefinitionException: No qualifying bean of type 'java.util.concurrent.ExecutorService' available: expected single matching bean but found 2: comparisonExecutor,renderingExecutor
+2025-04-15 13:14:53 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:14:53 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 13:14:53 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2025-04-15 13:14:53 [main] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2025-04-15 13:14:53 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLoggingListener - 
+
+Error starting ApplicationContext. To display the conditions report re-run your application with 'debug' enabled.
+2025-04-15 13:14:53 [main] ERROR o.s.b.d.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Parameter 0 of constructor in guraa.pdfcompare.service.PdfRenderingService required a single bean, but 2 were found:
+	- comparisonExecutor: defined by method 'comparisonExecutor' in class path resource [guraa/pdfcompare/config/ExecutorConfig.class]
+	- renderingExecutor: defined by method 'renderingExecutor' in class path resource [guraa/pdfcompare/config/ConcurrencyConfig.class]
+
+
+Action:
+
+Consider marking one of the beans as @Primary, updating the consumer to accept multiple beans, or using @Qualifier to identify the bean that should be consumed
+
+2025-04-15 13:18:36 [main] INFO  g.pdfcompare.PDFCompareApplication - Starting PDFCompareApplication using Java 17.0.10 on GUSTAV with PID 34084 (C:\projects\pdfCompare\backend\target\classes started by GustavTullberg in C:\projects\pdfCompare\backend)
+2025-04-15 13:18:36 [main] DEBUG g.pdfcompare.PDFCompareApplication - Running with Spring Boot v2.7.10, Spring v5.3.26
+2025-04-15 13:18:36 [main] INFO  g.pdfcompare.PDFCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-04-15 13:18:39 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-04-15 13:18:39 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 123 ms. Found 2 JPA repository interfaces.
+2025-04-15 13:18:41 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port(s): 3010 (http)
+2025-04-15 13:18:41 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-04-15 13:18:41 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.73]
+2025-04-15 13:18:42 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-04-15 13:18:42 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 5206 ms
+2025-04-15 13:18:42 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2025-04-15 13:18:43 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2025-04-15 13:18:43 [main] INFO  o.s.b.a.h.H2ConsoleAutoConfiguration - H2 console available at '/h2-console'. Database available at 'jdbc:h2:file:./pdfcompare-db'
+2025-04-15 13:18:44 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-04-15 13:18:44 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 5.6.15.Final
+2025-04-15 13:18:45 [main] INFO  o.h.annotations.common.Version - HCANN000001: Hibernate Commons Annotations {5.1.2.Final}
+2025-04-15 13:18:46 [main] INFO  org.hibernate.dialect.Dialect - HHH000400: Using dialect: org.hibernate.dialect.H2Dialect
+2025-04-15 13:18:52 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000490: Using JtaPlatform implementation: [org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform]
+2025-04-15 13:18:52 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:18:52 [main] INFO  g.p.config.ConcurrencyConfig - Creating rendering executor with 2 threads
+2025-04-15 13:18:52 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'PDFComparisonEngine' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\PDFComparisonEngine.class]: Unsatisfied dependency expressed through constructor parameter 0; nested exception is org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'smartDocumentMatcher' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\core\SmartDocumentMatcher.class]: Unsatisfied dependency expressed through constructor parameter 0; nested exception is org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'enhancedVisualMatcher' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\visual\EnhancedVisualMatcher.class]: Unsatisfied dependency expressed through constructor parameter 2; nested exception is org.springframework.beans.factory.NoUniqueBeanDefinitionException: No qualifying bean of type 'java.util.concurrent.ExecutorService' available: expected single matching bean but found 2: comparisonExecutor,renderingExecutor
+2025-04-15 13:18:52 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:18:52 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 13:18:52 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2025-04-15 13:18:52 [main] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2025-04-15 13:18:52 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLoggingListener - 
+
+Error starting ApplicationContext. To display the conditions report re-run your application with 'debug' enabled.
+2025-04-15 13:18:53 [main] ERROR o.s.b.d.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Parameter 2 of constructor in guraa.pdfcompare.visual.EnhancedVisualMatcher required a single bean, but 2 were found:
+	- comparisonExecutor: defined by method 'comparisonExecutor' in class path resource [guraa/pdfcompare/config/ExecutorConfig.class]
+	- renderingExecutor: defined by method 'renderingExecutor' in class path resource [guraa/pdfcompare/config/ConcurrencyConfig.class]
+
+
+Action:
+
+Consider marking one of the beans as @Primary, updating the consumer to accept multiple beans, or using @Qualifier to identify the bean that should be consumed
+
+2025-04-15 13:21:25 [main] INFO  g.pdfcompare.PDFCompareApplication - Starting PDFCompareApplication using Java 17.0.10 on GUSTAV with PID 33788 (C:\projects\pdfCompare\backend\target\classes started by GustavTullberg in C:\projects\pdfCompare\backend)
+2025-04-15 13:21:25 [main] DEBUG g.pdfcompare.PDFCompareApplication - Running with Spring Boot v2.7.10, Spring v5.3.26
+2025-04-15 13:21:25 [main] INFO  g.pdfcompare.PDFCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-04-15 13:21:29 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-04-15 13:21:30 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 365 ms. Found 2 JPA repository interfaces.
+2025-04-15 13:21:34 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port(s): 3010 (http)
+2025-04-15 13:21:34 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-04-15 13:21:34 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.73]
+2025-04-15 13:21:35 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-04-15 13:21:35 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 10247 ms
+2025-04-15 13:21:36 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2025-04-15 13:21:37 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2025-04-15 13:21:37 [main] INFO  o.s.b.a.h.H2ConsoleAutoConfiguration - H2 console available at '/h2-console'. Database available at 'jdbc:h2:file:./pdfcompare-db'
+2025-04-15 13:21:37 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-04-15 13:21:38 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 5.6.15.Final
+2025-04-15 13:21:38 [main] INFO  o.h.annotations.common.Version - HCANN000001: Hibernate Commons Annotations {5.1.2.Final}
+2025-04-15 13:21:39 [main] INFO  org.hibernate.dialect.Dialect - HHH000400: Using dialect: org.hibernate.dialect.H2Dialect
+2025-04-15 13:21:42 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000490: Using JtaPlatform implementation: [org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform]
+2025-04-15 13:21:42 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:21:42 [main] INFO  g.p.config.ConcurrencyConfig - Creating rendering executor with 2 threads
+2025-04-15 13:21:42 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'PDFComparisonEngine' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\PDFComparisonEngine.class]: Unsatisfied dependency expressed through constructor parameter 0; nested exception is org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'smartDocumentMatcher' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\core\SmartDocumentMatcher.class]: Unsatisfied dependency expressed through constructor parameter 1; nested exception is org.springframework.beans.factory.NoUniqueBeanDefinitionException: No qualifying bean of type 'java.util.concurrent.ExecutorService' available: expected single matching bean but found 2: comparisonExecutor,renderingExecutor
+2025-04-15 13:21:42 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:21:42 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 13:21:42 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2025-04-15 13:21:42 [main] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2025-04-15 13:21:42 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLoggingListener - 
+
+Error starting ApplicationContext. To display the conditions report re-run your application with 'debug' enabled.
+2025-04-15 13:21:42 [main] ERROR o.s.b.d.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Parameter 1 of constructor in guraa.pdfcompare.core.SmartDocumentMatcher required a single bean, but 2 were found:
+	- comparisonExecutor: defined by method 'comparisonExecutor' in class path resource [guraa/pdfcompare/config/ExecutorConfig.class]
+	- renderingExecutor: defined by method 'renderingExecutor' in class path resource [guraa/pdfcompare/config/ConcurrencyConfig.class]
+
+
+Action:
+
+Consider marking one of the beans as @Primary, updating the consumer to accept multiple beans, or using @Qualifier to identify the bean that should be consumed
+
+2025-04-15 13:22:53 [main] INFO  g.pdfcompare.PDFCompareApplication - Starting PDFCompareApplication using Java 17.0.10 on GUSTAV with PID 8372 (C:\projects\pdfCompare\backend\target\classes started by GustavTullberg in C:\projects\pdfCompare\backend)
+2025-04-15 13:22:53 [main] DEBUG g.pdfcompare.PDFCompareApplication - Running with Spring Boot v2.7.10, Spring v5.3.26
+2025-04-15 13:22:53 [main] INFO  g.pdfcompare.PDFCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-04-15 13:22:56 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-04-15 13:22:56 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 189 ms. Found 2 JPA repository interfaces.
+2025-04-15 13:22:58 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port(s): 3010 (http)
+2025-04-15 13:22:58 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-04-15 13:22:58 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.73]
+2025-04-15 13:22:58 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-04-15 13:22:58 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 4419 ms
+2025-04-15 13:22:58 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2025-04-15 13:22:59 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2025-04-15 13:22:59 [main] INFO  o.s.b.a.h.H2ConsoleAutoConfiguration - H2 console available at '/h2-console'. Database available at 'jdbc:h2:file:./pdfcompare-db'
+2025-04-15 13:22:59 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-04-15 13:22:59 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 5.6.15.Final
+2025-04-15 13:22:59 [main] INFO  o.h.annotations.common.Version - HCANN000001: Hibernate Commons Annotations {5.1.2.Final}
+2025-04-15 13:23:00 [main] INFO  org.hibernate.dialect.Dialect - HHH000400: Using dialect: org.hibernate.dialect.H2Dialect
+2025-04-15 13:23:01 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000490: Using JtaPlatform implementation: [org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform]
+2025-04-15 13:23:01 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:23:01 [main] INFO  g.p.config.ConcurrencyConfig - Creating rendering executor with 2 threads
+2025-04-15 13:23:01 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'PDFComparisonEngine' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\PDFComparisonEngine.class]: Unsatisfied dependency expressed through constructor parameter 1; nested exception is org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'textElementComparisonService' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\service\TextElementComparisonService.class]: Unsatisfied dependency expressed through constructor parameter 0; nested exception is org.springframework.beans.factory.NoUniqueBeanDefinitionException: No qualifying bean of type 'java.util.concurrent.ExecutorService' available: expected single matching bean but found 2: comparisonExecutor,renderingExecutor
+2025-04-15 13:23:01 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:23:01 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 13:23:01 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2025-04-15 13:23:01 [main] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2025-04-15 13:23:01 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLoggingListener - 
+
+Error starting ApplicationContext. To display the conditions report re-run your application with 'debug' enabled.
+2025-04-15 13:23:01 [main] ERROR o.s.b.d.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Parameter 0 of constructor in guraa.pdfcompare.service.TextElementComparisonService required a single bean, but 2 were found:
+	- comparisonExecutor: defined by method 'comparisonExecutor' in class path resource [guraa/pdfcompare/config/ExecutorConfig.class]
+	- renderingExecutor: defined by method 'renderingExecutor' in class path resource [guraa/pdfcompare/config/ConcurrencyConfig.class]
+
+
+Action:
+
+Consider marking one of the beans as @Primary, updating the consumer to accept multiple beans, or using @Qualifier to identify the bean that should be consumed
+
+2025-04-15 13:24:30 [main] INFO  g.pdfcompare.PDFCompareApplication - Starting PDFCompareApplication using Java 17.0.10 on GUSTAV with PID 40472 (C:\projects\pdfCompare\backend\target\classes started by GustavTullberg in C:\projects\pdfCompare\backend)
+2025-04-15 13:24:30 [main] DEBUG g.pdfcompare.PDFCompareApplication - Running with Spring Boot v2.7.10, Spring v5.3.26
+2025-04-15 13:24:30 [main] INFO  g.pdfcompare.PDFCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-04-15 13:24:33 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-04-15 13:24:33 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 278 ms. Found 2 JPA repository interfaces.
+2025-04-15 13:24:36 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port(s): 3010 (http)
+2025-04-15 13:24:36 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-04-15 13:24:36 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.73]
+2025-04-15 13:24:37 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-04-15 13:24:37 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 6624 ms
+2025-04-15 13:24:37 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2025-04-15 13:24:38 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2025-04-15 13:24:38 [main] INFO  o.s.b.a.h.H2ConsoleAutoConfiguration - H2 console available at '/h2-console'. Database available at 'jdbc:h2:file:./pdfcompare-db'
+2025-04-15 13:24:38 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-04-15 13:24:38 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 5.6.15.Final
+2025-04-15 13:24:38 [main] INFO  o.h.annotations.common.Version - HCANN000001: Hibernate Commons Annotations {5.1.2.Final}
+2025-04-15 13:24:38 [main] INFO  org.hibernate.dialect.Dialect - HHH000400: Using dialect: org.hibernate.dialect.H2Dialect
+2025-04-15 13:24:40 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000490: Using JtaPlatform implementation: [org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform]
+2025-04-15 13:24:40 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:24:40 [main] INFO  g.p.config.ConcurrencyConfig - Creating rendering executor with 2 threads
+2025-04-15 13:24:40 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'PDFComparisonEngine' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\PDFComparisonEngine.class]: Unsatisfied dependency expressed through constructor parameter 2; nested exception is org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'imageComparisonService' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\service\ImageComparisonService.class]: Unsatisfied dependency expressed through constructor parameter 0; nested exception is org.springframework.beans.factory.NoUniqueBeanDefinitionException: No qualifying bean of type 'java.util.concurrent.ExecutorService' available: expected single matching bean but found 2: comparisonExecutor,renderingExecutor
+2025-04-15 13:24:40 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:24:40 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 13:24:40 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2025-04-15 13:24:40 [main] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2025-04-15 13:24:40 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLoggingListener - 
+
+Error starting ApplicationContext. To display the conditions report re-run your application with 'debug' enabled.
+2025-04-15 13:24:40 [main] ERROR o.s.b.d.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Parameter 0 of constructor in guraa.pdfcompare.service.ImageComparisonService required a single bean, but 2 were found:
+	- comparisonExecutor: defined by method 'comparisonExecutor' in class path resource [guraa/pdfcompare/config/ExecutorConfig.class]
+	- renderingExecutor: defined by method 'renderingExecutor' in class path resource [guraa/pdfcompare/config/ConcurrencyConfig.class]
+
+
+Action:
+
+Consider marking one of the beans as @Primary, updating the consumer to accept multiple beans, or using @Qualifier to identify the bean that should be consumed
+
+2025-04-15 13:26:47 [main] INFO  g.pdfcompare.PDFCompareApplication - Starting PDFCompareApplication using Java 17.0.10 on GUSTAV with PID 31068 (C:\projects\pdfCompare\backend\target\classes started by GustavTullberg in C:\projects\pdfCompare\backend)
+2025-04-15 13:26:47 [main] DEBUG g.pdfcompare.PDFCompareApplication - Running with Spring Boot v2.7.10, Spring v5.3.26
+2025-04-15 13:26:47 [main] INFO  g.pdfcompare.PDFCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-04-15 13:26:52 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-04-15 13:26:52 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 302 ms. Found 2 JPA repository interfaces.
+2025-04-15 13:26:55 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port(s): 3010 (http)
+2025-04-15 13:26:55 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-04-15 13:26:55 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.73]
+2025-04-15 13:26:56 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-04-15 13:26:56 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 8515 ms
+2025-04-15 13:26:57 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2025-04-15 13:26:58 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2025-04-15 13:26:58 [main] INFO  o.s.b.a.h.H2ConsoleAutoConfiguration - H2 console available at '/h2-console'. Database available at 'jdbc:h2:file:./pdfcompare-db'
+2025-04-15 13:26:59 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-04-15 13:27:00 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 5.6.15.Final
+2025-04-15 13:27:01 [main] INFO  o.h.annotations.common.Version - HCANN000001: Hibernate Commons Annotations {5.1.2.Final}
+2025-04-15 13:27:01 [main] INFO  org.hibernate.dialect.Dialect - HHH000400: Using dialect: org.hibernate.dialect.H2Dialect
+2025-04-15 13:27:05 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000490: Using JtaPlatform implementation: [org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform]
+2025-04-15 13:27:05 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:27:05 [main] INFO  g.p.config.ConcurrencyConfig - Creating rendering executor with 2 threads
+2025-04-15 13:27:05 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'PDFComparisonEngine' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\PDFComparisonEngine.class]: Unsatisfied dependency expressed through constructor parameter 3; nested exception is org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'fontComparisonService' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\service\FontComparisonService.class]: Unsatisfied dependency expressed through constructor parameter 0; nested exception is org.springframework.beans.factory.NoUniqueBeanDefinitionException: No qualifying bean of type 'java.util.concurrent.ExecutorService' available: expected single matching bean but found 2: comparisonExecutor,renderingExecutor
+2025-04-15 13:27:05 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:27:05 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 13:27:05 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2025-04-15 13:27:05 [main] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2025-04-15 13:27:05 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLoggingListener - 
+
+Error starting ApplicationContext. To display the conditions report re-run your application with 'debug' enabled.
+2025-04-15 13:27:06 [main] ERROR o.s.b.d.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Parameter 0 of constructor in guraa.pdfcompare.service.FontComparisonService required a single bean, but 2 were found:
+	- comparisonExecutor: defined by method 'comparisonExecutor' in class path resource [guraa/pdfcompare/config/ExecutorConfig.class]
+	- renderingExecutor: defined by method 'renderingExecutor' in class path resource [guraa/pdfcompare/config/ConcurrencyConfig.class]
+
+
+Action:
+
+Consider marking one of the beans as @Primary, updating the consumer to accept multiple beans, or using @Qualifier to identify the bean that should be consumed
+
+2025-04-15 13:39:19 [main] INFO  g.pdfcompare.PDFCompareApplication - Starting PDFCompareApplication using Java 17.0.10 on GUSTAV with PID 43852 (C:\projects\pdfCompare\backend\target\classes started by GustavTullberg in C:\projects\pdfCompare\backend)
+2025-04-15 13:39:19 [main] DEBUG g.pdfcompare.PDFCompareApplication - Running with Spring Boot v2.7.10, Spring v5.3.26
+2025-04-15 13:39:19 [main] INFO  g.pdfcompare.PDFCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-04-15 13:39:22 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-04-15 13:39:22 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 212 ms. Found 2 JPA repository interfaces.
+2025-04-15 13:39:24 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port(s): 3010 (http)
+2025-04-15 13:39:24 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-04-15 13:39:24 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.73]
+2025-04-15 13:39:24 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-04-15 13:39:24 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 4841 ms
+2025-04-15 13:39:25 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2025-04-15 13:39:25 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2025-04-15 13:39:25 [main] INFO  o.s.b.a.h.H2ConsoleAutoConfiguration - H2 console available at '/h2-console'. Database available at 'jdbc:h2:file:./pdfcompare-db'
+2025-04-15 13:39:26 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-04-15 13:39:26 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 5.6.15.Final
+2025-04-15 13:39:27 [main] INFO  o.h.annotations.common.Version - HCANN000001: Hibernate Commons Annotations {5.1.2.Final}
+2025-04-15 13:39:27 [main] INFO  org.hibernate.dialect.Dialect - HHH000400: Using dialect: org.hibernate.dialect.H2Dialect
+2025-04-15 13:39:29 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000490: Using JtaPlatform implementation: [org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform]
+2025-04-15 13:39:29 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:39:29 [main] INFO  g.p.config.ConcurrencyConfig - Creating rendering executor with 2 threads
+2025-04-15 13:39:30 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'PDFComparisonEngine' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\PDFComparisonEngine.class]: Unsatisfied dependency expressed through constructor parameter 4; nested exception is org.springframework.beans.factory.NoUniqueBeanDefinitionException: No qualifying bean of type 'java.util.concurrent.ExecutorService' available: expected single matching bean but found 2: comparisonExecutor,renderingExecutor
+2025-04-15 13:39:30 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:39:30 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 13:39:30 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2025-04-15 13:39:30 [main] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2025-04-15 13:39:30 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLoggingListener - 
+
+Error starting ApplicationContext. To display the conditions report re-run your application with 'debug' enabled.
+2025-04-15 13:39:30 [main] ERROR o.s.b.d.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Parameter 4 of constructor in guraa.pdfcompare.PDFComparisonEngine required a single bean, but 2 were found:
+	- comparisonExecutor: defined by method 'comparisonExecutor' in class path resource [guraa/pdfcompare/config/ExecutorConfig.class]
+	- renderingExecutor: defined by method 'renderingExecutor' in class path resource [guraa/pdfcompare/config/ConcurrencyConfig.class]
+
+
+Action:
+
+Consider marking one of the beans as @Primary, updating the consumer to accept multiple beans, or using @Qualifier to identify the bean that should be consumed
+
+2025-04-15 13:53:19 [main] INFO  g.pdfcompare.PDFCompareApplication - Starting PDFCompareApplication using Java 17.0.10 on GUSTAV with PID 20356 (C:\projects\pdfCompare\backend\target\classes started by GustavTullberg in C:\projects\pdfCompare\backend)
+2025-04-15 13:53:19 [main] DEBUG g.pdfcompare.PDFCompareApplication - Running with Spring Boot v2.7.10, Spring v5.3.26
+2025-04-15 13:53:19 [main] INFO  g.pdfcompare.PDFCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-04-15 13:53:22 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-04-15 13:53:23 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 235 ms. Found 2 JPA repository interfaces.
+2025-04-15 13:53:26 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port(s): 3010 (http)
+2025-04-15 13:53:26 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-04-15 13:53:26 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.73]
+2025-04-15 13:53:27 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-04-15 13:53:27 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 7709 ms
+2025-04-15 13:53:28 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2025-04-15 13:53:29 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2025-04-15 13:53:29 [main] INFO  o.s.b.a.h.H2ConsoleAutoConfiguration - H2 console available at '/h2-console'. Database available at 'jdbc:h2:file:./pdfcompare-db'
+2025-04-15 13:53:30 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-04-15 13:53:30 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 5.6.15.Final
+2025-04-15 13:53:31 [main] INFO  o.h.annotations.common.Version - HCANN000001: Hibernate Commons Annotations {5.1.2.Final}
+2025-04-15 13:53:31 [main] INFO  org.hibernate.dialect.Dialect - HHH000400: Using dialect: org.hibernate.dialect.H2Dialect
+2025-04-15 13:53:35 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000490: Using JtaPlatform implementation: [org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform]
+2025-04-15 13:53:35 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:53:35 [main] INFO  g.p.config.ConcurrencyConfig - Creating rendering executor with 2 threads
+2025-04-15 13:53:36 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'PDFComparisonEngine' defined in file [C:\projects\pdfCompare\backend\target\classes\guraa\pdfcompare\PDFComparisonEngine.class]: Unsatisfied dependency expressed through constructor parameter 4; nested exception is org.springframework.beans.factory.NoUniqueBeanDefinitionException: No qualifying bean of type 'java.util.concurrent.ExecutorService' available: expected single matching bean but found 2: comparisonExecutor,renderingExecutor
+2025-04-15 13:53:36 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:53:36 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 13:53:36 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2025-04-15 13:53:36 [main] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2025-04-15 13:53:36 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLoggingListener - 
+
+Error starting ApplicationContext. To display the conditions report re-run your application with 'debug' enabled.
+2025-04-15 13:53:36 [main] ERROR o.s.b.d.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Parameter 4 of constructor in guraa.pdfcompare.PDFComparisonEngine required a single bean, but 2 were found:
+	- comparisonExecutor: defined by method 'comparisonExecutor' in class path resource [guraa/pdfcompare/config/ExecutorConfig.class]
+	- renderingExecutor: defined by method 'renderingExecutor' in class path resource [guraa/pdfcompare/config/ConcurrencyConfig.class]
+
+
+Action:
+
+Consider marking one of the beans as @Primary, updating the consumer to accept multiple beans, or using @Qualifier to identify the bean that should be consumed
+
+2025-04-15 13:57:28 [main] INFO  g.pdfcompare.PDFCompareApplication - Starting PDFCompareApplication using Java 17.0.10 on GUSTAV with PID 43016 (C:\projects\pdfCompare\backend\target\classes started by GustavTullberg in C:\projects\pdfCompare\backend)
+2025-04-15 13:57:28 [main] DEBUG g.pdfcompare.PDFCompareApplication - Running with Spring Boot v2.7.10, Spring v5.3.26
+2025-04-15 13:57:28 [main] INFO  g.pdfcompare.PDFCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-04-15 13:57:31 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-04-15 13:57:31 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 106 ms. Found 2 JPA repository interfaces.
+2025-04-15 13:57:33 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port(s): 3010 (http)
+2025-04-15 13:57:33 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-04-15 13:57:33 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.73]
+2025-04-15 13:57:33 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-04-15 13:57:33 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 4807 ms
+2025-04-15 13:57:34 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2025-04-15 13:57:34 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2025-04-15 13:57:34 [main] INFO  o.s.b.a.h.H2ConsoleAutoConfiguration - H2 console available at '/h2-console'. Database available at 'jdbc:h2:file:./pdfcompare-db'
+2025-04-15 13:57:35 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-04-15 13:57:35 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 5.6.15.Final
+2025-04-15 13:57:35 [main] INFO  o.h.annotations.common.Version - HCANN000001: Hibernate Commons Annotations {5.1.2.Final}
+2025-04-15 13:57:35 [main] INFO  org.hibernate.dialect.Dialect - HHH000400: Using dialect: org.hibernate.dialect.H2Dialect
+2025-04-15 13:57:37 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000490: Using JtaPlatform implementation: [org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform]
+2025-04-15 13:57:37 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:57:37 [main] INFO  g.p.config.ConcurrencyConfig - Creating rendering executor with 2 threads
+2025-04-15 13:57:39 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2025-04-15 13:57:40 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint(s) beneath base path '/actuator'
+2025-04-15 13:57:40 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port(s): 3010 (http) with context path ''
+2025-04-15 13:57:40 [main] INFO  g.pdfcompare.PDFCompareApplication - Started PDFCompareApplication in 14.128 seconds (JVM running for 16.502)
+2025-04-15 13:57:41 [RMI TCP Connection(1)-192.168.68.121] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-04-15 13:57:41 [RMI TCP Connection(1)-192.168.68.121] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-04-15 13:57:41 [RMI TCP Connection(1)-192.168.68.121] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 5 ms
+2025-04-15 13:58:02 [http-nio-3010-exec-3] INFO  guraa.pdfcompare.service.PdfService - Saving document: e0cce5e5-6713-4cd8-a937-f98026c2dae5
+2025-04-15 13:58:09 [http-nio-3010-exec-4] INFO  guraa.pdfcompare.service.PdfService - Saving document: 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 13:58:12 [pool-1-thread-1] INFO  guraa.pdfcompare.PDFComparisonEngine - Starting comparison between documents: e0cce5e5-6713-4cd8-a937-f98026c2dae5 and 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 13:58:12 [pool-1-thread-1] INFO  g.p.core.SmartDocumentMatcher - Starting smart document matching between documents: e0cce5e5-6713-4cd8-a937-f98026c2dae5 and 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 13:58:12 [pool-1-thread-1] INFO  g.p.visual.EnhancedVisualMatcher - Starting visual matching between documents: e0cce5e5-6713-4cd8-a937-f98026c2dae5 and 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 13:58:12 [pool-1-thread-3] INFO  g.p.service.PdfRenderingService - Pre-rendering all pages for document: 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 13:58:12 [pool-1-thread-2] INFO  g.p.service.PdfRenderingService - Pre-rendering all pages for document: e0cce5e5-6713-4cd8-a937-f98026c2dae5
+2025-04-15 13:58:42 [render-102] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 1 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 13:58:42 [render-101] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 1 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 13:59:12 [render-102] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 1 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 13:59:12 [render-101] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 1 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 13:59:42 [render-102] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 1 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 13:59:42 [render-101] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 1 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 13:59:42 [render-102] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 1 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 13:59:42 [render-101] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 1 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 13:59:54 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 13:59:54 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 13:59:54 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2025-04-15 14:09:25 [main] INFO  g.pdfcompare.PDFCompareApplication - Starting PDFCompareApplication using Java 17.0.10 on GUSTAV with PID 45248 (C:\projects\pdfCompare\backend\target\classes started by GustavTullberg in C:\projects\pdfCompare\backend)
+2025-04-15 14:09:25 [main] DEBUG g.pdfcompare.PDFCompareApplication - Running with Spring Boot v2.7.10, Spring v5.3.26
+2025-04-15 14:09:25 [main] INFO  g.pdfcompare.PDFCompareApplication - No active profile set, falling back to 1 default profile: "default"
+2025-04-15 14:09:27 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-04-15 14:09:27 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 112 ms. Found 2 JPA repository interfaces.
+2025-04-15 14:09:28 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port(s): 3010 (http)
+2025-04-15 14:09:28 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-04-15 14:09:28 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.73]
+2025-04-15 14:09:28 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-04-15 14:09:28 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3641 ms
+2025-04-15 14:09:29 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2025-04-15 14:09:29 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2025-04-15 14:09:29 [main] INFO  o.s.b.a.h.H2ConsoleAutoConfiguration - H2 console available at '/h2-console'. Database available at 'jdbc:h2:file:./pdfcompare-db'
+2025-04-15 14:09:29 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-04-15 14:09:29 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 5.6.15.Final
+2025-04-15 14:09:30 [main] INFO  o.h.annotations.common.Version - HCANN000001: Hibernate Commons Annotations {5.1.2.Final}
+2025-04-15 14:09:30 [main] INFO  org.hibernate.dialect.Dialect - HHH000400: Using dialect: org.hibernate.dialect.H2Dialect
+2025-04-15 14:09:31 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000490: Using JtaPlatform implementation: [org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform]
+2025-04-15 14:09:31 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 14:09:31 [main] INFO  g.p.config.ConcurrencyConfig - Creating rendering executor with 2 threads
+2025-04-15 14:09:32 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2025-04-15 14:09:33 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint(s) beneath base path '/actuator'
+2025-04-15 14:09:33 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port(s): 3010 (http) with context path ''
+2025-04-15 14:09:33 [main] INFO  g.pdfcompare.PDFCompareApplication - Started PDFCompareApplication in 10.092 seconds (JVM running for 12.05)
+2025-04-15 14:09:34 [RMI TCP Connection(3)-192.168.68.121] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-04-15 14:09:34 [RMI TCP Connection(3)-192.168.68.121] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-04-15 14:09:34 [RMI TCP Connection(3)-192.168.68.121] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 1 ms
+2025-04-15 14:09:50 [pool-1-thread-1] INFO  guraa.pdfcompare.PDFComparisonEngine - Starting comparison between documents: e0cce5e5-6713-4cd8-a937-f98026c2dae5 and 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 14:09:50 [pool-1-thread-1] INFO  g.p.core.SmartDocumentMatcher - Starting smart document matching between documents: e0cce5e5-6713-4cd8-a937-f98026c2dae5 and 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 14:09:50 [pool-1-thread-1] INFO  g.p.visual.EnhancedVisualMatcher - Starting visual matching between documents: e0cce5e5-6713-4cd8-a937-f98026c2dae5 and 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 14:09:50 [pool-1-thread-2] INFO  g.p.service.PdfRenderingService - Pre-rendering all pages for document: e0cce5e5-6713-4cd8-a937-f98026c2dae5
+2025-04-15 14:09:50 [pool-1-thread-3] INFO  g.p.service.PdfRenderingService - Pre-rendering all pages for document: 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8
+2025-04-15 14:09:50 [http-nio-3010-exec-6] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: 450d993d-cebd-4771-957f-95eb57d2bc84, trying file storage
+2025-04-15 14:09:50 [http-nio-3010-exec-6] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: 450d993d-cebd-4771-957f-95eb57d2bc84
+2025-04-15 14:09:50 [http-nio-3010-exec-3] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: 450d993d-cebd-4771-957f-95eb57d2bc84, trying file storage
+2025-04-15 14:09:50 [http-nio-3010-exec-3] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: 450d993d-cebd-4771-957f-95eb57d2bc84
+2025-04-15 14:09:50 [http-nio-3010-exec-8] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: 450d993d-cebd-4771-957f-95eb57d2bc84, trying file storage
+2025-04-15 14:09:50 [http-nio-3010-exec-8] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: 450d993d-cebd-4771-957f-95eb57d2bc84
+2025-04-15 14:09:51 [http-nio-3010-exec-9] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: 450d993d-cebd-4771-957f-95eb57d2bc84, trying file storage
+2025-04-15 14:09:51 [http-nio-3010-exec-9] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: 450d993d-cebd-4771-957f-95eb57d2bc84
+2025-04-15 14:10:20 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 1 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:10:20 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 1 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 14:10:50 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 1 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 14:10:50 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 1 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:11:20 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 1 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 14:11:20 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 1 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:11:20 [render-94] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 1 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:11:20 [render-93] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 1 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:11:36 [http-nio-3010-exec-2] INFO  guraa.pdfcompare.service.PdfService - Saving document: 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0
+2025-04-15 14:11:42 [http-nio-3010-exec-7] INFO  guraa.pdfcompare.service.PdfService - Saving document: 714e5bd0-f2ad-46b2-a0dc-5db41e3a7e45
+2025-04-15 14:11:42 [pool-1-thread-4] INFO  guraa.pdfcompare.PDFComparisonEngine - Starting comparison between documents: 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0 and 714e5bd0-f2ad-46b2-a0dc-5db41e3a7e45
+2025-04-15 14:11:42 [pool-1-thread-4] INFO  g.p.core.SmartDocumentMatcher - Starting smart document matching between documents: 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0 and 714e5bd0-f2ad-46b2-a0dc-5db41e3a7e45
+2025-04-15 14:11:42 [pool-1-thread-4] INFO  g.p.visual.EnhancedVisualMatcher - Starting visual matching between documents: 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0 and 714e5bd0-f2ad-46b2-a0dc-5db41e3a7e45
+2025-04-15 14:11:43 [http-nio-3010-exec-5] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: b6d647fe-487e-404d-beee-f81c09d60854, trying file storage
+2025-04-15 14:11:43 [http-nio-3010-exec-5] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: b6d647fe-487e-404d-beee-f81c09d60854
+2025-04-15 14:11:43 [http-nio-3010-exec-6] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: b6d647fe-487e-404d-beee-f81c09d60854, trying file storage
+2025-04-15 14:11:43 [http-nio-3010-exec-6] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: b6d647fe-487e-404d-beee-f81c09d60854
+2025-04-15 14:11:43 [http-nio-3010-exec-3] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: b6d647fe-487e-404d-beee-f81c09d60854, trying file storage
+2025-04-15 14:11:43 [http-nio-3010-exec-3] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: b6d647fe-487e-404d-beee-f81c09d60854
+2025-04-15 14:11:43 [http-nio-3010-exec-8] DEBUG g.p.service.ComparisonService - Comparison result not found in memory for ID: b6d647fe-487e-404d-beee-f81c09d60854, trying file storage
+2025-04-15 14:11:43 [http-nio-3010-exec-8] DEBUG g.p.service.ComparisonResultStorage - Comparison result file not found or invalid for ID: b6d647fe-487e-404d-beee-f81c09d60854
+2025-04-15 14:11:50 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 3 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:11:50 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 2 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:12:20 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 2 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:12:20 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 3 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:12:50 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 2 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:12:50 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 3 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:12:50 [render-93] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 3 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:12:50 [render-94] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 2 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:13:20 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 4 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:13:20 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 5 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:13:51 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 5 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:13:51 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 4 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:14:21 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 4 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:14:21 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 5 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:14:21 [render-93] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 4 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:14:21 [render-94] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 5 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:14:51 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 6 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:14:51 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 7 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:15:21 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 6 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:15:21 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 7 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:15:51 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 7 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:15:51 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 6 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:15:51 [render-93] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 6 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:15:51 [render-94] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 7 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:16:21 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 8 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:16:21 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 2 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 14:16:51 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 8 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:16:51 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 2 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 14:17:21 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 8 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Timed out waiting for rendering resources
+2025-04-15 14:17:21 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 2 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 14:17:21 [render-94] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 2 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:17:21 [render-93] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 8 of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:17:21 [pool-1-thread-2] ERROR g.p.service.PdfRenderingService - Error during pre-rendering of document e0cce5e5-6713-4cd8-a937-f98026c2dae5: java.io.IOException: Failed to render page after 3 attempts
+java.util.concurrent.CompletionException: java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:287)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	... 4 common frames omitted
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:17:21 [pool-1-thread-2] ERROR g.p.visual.EnhancedVisualMatcher - Error pre-rendering base document: Failed to pre-render all pages
+java.io.IOException: Failed to pre-render all pages
+	at guraa.pdfcompare.service.PdfRenderingService.preRenderAllPages(PdfRenderingService.java:300)
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.lambda$preRenderPages$0(EnhancedVisualMatcher.java:108)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.util.concurrent.CompletionException: java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:287)
+	... 4 common frames omitted
+Caused by: java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	... 4 common frames omitted
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:17:21 [pool-1-thread-2] INFO  g.p.service.PdfRenderingService - Pre-rendering all pages for document: 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0
+2025-04-15 14:17:51 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 4 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 14:17:51 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 3 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 14:18:22 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 3 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 14:18:22 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 4 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 14:18:52 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 3 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 14:18:52 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 4 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Timed out waiting for rendering resources
+2025-04-15 14:18:52 [render-94] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 3 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:18:52 [render-93] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 4 of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:18:52 [pool-1-thread-3] ERROR g.p.service.PdfRenderingService - Error during pre-rendering of document 13f4e7b3-e2e7-4feb-9a13-f7a928d718d8: java.io.IOException: Failed to render page after 3 attempts
+java.util.concurrent.CompletionException: java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:287)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	... 4 common frames omitted
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:18:52 [pool-1-thread-3] ERROR g.p.visual.EnhancedVisualMatcher - Error pre-rendering compare document: Failed to pre-render all pages
+java.io.IOException: Failed to pre-render all pages
+	at guraa.pdfcompare.service.PdfRenderingService.preRenderAllPages(PdfRenderingService.java:300)
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.lambda$preRenderPages$1(EnhancedVisualMatcher.java:117)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.util.concurrent.CompletionException: java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:287)
+	... 4 common frames omitted
+Caused by: java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	... 4 common frames omitted
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:18:52 [pool-1-thread-3] INFO  g.p.service.PdfRenderingService - Pre-rendering all pages for document: 714e5bd0-f2ad-46b2-a0dc-5db41e3a7e45
+2025-04-15 14:18:52 [pool-1-thread-1] ERROR g.p.visual.EnhancedVisualMatcher - Error during visual matching: Failed to pre-render pages
+java.io.IOException: Failed to pre-render pages
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.preRenderPages(EnhancedVisualMatcher.java:128)
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.matchPages(EnhancedVisualMatcher.java:79)
+	at guraa.pdfcompare.core.SmartDocumentMatcher.matchPagesVisually(SmartDocumentMatcher.java:97)
+	at guraa.pdfcompare.core.SmartDocumentMatcher.matchDocuments(SmartDocumentMatcher.java:65)
+	at guraa.pdfcompare.PDFComparisonEngine.matchDocuments(PDFComparisonEngine.java:122)
+	at guraa.pdfcompare.PDFComparisonEngine.compareDocuments(PDFComparisonEngine.java:84)
+	at guraa.pdfcompare.service.PdfService.lambda$comparePdfs$1(PdfService.java:193)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncSupply.run(CompletableFuture.java:1768)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.util.concurrent.CompletionException: java.lang.RuntimeException: java.io.IOException: Failed to pre-render all pages
+	at java.base/java.util.concurrent.CompletableFuture.encodeThrowable(CompletableFuture.java:315)
+	at java.base/java.util.concurrent.CompletableFuture.completeThrowable(CompletableFuture.java:320)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1807)
+	... 3 common frames omitted
+Caused by: java.lang.RuntimeException: java.io.IOException: Failed to pre-render all pages
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.lambda$preRenderPages$0(EnhancedVisualMatcher.java:111)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	... 3 common frames omitted
+Caused by: java.io.IOException: Failed to pre-render all pages
+	at guraa.pdfcompare.service.PdfRenderingService.preRenderAllPages(PdfRenderingService.java:300)
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.lambda$preRenderPages$0(EnhancedVisualMatcher.java:108)
+	... 4 common frames omitted
+Caused by: java.util.concurrent.CompletionException: java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:287)
+	... 4 common frames omitted
+Caused by: java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	... 4 common frames omitted
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:18:52 [pool-1-thread-1] ERROR guraa.pdfcompare.service.PdfService - Error comparing documents: Visual matching failed
+java.io.IOException: Visual matching failed
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.matchPages(EnhancedVisualMatcher.java:93)
+	at guraa.pdfcompare.core.SmartDocumentMatcher.matchPagesVisually(SmartDocumentMatcher.java:97)
+	at guraa.pdfcompare.core.SmartDocumentMatcher.matchDocuments(SmartDocumentMatcher.java:65)
+	at guraa.pdfcompare.PDFComparisonEngine.matchDocuments(PDFComparisonEngine.java:122)
+	at guraa.pdfcompare.PDFComparisonEngine.compareDocuments(PDFComparisonEngine.java:84)
+	at guraa.pdfcompare.service.PdfService.lambda$comparePdfs$1(PdfService.java:193)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncSupply.run(CompletableFuture.java:1768)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Failed to pre-render pages
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.preRenderPages(EnhancedVisualMatcher.java:128)
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.matchPages(EnhancedVisualMatcher.java:79)
+	... 9 common frames omitted
+Caused by: java.util.concurrent.CompletionException: java.lang.RuntimeException: java.io.IOException: Failed to pre-render all pages
+	at java.base/java.util.concurrent.CompletableFuture.encodeThrowable(CompletableFuture.java:315)
+	at java.base/java.util.concurrent.CompletableFuture.completeThrowable(CompletableFuture.java:320)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1807)
+	... 3 common frames omitted
+Caused by: java.lang.RuntimeException: java.io.IOException: Failed to pre-render all pages
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.lambda$preRenderPages$0(EnhancedVisualMatcher.java:111)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	... 3 common frames omitted
+Caused by: java.io.IOException: Failed to pre-render all pages
+	at guraa.pdfcompare.service.PdfRenderingService.preRenderAllPages(PdfRenderingService.java:300)
+	at guraa.pdfcompare.visual.EnhancedVisualMatcher.lambda$preRenderPages$0(EnhancedVisualMatcher.java:108)
+	... 4 common frames omitted
+Caused by: java.util.concurrent.CompletionException: java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:287)
+	... 4 common frames omitted
+Caused by: java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	... 4 common frames omitted
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:19:22 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 2 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:19:22 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 1 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:19:52 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 2 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:19:52 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 1 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:20:22 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 2 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:20:22 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 1 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:20:22 [render-93] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 2 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:20:22 [render-94] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 1 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:20:52 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 3 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:20:52 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 4 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:21:22 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 4 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:21:22 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 2 failed to render page 3 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:21:52 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 3 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:21:52 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 3 failed to render page 4 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:21:52 [render-93] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 3 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:21:52 [render-94] ERROR g.p.service.PdfRenderingService - Error pre-rendering page 4 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Failed to render page after 3 attempts
+java.io.IOException: Failed to render page after 3 attempts
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:250)
+	at guraa.pdfcompare.service.PdfRenderingService.lambda$preRenderAllPages$1(PdfRenderingService.java:275)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.io.IOException: Timed out waiting for rendering resources
+	at guraa.pdfcompare.service.PdfRenderingService.renderPage(PdfRenderingService.java:177)
+	... 5 common frames omitted
+2025-04-15 14:22:22 [render-94] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 6 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:22:22 [render-93] WARN  g.p.service.PdfRenderingService - Attempt 1 failed to render page 5 of document 7a873b07-97b5-4fb8-be86-8d5ccd4b1fc0: Timed out waiting for rendering resources
+2025-04-15 14:22:51 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2025-04-15 14:22:51 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2025-04-15 14:22:51 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.

@@ -2,8 +2,8 @@ package guraa.pdfcompare.service;
 
 import guraa.pdfcompare.model.difference.FontDifference;
 import guraa.pdfcompare.model.PdfDocument;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -24,10 +24,18 @@ import java.util.concurrent.ExecutorService;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class FontComparisonService {
 
     private final ExecutorService executorService;
+    
+    /**
+     * Constructor with qualifier to specify which executor service to use.
+     * 
+     * @param executorService The executor service for comparison operations
+     */
+    public FontComparisonService(@Qualifier("comparisonExecutor") ExecutorService executorService) {
+        this.executorService = executorService;
+    }
 
     @Value("${app.font.detailed-analysis:false}")
     private boolean detailedAnalysis;

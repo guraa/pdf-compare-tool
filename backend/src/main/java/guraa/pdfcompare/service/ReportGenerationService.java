@@ -5,8 +5,8 @@ import guraa.pdfcompare.model.ComparisonResult;
 import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.repository.ComparisonRepository;
 import guraa.pdfcompare.repository.PdfRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -36,13 +36,31 @@ import java.util.concurrent.ExecutorService;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ReportGenerationService {
 
     private final ComparisonRepository comparisonRepository;
     private final PdfRepository pdfRepository;
     private final TemplateEngine templateEngine;
     private final ExecutorService executorService;
+    
+    /**
+     * Constructor with qualifier to specify which executor service to use.
+     * 
+     * @param comparisonRepository The comparison repository
+     * @param pdfRepository The PDF repository
+     * @param templateEngine The template engine for report generation
+     * @param executorService The executor service for report generation operations
+     */
+    public ReportGenerationService(
+            ComparisonRepository comparisonRepository,
+            PdfRepository pdfRepository,
+            TemplateEngine templateEngine,
+            @Qualifier("comparisonExecutor") ExecutorService executorService) {
+        this.comparisonRepository = comparisonRepository;
+        this.pdfRepository = pdfRepository;
+        this.templateEngine = templateEngine;
+        this.executorService = executorService;
+    }
 
     @Value("${app.reports.directory:uploads/reports}")
     private String reportsDirectory;

@@ -4,8 +4,8 @@ import guraa.pdfcompare.PDFComparisonEngine;
 import guraa.pdfcompare.model.*;
 import guraa.pdfcompare.repository.ComparisonRepository;
 import guraa.pdfcompare.repository.PdfRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -22,13 +22,35 @@ import java.util.concurrent.ExecutorService;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ComparisonService {
 
     private final PdfRepository pdfRepository;
     private final ComparisonRepository comparisonRepository;
     private final PDFComparisonEngine comparisonEngine;
     private final ExecutorService executorService;
+    private final ComparisonResultStorage resultStorage;
+    
+    /**
+     * Constructor with qualifier to specify which executor service to use.
+     * 
+     * @param pdfRepository The PDF repository
+     * @param comparisonRepository The comparison repository
+     * @param comparisonEngine The PDF comparison engine
+     * @param executorService The executor service for comparison operations
+     * @param resultStorage The comparison result storage
+     */
+    public ComparisonService(
+            PdfRepository pdfRepository,
+            ComparisonRepository comparisonRepository,
+            PDFComparisonEngine comparisonEngine,
+            @Qualifier("comparisonExecutor") ExecutorService executorService,
+            ComparisonResultStorage resultStorage) {
+        this.pdfRepository = pdfRepository;
+        this.comparisonRepository = comparisonRepository;
+        this.comparisonEngine = comparisonEngine;
+        this.executorService = executorService;
+        this.resultStorage = resultStorage;
+    }
 
     // Cache of comparison tasks
     private final ConcurrentHashMap<String, CompletableFuture<ComparisonResult>> comparisonTasks = new ConcurrentHashMap<>();
@@ -64,8 +86,8 @@ public class ComparisonService {
 
         // Start the comparison in the background
         final String comparisonId = comparison.getId();
-        comparisonTasks.computeIfAbsent(comparisonId, key -> {
-            return CompletableFuture.supplyAsync(() -> {
+        comparisonTasks.computeIfAbsent(comparisonId, key -> 
+            CompletableFuture.supplyAsync(() -> {
                 try {
                     // Update the status to "processing"
                     Comparison updatedComparison = comparisonRepository.findById(comparisonId)
@@ -80,6 +102,17 @@ public class ComparisonService {
                     updatedComparison = comparisonRepository.findById(comparisonId)
                             .orElseThrow(() -> new IllegalArgumentException("Comparison not found: " + comparisonId));
                     updatedComparison.setStatus("completed");
+                    
+                    // Store the result in the file system
+                    try {
+                        resultStorage.storeResult(comparisonId, result);
+                        log.debug("Stored comparison result for ID: {}", comparisonId);
+                    } catch (IOException e) {
+                        log.error("Failed to store comparison result for ID {}: {}", comparisonId, e.getMessage(), e);
+                        // Continue even if storage fails, as we can still return the result in memory
+                    }
+                    
+                    // Set the result in memory for immediate use
                     updatedComparison.setResult(result);
                     comparisonRepository.save(updatedComparison);
 
@@ -99,8 +132,8 @@ public class ComparisonService {
                     log.error("Error comparing documents: {}", e.getMessage(), e);
                     throw new RuntimeException("Error comparing documents", e);
                 }
-            }, executorService);
-        });
+            }, executorService)
+        );
 
         return comparison;
     }
@@ -143,9 +176,31 @@ public class ComparisonService {
      * @return The comparison result, or null if not found
      */
     public ComparisonResult getComparisonResult(String id) {
-        return comparisonRepository.findById(id)
+        // First try to get the result from the comparison object in memory
+        ComparisonResult resultFromMemory = comparisonRepository.findById(id)
                 .map(Comparison::getResult)
                 .orElse(null);
+        
+        // If the result is not in memory, try to get it from the file system
+        if (resultFromMemory == null) {
+            log.debug("Comparison result not found in memory for ID: {}, trying file storage", id);
+            final ComparisonResult resultFromStorage = resultStorage.retrieveResult(id);
+            
+            // If we found the result in the file system, update the comparison object in memory
+            if (resultFromStorage != null) {
+                log.debug("Retrieved comparison result from file storage for ID: {}", id);
+                comparisonRepository.findById(id).ifPresent(comparison -> {
+                    comparison.setResult(resultFromStorage);
+                    // No need to save as we're just updating the transient field
+                });
+                
+                return resultFromStorage;
+            }
+            
+            return null;
+        }
+        
+        return resultFromMemory;
     }
 
     /**
@@ -154,6 +209,22 @@ public class ComparisonService {
      * @param id The comparison ID
      */
     public void deleteComparison(String id) {
+        // Delete the comparison result from the file system
+        try {
+            if (resultStorage.resultExists(id)) {
+                boolean deleted = resultStorage.deleteResult(id);
+                if (deleted) {
+                    log.debug("Deleted comparison result file for ID: {}", id);
+                } else {
+                    log.warn("Failed to delete comparison result file for ID: {}", id);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error deleting comparison result file for ID {}: {}", id, e.getMessage(), e);
+            // Continue with deletion even if file deletion fails
+        }
+        
+        // Delete the comparison from the database
         comparisonRepository.deleteById(id);
     }
 
@@ -172,6 +243,21 @@ public class ComparisonService {
             boolean cancelled = task.cancel(true);
 
             if (cancelled) {
+                // Delete any existing result file
+                try {
+                    if (resultStorage.resultExists(id)) {
+                        boolean deleted = resultStorage.deleteResult(id);
+                        if (deleted) {
+                            log.debug("Deleted comparison result file for cancelled comparison ID: {}", id);
+                        } else {
+                            log.warn("Failed to delete comparison result file for cancelled comparison ID: {}", id);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("Error deleting comparison result file for cancelled comparison ID {}: {}", id, e.getMessage(), e);
+                    // Continue with cancellation even if file deletion fails
+                }
+                
                 // Update the status to "cancelled"
                 comparisonRepository.findById(id).ifPresent(comparison -> {
                     comparison.setStatus("cancelled");

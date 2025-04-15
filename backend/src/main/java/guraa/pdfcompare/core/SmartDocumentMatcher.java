@@ -3,8 +3,8 @@ package guraa.pdfcompare.core;
 import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.service.PagePair;
 import guraa.pdfcompare.visual.EnhancedVisualMatcher;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -24,11 +24,23 @@ import java.util.concurrent.ExecutorService;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class SmartDocumentMatcher implements DocumentMatchingStrategy {
 
     private final EnhancedVisualMatcher visualMatcher;
     private final ExecutorService executorService;
+    
+    /**
+     * Constructor with qualifier to specify which executor service to use.
+     * 
+     * @param visualMatcher The visual matcher for comparing documents
+     * @param executorService The executor service for comparison operations
+     */
+    public SmartDocumentMatcher(
+            EnhancedVisualMatcher visualMatcher,
+            @Qualifier("comparisonExecutor") ExecutorService executorService) {
+        this.visualMatcher = visualMatcher;
+        this.executorService = executorService;
+    }
 
     @Value("${app.matching.visual-weight:0.7}")
     private double visualWeight;

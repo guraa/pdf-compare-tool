@@ -4,8 +4,8 @@ import guraa.pdfcompare.PDFComparisonEngine;
 import guraa.pdfcompare.model.ComparisonResult;
 import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.repository.PdfRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -36,12 +36,27 @@ import java.util.concurrent.ExecutorService;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class PdfService {
 
     private final PdfRepository pdfRepository;
     private final ExecutorService executorService;
     private final PDFComparisonEngine comparisonEngine;
+    
+    /**
+     * Constructor with qualifier to specify which executor service to use.
+     * 
+     * @param pdfRepository The PDF repository
+     * @param executorService The executor service for comparison operations
+     * @param comparisonEngine The PDF comparison engine
+     */
+    public PdfService(
+            PdfRepository pdfRepository,
+            @Qualifier("comparisonExecutor") ExecutorService executorService,
+            PDFComparisonEngine comparisonEngine) {
+        this.pdfRepository = pdfRepository;
+        this.executorService = executorService;
+        this.comparisonEngine = comparisonEngine;
+    }
 
     @Value("${app.documents.storage-path:uploads/documents}")
     private String documentsStoragePath;

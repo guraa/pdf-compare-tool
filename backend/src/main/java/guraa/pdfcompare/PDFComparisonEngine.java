@@ -13,8 +13,8 @@ import guraa.pdfcompare.service.ImageComparisonService;
 import guraa.pdfcompare.service.PageLevelComparisonSummary;
 import guraa.pdfcompare.service.PagePair;
 import guraa.pdfcompare.service.TextElementComparisonService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -35,7 +35,6 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class PDFComparisonEngine {
 
     private final SmartDocumentMatcher documentMatcher;
@@ -43,6 +42,28 @@ public class PDFComparisonEngine {
     private final ImageComparisonService imageComparisonService;
     private final FontComparisonService fontComparisonService;
     private final ExecutorService executorService;
+    
+    /**
+     * Constructor with qualifier to specify which executor service to use.
+     * 
+     * @param documentMatcher The document matcher
+     * @param textComparisonService The text comparison service
+     * @param imageComparisonService The image comparison service
+     * @param fontComparisonService The font comparison service
+     * @param executorService The executor service for comparison operations
+     */
+    public PDFComparisonEngine(
+            SmartDocumentMatcher documentMatcher,
+            TextElementComparisonService textComparisonService,
+            ImageComparisonService imageComparisonService,
+            FontComparisonService fontComparisonService,
+            @Qualifier("comparisonExecutor") ExecutorService executorService) {
+        this.documentMatcher = documentMatcher;
+        this.textComparisonService = textComparisonService;
+        this.imageComparisonService = imageComparisonService;
+        this.fontComparisonService = fontComparisonService;
+        this.executorService = executorService;
+    }
 
     @Value("${app.comparison.smart-matching-enabled:true}")
     private boolean smartMatchingEnabled;

@@ -4,8 +4,8 @@ import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.model.difference.ImageDifference;
 import guraa.pdfcompare.util.ImageInfo;
 import guraa.pdfcompare.visual.SSIMCalculator;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -33,12 +33,27 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ImageComparisonService {
 
     private final ExecutorService executorService;
     private final SSIMCalculator ssimCalculator;
     private final PdfRenderingService pdfRenderingService;
+    
+    /**
+     * Constructor with qualifier to specify which executor service to use.
+     * 
+     * @param executorService The executor service for comparison operations
+     * @param ssimCalculator The SSIM calculator for image comparison
+     * @param pdfRenderingService The PDF rendering service
+     */
+    public ImageComparisonService(
+            @Qualifier("comparisonExecutor") ExecutorService executorService,
+            SSIMCalculator ssimCalculator,
+            PdfRenderingService pdfRenderingService) {
+        this.executorService = executorService;
+        this.ssimCalculator = ssimCalculator;
+        this.pdfRenderingService = pdfRenderingService;
+    }
 
     @Value("${app.comparison.image-similarity-threshold:0.95}")
     private double imageSimilarityThreshold;
