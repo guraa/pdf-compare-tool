@@ -105,6 +105,9 @@ const PDFRenderer = ({
     }
   }, [imageLoaded, isBaseDocument, pageMetadata, scaleAdjustment, xOffsetAdjustment, yOffsetAdjustment]);
 
+
+  
+
   // Pre-calculate and store adjusted coordinates when scale factor changes
   useEffect(() => {
     if (!differences || !scaleFactor || !canvasRef.current) return;
