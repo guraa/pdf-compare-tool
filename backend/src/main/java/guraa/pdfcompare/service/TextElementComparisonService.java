@@ -1,13 +1,8 @@
 package guraa.pdfcompare.service;
 
-import com.github.difflib.DiffUtils;
-import com.github.difflib.patch.AbstractDelta;
-import com.github.difflib.patch.Chunk;
-import com.github.difflib.DiffUtils;
 import com.github.difflib.patch.AbstractDelta;
 import com.github.difflib.patch.Chunk;
 import com.github.difflib.patch.DeltaType;
-import com.github.difflib.patch.Patch;
 import com.itextpdf.kernel.pdf.PdfPage;
 import com.itextpdf.kernel.pdf.PdfReader;
 import com.itextpdf.kernel.pdf.canvas.parser.PdfTextExtractor;
@@ -22,16 +17,12 @@ import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-// Removed: import java.util.concurrent.CompletableFuture;
-// Removed: import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
@@ -109,20 +100,150 @@ public class TextElementComparisonService {
         List<String> baseLines = extractTextLines(baseDocument, basePageNumber);
         List<String> compareLines = extractTextLines(compareDocument, comparePageNumber);
 
-        // Calculate the diff
-        Patch<String> patch = DiffUtils.diff(baseLines, compareLines);
-
-        // Convert the diff to text differences
         List<TextDifference> differences = new ArrayList<>();
 
-        for (AbstractDelta<String> delta : patch.getDeltas()) {
-            TextDifference difference = createTextDifference(delta, basePageNumber, comparePageNumber);
-            differences.add(difference);
+        // More comprehensive text comparison
+        for (int i = 0; i < Math.max(baseLines.size(), compareLines.size()); i++) {
+            String baseLine = i < baseLines.size() ? baseLines.get(i) : null;
+            String compareLine = i < compareLines.size() ? compareLines.get(i) : null;
+
+            // Detect line-level differences with default coordinate values
+            TextDifference lineDifference = detectLineDifference(
+                    baseLine, compareLine,
+                    basePageNumber, comparePageNumber,
+                    0.0, 0.0,  // baseX, baseY
+                    0.0, 0.0,  // compareX, compareY
+                    0.0, 0.0,  // baseWidth, baseHeight
+                    0.0, 0.0   // compareWidth, compareHeight
+            );
+
+            if (lineDifference != null) {
+                differences.add(lineDifference);
+            }
         }
 
         return differences;
     }
 
+    private TextDifference detectLineDifference(
+            String baseLine, String compareLine,
+            int basePageNumber, int comparePageNumber,
+            double baseX, double baseY,
+            double compareX, double compareY,
+            double baseWidth, double baseHeight,
+            double compareWidth, double compareHeight ) {
+
+        // If both lines are null, no difference
+        if (baseLine == null && compareLine == null) {
+            return null;
+        }
+
+        // Line added
+        if (baseLine == null) {
+            return TextDifference.builder()
+                    .compareText(compareLine)
+                    .comparePageNumber(comparePageNumber)
+                    .compareTextLength(compareLine.length())
+                    .textDifference(true)
+                    .severity(compareLine.length() > 50 ? "major" : "minor")
+                    .type("text")
+                    .addition(true)
+                    .compareX(compareX)
+                    .compareY(compareY)
+                    .compareWidth(compareWidth)
+                    .compareHeight(compareHeight)
+                    .build();
+        }
+
+        // Line deleted
+        if (compareLine == null) {
+            return TextDifference.builder()
+                    .changeType("deleted")
+                    .baseText(baseLine)
+                    .basePageNumber(basePageNumber)
+                    .baseTextLength(baseLine.length())
+                    .textDifference(true)  // Explicitly set to true
+                    .severity(baseLine.length() > 50 ? "major" : "minor")
+                    .type("text")  // Set the type explicitly
+                    .deletion(true)
+                    .baseX(baseX)
+                    .baseY(baseY)
+                    .baseWidth(baseWidth)
+                    .baseHeight(baseHeight)
+                    .build();
+        }
+
+        // Compute text similarity
+        double similarity = computeTextSimilarity(baseLine, compareLine);
+
+        // If significant difference
+        if (similarity < textSimilarityThreshold) {
+            return TextDifference.builder()
+                    .changeType("modified")
+                    .baseText(baseLine)
+                    .compareText(compareLine)
+                    .basePageNumber(basePageNumber)
+                    .comparePageNumber(comparePageNumber)
+                    .baseTextLength(baseLine.length())
+                    .compareTextLength(compareLine.length())
+                    .similarityScore(similarity)
+                    .textDifference(true)  // Explicitly set to true
+                    .modification(true)
+                    .severity(computeSeverity(baseLine, compareLine))
+                    .type("text")  // Set the type explicitly
+                    .baseX(baseX)
+                    .baseY(baseY)
+                    .compareX(compareX)
+                    .compareY(compareY)
+                    .baseWidth(baseWidth)
+                    .baseHeight(baseHeight)
+                    .compareWidth(compareWidth)
+                    .compareHeight(compareHeight)
+                    .xdifference(compareX - baseX)
+                    .ydifference(compareY - baseY)
+                    .widthDifference(compareWidth - baseWidth)
+                    .heightDifference(compareHeight - baseHeight)
+                    .build();
+        }
+
+        return null;
+    }
+    private double computeTextSimilarity(String text1, String text2) {
+        // Use Levenshtein distance or other string similarity algorithms
+        // Lower value means less similarity
+        return 1.0 - (double) computeLevenshteinDistance(text1, text2) /
+                Math.max(text1.length(), text2.length());
+    }
+
+    private String computeSeverity(String baseText, String compareText) {
+        int lengthDiff = Math.abs(baseText.length() - compareText.length());
+        int contentDiff = computeLevenshteinDistance(baseText, compareText);
+
+        if (contentDiff > baseText.length() * 0.5) return "major";
+        if (contentDiff > baseText.length() * 0.2) return "minor";
+        return "cosmetic";
+    }
+
+    private int computeLevenshteinDistance(String s1, String s2) {
+        // Levenshtein distance implementation to measure string differences
+        // This is a common string similarity metric
+        int[][] dp = new int[s1.length() + 1][s2.length() + 1];
+
+        for (int i = 0; i <= s1.length(); i++) {
+            for (int j = 0; j <= s2.length(); j++) {
+                if (i == 0) dp[i][j] = j;
+                else if (j == 0) dp[i][j] = i;
+                else {
+                    dp[i][j] = Math.min(
+                            Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1),
+                            dp[i - 1][j - 1] + (s1.charAt(i - 1) == s2.charAt(j - 1) ? 0 : 1)
+                    );
+                }
+            }
+        }
+
+        return dp[s1.length()][s2.length()];
+    }
     /**
      * Extract text lines from a page.
      *

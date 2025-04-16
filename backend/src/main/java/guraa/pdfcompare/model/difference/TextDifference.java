@@ -1,9 +1,9 @@
 package guraa.pdfcompare.model.difference;
 
 import lombok.AllArgsConstructor;
-import lombok.experimental.SuperBuilder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 /**
  * Represents a difference between text content in two PDF documents.
@@ -65,6 +65,10 @@ public class TextDifference extends Difference {
      * The x-coordinate in the compare document.
      */
     private double compareX;
+    /**
+     * Similarity score between the text elements (0.0 to 1.0).
+     */
+    private double similarityScore;
 
     /**
      * The y-coordinate in the compare document.
@@ -110,6 +114,42 @@ public class TextDifference extends Difference {
      * The text color in the compare document.
      */
     private String compareColor;
+
+    /**
+     * Indicates if this is a text difference
+     */
+    private boolean textDifference;
+
+    /**
+     * Length of the text in the base document
+     */
+    private int baseTextLength;
+
+    /**
+     * Length of the text in the compare document
+     */
+    private int compareTextLength;
+
+    /**
+     * Indicates if this is an addition
+     */
+    private boolean addition;
+
+    /**
+     * Indicates if this is a deletion
+     */
+    private boolean deletion;
+
+    /**
+     * Indicates if this is a modification
+     */
+    private boolean modification;
+
+    private double xdifference;
+
+    private double ydifference;
+    private double widthDifference;
+    private double heightDifference;
 
     /**
      * Get the length of the base text.
@@ -271,5 +311,9 @@ public class TextDifference extends Difference {
      */
     public double getHeightDifference() {
         return compareHeight - baseHeight;
+    }
+    public TextDifference similarityScore(double similarityScore) {
+        this.similarityScore = similarityScore;
+        return this;
     }
 }
