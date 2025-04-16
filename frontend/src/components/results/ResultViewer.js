@@ -48,7 +48,7 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
   const [exportFormat, setExportFormat] = useState('pdf');
   const [exportLoading, setExportLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  const [maxRetries] = useState(10);
+  const [maxRetries] = useState(20);
   
   // Use refs to prevent infinite loops
   const retryCountRef = useRef(retryCount);

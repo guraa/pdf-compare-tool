@@ -9,13 +9,9 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 
 /**
  * Service for storing and retrieving comparison results.
- * This service handles the persistence of comparison results to the file system.
  */
 @Slf4j
 @Service
@@ -25,17 +21,17 @@ public class ComparisonResultStorage {
     private final ObjectMapper objectMapper;
 
     /**
-     * Constructor with storage location.
+     * Constructor with storage location and object mapper.
      *
      * @param storageLocation The location to store comparison results
-     * @param objectMapper The object mapper for serialization/deserialization
+     * @param objectMapper The object mapper for serialization
      */
     public ComparisonResultStorage(
-            @Value("${app.storage.location}") String storageLocation,
+            @Value("${app.storage.location:uploads/results}") String storageLocation,
             ObjectMapper objectMapper) {
         this.storageLocation = storageLocation;
         this.objectMapper = objectMapper;
-        
+
         // Ensure the storage directory exists
         try {
             FileUtils.createDirectories(new File(getResultsDirectory()));
@@ -57,27 +53,14 @@ public class ComparisonResultStorage {
         }
 
         File resultFile = getResultFile(comparisonId);
-        
+
         // Ensure the parent directory exists
         FileUtils.createDirectories(resultFile.getParentFile());
-        
-        // Write the result to a temporary file first
-        File tempFile = FileUtils.createTempFile(resultFile.getParentFile(), "result_", ".tmp");
-        
-        try {
-            // Serialize the result to the temporary file
-            objectMapper.writeValue(tempFile, result);
-            
-            // Move the temporary file to the final location
-            Files.move(tempFile.toPath(), resultFile.toPath(), 
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            
-            log.debug("Stored comparison result for ID: {}", comparisonId);
-        } catch (IOException e) {
-            // Clean up the temporary file if there was an error
-            FileUtils.deleteFile(tempFile);
-            throw e;
-        }
+
+        // Write the result to the file
+        objectMapper.writeValue(resultFile, result);
+
+        log.debug("Stored comparison result for ID: {}", comparisonId);
     }
 
     /**
@@ -92,17 +75,14 @@ public class ComparisonResultStorage {
         }
 
         File resultFile = getResultFile(comparisonId);
-        
+
         if (!FileUtils.isFileValid(resultFile)) {
             log.debug("Comparison result file not found or invalid for ID: {}", comparisonId);
             return null;
         }
-        
+
         try {
-            // Deserialize the result from the file
-            ComparisonResult result = objectMapper.readValue(resultFile, ComparisonResult.class);
-            log.debug("Retrieved comparison result for ID: {}", comparisonId);
-            return result;
+            return objectMapper.readValue(resultFile, ComparisonResult.class);
         } catch (IOException e) {
             log.error("Failed to read comparison result for ID {}: {}", comparisonId, e.getMessage(), e);
             return null;
@@ -121,11 +101,6 @@ public class ComparisonResultStorage {
         }
 
         File resultFile = getResultFile(comparisonId);
-        
-        if (!resultFile.exists()) {
-            return true; // Already deleted
-        }
-        
         return FileUtils.deleteFile(resultFile);
     }
 

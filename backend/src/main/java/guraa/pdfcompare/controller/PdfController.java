@@ -153,29 +153,6 @@ public class PdfController {
         }
     }
 
-    /**
-     * Compare two PDF documents.
-     *
-     * @param request The comparison request
-     * @return The comparison ID
-     */
-    @PostMapping("/compare")
-    public ResponseEntity<?> comparePdfs(@RequestBody CompareRequest request) {
-        try {
-            String comparisonId = pdfService.comparePdfs(
-                    request.getBaseFileId(),
-                    request.getCompareFileId(),
-                    request.getOptions());
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("comparisonId", comparisonId);
-
-            return ResponseEntity.ok().body(response);
-        } catch (Exception e) {
-            log.error("Failed to compare PDFs", e);
-            return ResponseEntity.internalServerError().body(Map.of("error", "Failed to compare PDFs: " + e.getMessage()));
-        }
-    }
 
     /**
      * Upload a PDF file with streaming support for large files.

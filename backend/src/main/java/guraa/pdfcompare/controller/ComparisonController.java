@@ -138,7 +138,7 @@ public class ComparisonController {
             Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
             if (comparisonOpt.isEmpty()) {
                 log.warn("Comparison not found: {}", comparisonId);
-                return ResponseEntity.notFound()
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("status", "NOT_FOUND", "message", "Comparison not found"));
             }
 
@@ -188,8 +188,10 @@ public class ComparisonController {
             Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
             if (comparisonOpt.isEmpty()) {
                 log.warn("Comparison not found: {}", comparisonId);
-                return ResponseEntity.notFound()
-                        .body(Map.of("error", "Comparison not found", "comparisonId", comparisonId));
+                Map<String, Object> response = new HashMap<>();
+                response.put("key1", "value1");
+                response.put("key2", "value2");
+                return ResponseEntity.ok(response);
             }
 
             Comparison comparison = comparisonOpt.get();
@@ -267,7 +269,7 @@ public class ComparisonController {
             // Check if comparison exists
             if (!comparisonRepository.existsById(comparisonId)) {
                 log.warn("Comparison not found: {}", comparisonId);
-                return ResponseEntity.notFound()
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Comparison not found", "comparisonId", comparisonId));
             }
 
@@ -297,7 +299,7 @@ public class ComparisonController {
 
             if (pageDetails == null) {
                 log.warn("Page details not found for comparison: {}, page: {}", comparisonId, pageNumber);
-                return ResponseEntity.notFound()
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Page details not found",
                                 "comparisonId", comparisonId, "pageNumber", pageNumber));
             }
@@ -327,7 +329,7 @@ public class ComparisonController {
             // Check if comparison exists
             if (!comparisonRepository.existsById(comparisonId)) {
                 log.warn("Comparison not found: {}", comparisonId);
-                return ResponseEntity.notFound()
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Comparison not found", "comparisonId", comparisonId));
             }
 
@@ -378,7 +380,7 @@ public class ComparisonController {
             // Check if comparison exists
             if (!comparisonRepository.existsById(comparisonId)) {
                 log.warn("Comparison not found: {}", comparisonId);
-                return ResponseEntity.notFound()
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Comparison not found", "comparisonId", comparisonId));
             }
 
@@ -395,7 +397,7 @@ public class ComparisonController {
             List<DocumentPair> documentPairs = comparisonService.getDocumentPairs(comparisonId);
             if (documentPairs == null || documentPairs.isEmpty() || pairIndex >= documentPairs.size()) {
                 log.warn("Document pair {} not found in comparison {}", pairIndex, comparisonId);
-                return ResponseEntity.notFound()
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Document pair not found",
                                 "comparisonId", comparisonId, "pairIndex", pairIndex));
             }
@@ -403,10 +405,11 @@ public class ComparisonController {
             // Get the result for this document pair
             ComparisonResult result = comparisonService.getDocumentPairResult(comparisonId, pairIndex);
 
+
             if (result == null) {
                 log.warn("Document pair result not found for comparison: {}, pair index: {}",
                         comparisonId, pairIndex);
-                return ResponseEntity.notFound()
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Document pair result not found",
                                 "comparisonId", comparisonId, "pairIndex", pairIndex));
             }
@@ -467,7 +470,7 @@ public class ComparisonController {
             List<DocumentPair> documentPairs = comparisonService.getDocumentPairs(comparisonId);
             if (documentPairs == null || documentPairs.isEmpty() || pairIndex >= documentPairs.size()) {
                 log.warn("Document pair {} not found in comparison {}", pairIndex, comparisonId);
-                return ResponseEntity.notFound()
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Document pair not found",
                                 "comparisonId", comparisonId, "pairIndex", pairIndex));
             }
@@ -480,7 +483,7 @@ public class ComparisonController {
             if (pageNumber < 1 || pageNumber > maxPageCount) {
                 log.warn("Page {} not found in document pair {} of comparison {}",
                         pageNumber, pairIndex, comparisonId);
-                return ResponseEntity.notFound()
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Page not found in document pair",
                                 "maxPage", maxPageCount,
                                 "comparisonId", comparisonId,
@@ -504,7 +507,7 @@ public class ComparisonController {
 
                 log.warn("Page details not found for page {} of document pair {} in comparison {}",
                         pageNumber, pairIndex, comparisonId);
-                return ResponseEntity.notFound()
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Page details not found",
                                 "comparisonId", comparisonId,
                                 "pairIndex", pairIndex,
@@ -540,7 +543,7 @@ public class ComparisonController {
             // Check if comparison exists
             if (!comparisonRepository.existsById(comparisonId)) {
                 log.warn("Comparison not found: {}", comparisonId);
-                return ResponseEntity.notFound()
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Comparison not found", "comparisonId", comparisonId));
             }
 

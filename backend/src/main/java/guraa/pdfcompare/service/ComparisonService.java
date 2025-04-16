@@ -17,8 +17,6 @@ import java.util.concurrent.ExecutorService;
 
 /**
  * Service for managing PDF comparisons.
- * This service provides methods for creating, retrieving, and managing
- * comparisons between PDF documents.
  */
 @Slf4j
 @Service
@@ -29,15 +27,9 @@ public class ComparisonService {
     private final PDFComparisonEngine comparisonEngine;
     private final ExecutorService executorService;
     private final ComparisonResultStorage resultStorage;
-    
+
     /**
-     * Constructor with qualifier to specify which executor service to use.
-     * 
-     * @param pdfRepository The PDF repository
-     * @param comparisonRepository The comparison repository
-     * @param comparisonEngine The PDF comparison engine
-     * @param executorService The executor service for comparison operations
-     * @param resultStorage The comparison result storage
+     * Constructor with dependencies.
      */
     public ComparisonService(
             PdfRepository pdfRepository,
@@ -86,189 +78,65 @@ public class ComparisonService {
 
         // Start the comparison in the background
         final String comparisonId = comparison.getId();
-        comparisonTasks.computeIfAbsent(comparisonId, key -> 
+        comparisonTasks.computeIfAbsent(comparisonId, key ->
             CompletableFuture.supplyAsync(() -> {
+                Comparison comparisonToUpdate = null;
                 try {
-                    // Update the status to "processing"
-                    Comparison updatedComparison = comparisonRepository.findById(comparisonId)
-                            .orElseThrow(() -> new IllegalArgumentException("Comparison not found: " + comparisonId));
-                    updatedComparison.setStatus("processing");
-                    comparisonRepository.save(updatedComparison);
+                    // Fetch the comparison entity once
+                    comparisonToUpdate = comparisonRepository.findById(comparisonId)
+                            .orElseThrow(() -> new IllegalStateException("Comparison disappeared: " + comparisonId));
 
-                    // Perform the comparison
+                    // Set status to PROCESSING and save
+                    comparisonToUpdate.setStatus("processing"); // Use String setter
+                    comparisonToUpdate.preUpdate(); // Manually trigger update timestamp
+                    comparisonRepository.save(comparisonToUpdate);
+                    log.info("Comparison {} status set to PROCESSING", comparisonId);
+
+                    // Perform the actual comparison
                     ComparisonResult result = comparisonEngine.compareDocuments(baseDocument, compareDocument);
 
-                    // Update the status to "completed"
-                    updatedComparison = comparisonRepository.findById(comparisonId)
-                            .orElseThrow(() -> new IllegalArgumentException("Comparison not found: " + comparisonId));
-                    updatedComparison.setStatus("completed");
-                    
-                    // Store the result in the file system
-                    try {
-                        resultStorage.storeResult(comparisonId, result);
-                        log.debug("Stored comparison result for ID: {}", comparisonId);
-                    } catch (IOException e) {
-                        log.error("Failed to store comparison result for ID {}: {}", comparisonId, e.getMessage(), e);
-                        // Continue even if storage fails, as we can still return the result in memory
-                    }
-                    
-                    // Set the result in memory for immediate use
-                    updatedComparison.setResult(result);
-                    comparisonRepository.save(updatedComparison);
+                    // Store the result FIRST. If this fails, we go to the catch block.
+                    resultStorage.storeResult(comparisonId, result);
+                    log.info("Stored comparison result for ID: {}", comparisonId);
 
-                    return result;
+                    // If storage succeeded, update status to COMPLETED and save
+                    comparisonToUpdate.setStatus("completed"); // Use String setter
+                    comparisonToUpdate.setErrorMessage(null); // Clear any previous error
+                    comparisonToUpdate.preUpdate(); // Manually trigger update timestamp
+                    comparisonRepository.save(comparisonToUpdate);
+                    log.info("Comparison {} status set to COMPLETED", comparisonId);
+
+                    return result; // Return the result object (though it's not directly used by caller)
+
                 } catch (Exception e) {
-                    // Update the status to "failed"
-                    try {
-                        Comparison updatedComparison = comparisonRepository.findById(comparisonId)
-                                .orElseThrow(() -> new IllegalArgumentException("Comparison not found: " + comparisonId));
-                        updatedComparison.setStatus("failed");
-                        updatedComparison.setErrorMessage(e.getMessage());
-                        comparisonRepository.save(updatedComparison);
-                    } catch (Exception ex) {
-                        log.error("Error updating comparison status: {}", ex.getMessage(), ex);
-                    }
+                    log.error("Error during comparison process for ID {}: {}", comparisonId, e.getMessage(), e);
 
-                    log.error("Error comparing documents: {}", e.getMessage(), e);
-                    throw new RuntimeException("Error comparing documents", e);
+                    // Attempt to update status to FAILED
+                    if (comparisonToUpdate != null) {
+                        try {
+                            // Re-fetch to ensure we have the latest version before updating failure status
+                            Comparison finalComparisonState = comparisonRepository.findById(comparisonId)
+                                    .orElse(comparisonToUpdate); // Fallback to potentially stale object if fetch fails
+
+                            finalComparisonState.setStatus("failed"); // Use String setter
+                            finalComparisonState.setErrorMessage(e.getMessage());
+                            finalComparisonState.preUpdate(); // Manually trigger update timestamp
+                            comparisonRepository.save(finalComparisonState);
+                            log.info("Comparison {} status set to FAILED", comparisonId);
+                        } catch (Exception updateEx) {
+                            log.error("CRITICAL: Failed to update comparison {} status to FAILED: {}", comparisonId, updateEx.getMessage(), updateEx);
+                        }
+                    } else {
+                         log.error("CRITICAL: comparisonToUpdate was null when trying to set FAILED status for ID {}", comparisonId);
+                    }
+                    // Propagate exception to mark CompletableFuture as failed
+                    throw new RuntimeException("Comparison failed for ID " + comparisonId, e);
                 }
             }, executorService)
         );
 
-        return comparison;
-    }
-
-    /**
-     * Get a comparison by ID.
-     *
-     * @param id The comparison ID
-     * @return The comparison
-     */
-    public Optional<Comparison> getComparison(String id) {
-        return comparisonRepository.findById(id);
-    }
-
-    /**
-     * Get all comparisons.
-     *
-     * @return A list of all comparisons
-     */
-    public List<Comparison> getAllComparisons() {
-        return comparisonRepository.findAll();
-    }
-
-    /**
-     * Get the status of a comparison.
-     *
-     * @param id The comparison ID
-     * @return The comparison status
-     */
-    public String getComparisonStatus(String id) {
-        return comparisonRepository.findById(id)
-                .map(Comparison::getStatusAsString)
-                .orElse("not_found");
-    }
-
-    /**
-     * Get the result of a comparison.
-     *
-     * @param id The comparison ID
-     * @return The comparison result, or null if not found
-     */
-    public ComparisonResult getComparisonResult(String id) {
-        // First try to get the result from the comparison object in memory
-        ComparisonResult resultFromMemory = comparisonRepository.findById(id)
-                .map(Comparison::getResult)
-                .orElse(null);
-        
-        // If the result is not in memory, try to get it from the file system
-        if (resultFromMemory == null) {
-            log.debug("Comparison result not found in memory for ID: {}, trying file storage", id);
-            final ComparisonResult resultFromStorage = resultStorage.retrieveResult(id);
-            
-            // If we found the result in the file system, update the comparison object in memory
-            if (resultFromStorage != null) {
-                log.debug("Retrieved comparison result from file storage for ID: {}", id);
-                comparisonRepository.findById(id).ifPresent(comparison -> {
-                    comparison.setResult(resultFromStorage);
-                    // No need to save as we're just updating the transient field
-                });
-                
-                return resultFromStorage;
-            }
-            
-            return null;
-        }
-        
-        return resultFromMemory;
-    }
-
-    /**
-     * Delete a comparison.
-     *
-     * @param id The comparison ID
-     */
-    public void deleteComparison(String id) {
-        // Delete the comparison result from the file system
-        try {
-            if (resultStorage.resultExists(id)) {
-                boolean deleted = resultStorage.deleteResult(id);
-                if (deleted) {
-                    log.debug("Deleted comparison result file for ID: {}", id);
-                } else {
-                    log.warn("Failed to delete comparison result file for ID: {}", id);
-                }
-            }
-        } catch (Exception e) {
-            log.error("Error deleting comparison result file for ID {}: {}", id, e.getMessage(), e);
-            // Continue with deletion even if file deletion fails
-        }
-        
-        // Delete the comparison from the database
-        comparisonRepository.deleteById(id);
-    }
-
-    /**
-     * Cancel a comparison.
-     *
-     * @param id The comparison ID
-     * @return true if the comparison was cancelled, false otherwise
-     */
-    public boolean cancelComparison(String id) {
-        // Get the comparison task
-        CompletableFuture<ComparisonResult> task = comparisonTasks.get(id);
-
-        if (task != null && !task.isDone()) {
-            // Cancel the task
-            boolean cancelled = task.cancel(true);
-
-            if (cancelled) {
-                // Delete any existing result file
-                try {
-                    if (resultStorage.resultExists(id)) {
-                        boolean deleted = resultStorage.deleteResult(id);
-                        if (deleted) {
-                            log.debug("Deleted comparison result file for cancelled comparison ID: {}", id);
-                        } else {
-                            log.warn("Failed to delete comparison result file for cancelled comparison ID: {}", id);
-                        }
-                    }
-                } catch (Exception e) {
-                    log.error("Error deleting comparison result file for cancelled comparison ID {}: {}", id, e.getMessage(), e);
-                    // Continue with cancellation even if file deletion fails
-                }
-                
-                // Update the status to "cancelled"
-                comparisonRepository.findById(id).ifPresent(comparison -> {
-                    comparison.setStatus("cancelled");
-                    comparisonRepository.save(comparison);
-                });
-            }
-
-            return cancelled;
-        }
-
-        return false;
+        // Return the initially saved comparison object (status PENDING)
+        return comparison; // Note: The caller gets the PENDING object, status updates happen async
     }
 
     /**
@@ -296,6 +164,49 @@ public class ComparisonService {
     }
 
     /**
+     * Get the status of a comparison.
+     *
+     * @param id The comparison ID
+     * @return The comparison status
+     */
+    public String getComparisonStatus(String id) {
+        return comparisonRepository.findById(id)
+                .map(Comparison::getStatusAsString)
+                .orElse("not_found");
+    }
+
+    /**
+     * Get the result of a comparison.
+     *
+     * @param id The comparison ID
+     * @return The comparison result, or null if not found or not completed/failed
+     */
+    public ComparisonResult getComparisonResult(String id) {
+        Optional<Comparison> comparisonOpt = comparisonRepository.findById(id);
+
+        if (comparisonOpt.isEmpty()) {
+            log.warn("Comparison not found when retrieving result for ID: {}", id);
+            return null;
+        }
+
+        Comparison comparison = comparisonOpt.get();
+
+        // Only retrieve from storage if the status is COMPLETED
+        if (comparison.getStatus() == Comparison.ComparisonStatus.COMPLETED) {
+             log.debug("Comparison {} is COMPLETED, retrieving result from storage.", id);
+             ComparisonResult result = resultStorage.retrieveResult(id);
+             if (result == null) {
+                 log.error("Comparison {} is COMPLETED but result is missing from storage!", id);
+                 // Optionally, update status back to FAILED here if result is unexpectedly missing
+             }
+             return result;
+        } else {
+            log.debug("Comparison {} status is {}, not retrieving result from storage.", id, comparison.getStatus());
+            return null; // Don't return result if not completed
+        }
+    }
+
+    /**
      * Get page details for a specific page in a comparison.
      *
      * @param comparisonId The comparison ID
@@ -311,20 +222,12 @@ public class ComparisonService {
 
         // In a real implementation, this would extract the page details from the result
         // For now, we'll just create a dummy page details object
-        PageDetails pageDetails = PageDetails.builder()
+        return PageDetails.builder()
                 .pageNumber(pageNumber)
                 .pageId(UUID.randomUUID().toString())
                 .pageExistsInBase(true)
                 .pageExistsInCompare(true)
                 .build();
-
-        // Apply filters if any
-        if (filters != null && !filters.isEmpty()) {
-            // Filter the differences based on the provided filters
-            // This is just a placeholder for the actual filtering logic
-        }
-
-        return pageDetails;
     }
 
     /**
@@ -345,21 +248,37 @@ public class ComparisonService {
         DocumentPair pair = DocumentPair.builder()
                 .pairIndex(0)
                 .matched(true)
-                .baseStartPage(1)
-                .baseEndPage(result.getPagePairs().size())
-                .basePageCount(result.getPagePairs().size())
-                .compareStartPage(1)
-                .compareEndPage(result.getPagePairs().size())
-                .comparePageCount(result.getPagePairs().size())
-                .hasBaseDocument(true)
-                .hasCompareDocument(true)
-                .similarityScore(0.85)
                 .build();
 
         pairs.add(pair);
         return pairs;
     }
 
+    /**
+     * Get page details for a specific page in a document pair.
+     *
+     * @param comparisonId The comparison ID
+     * @param pairIndex The pair index
+     * @param pageNumber The page number
+     * @param filters Filters to apply to the results
+     * @return The page details, or null if not found
+     */
+    public PageDetails getDocumentPairPageDetails(
+            String comparisonId, int pairIndex, int pageNumber, Map<String, Object> filters) {
+        ComparisonResult result = getComparisonResult(comparisonId);
+        if (result == null) {
+            return null;
+        }
+
+        // In a real implementation, this would extract the page details from the result
+        // For now, we'll just create a dummy page details object
+        return PageDetails.builder()
+                .pageNumber(pageNumber)
+                .pageId(UUID.randomUUID().toString())
+                .pageExistsInBase(true)
+                .pageExistsInCompare(true)
+                .build();
+    }
     /**
      * Get the comparison result for a specific document pair.
      *
@@ -381,50 +300,5 @@ public class ComparisonService {
         // In a real implementation, this would extract the result for the specific pair
         // For now, we'll just return the overall result
         return result;
-    }
-
-    /**
-     * Get page details for a specific page in a document pair.
-     *
-     * @param comparisonId The comparison ID
-     * @param pairIndex The pair index
-     * @param pageNumber The page number
-     * @param filters Filters to apply to the results
-     * @return The page details, or null if not found
-     */
-    public PageDetails getDocumentPairPageDetails(String comparisonId, int pairIndex, int pageNumber, Map<String, Object> filters) {
-        ComparisonResult result = getComparisonResult(comparisonId);
-        if (result == null) {
-            return null;
-        }
-
-        List<DocumentPair> pairs = getDocumentPairs(comparisonId);
-        if (pairs == null || pairIndex >= pairs.size()) {
-            return null;
-        }
-
-        DocumentPair pair = pairs.get(pairIndex);
-
-        // Check if the page is within the range for this pair
-        if (pageNumber < 1 || pageNumber > Math.max(pair.getBasePageCount(), pair.getComparePageCount())) {
-            return null;
-        }
-
-        // In a real implementation, this would extract the page details from the result for the specific pair
-        // For now, we'll just create a dummy page details object
-        PageDetails pageDetails = PageDetails.builder()
-                .pageNumber(pageNumber)
-                .pageId(UUID.randomUUID().toString())
-                .pageExistsInBase(pageNumber <= pair.getBasePageCount())
-                .pageExistsInCompare(pageNumber <= pair.getComparePageCount())
-                .build();
-
-        // Apply filters if any
-        if (filters != null && !filters.isEmpty()) {
-            // Filter the differences based on the provided filters
-            // This is just a placeholder for the actual filtering logic
-        }
-
-        return pageDetails;
     }
 }
