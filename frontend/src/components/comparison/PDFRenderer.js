@@ -33,7 +33,7 @@ const PDFRenderer = ({
   const [scaleFactor, setScaleFactor] = useState(1);
   const [containerOffset, setContainerOffset] = useState({ x: 0, y: 0 });
   const [adjustedCoordinates, setAdjustedCoordinates] = useState([]);
-  const [debugMode, setDebugMode] = useState(true); // Set to true to show coordinate values
+  const [debugMode, setDebugMode] = useState(false); // Set to false by default in production
 
   // Refs
   const imageRef = useRef(null);
@@ -110,7 +110,7 @@ const PDFRenderer = ({
     if (!differences || !scaleFactor || !canvasRef.current) return;
     
     // Log original differences for debugging
-    if (differences.length > 0) {
+    if (differences.length > 0 && debugMode) {
       console.log(`Processing ${differences.length} differences for rendering`);
       console.log('Sample original difference:', differences[0]);
     }
@@ -121,41 +121,71 @@ const PDFRenderer = ({
     // Transform all difference coordinates
     const transformed = differences.map(diff => {
       // Skip if missing key properties
-      if (!diff.id) return null;
+      if (!diff) return null;
       
-      // Get coordinates based on the available format
-      let x, y, width, height, id, type, changeType, text;
+      // Create an ID if one doesn't exist
+      const id = diff.id || `diff-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Get coordinates based on the format
+      let x, y, width, height, type, changeType, text, baseText, compareText;
       let originalX, originalY, originalWidth, originalHeight;
       
-      if (diff.x !== undefined && diff.y !== undefined) {
-        // Format with direct x,y coordinates
+      // Handle the new format
+      if (diff.baseX !== undefined || diff.compareX !== undefined) {
+        // Use base coordinates if this is base document, otherwise use compare
+        if (isBaseDocument) {
+          originalX = diff.baseX || 0;
+          originalY = diff.baseY || 0;
+          originalWidth = diff.baseWidth || 50;
+          originalHeight = diff.baseHeight || 20;
+          text = diff.baseText || '';
+        } else {
+          originalX = diff.compareX || 0;
+          originalY = diff.compareY || 0;
+          originalWidth = diff.compareWidth || 50;
+          originalHeight = diff.compareHeight || 20;
+          text = diff.compareText || '';
+        }
+        
+        baseText = diff.baseText;
+        compareText = diff.compareText;
+      } 
+      // Handle older format
+      else if (diff.x !== undefined && diff.y !== undefined) {
         originalX = diff.x;
         originalY = diff.y;
         originalWidth = diff.width || 10;
         originalHeight = diff.height || 10;
-      } else if (diff.position && diff.bounds) {
-        // Format with position and bounds objects
+        text = diff.text || '';
+      } 
+      // Handle position/bounds format
+      else if (diff.position && diff.bounds) {
         originalX = diff.position.x;
         originalY = diff.position.y;
         originalWidth = diff.bounds.width || 10;
         originalHeight = diff.bounds.height || 10;
-      } else {
-        return null; // Skip if missing coordinate data
+        text = diff.text || '';
+      } 
+      // If we don't have coordinates, create default ones
+      else {
+        originalX = 50;
+        originalY = 50;
+        originalWidth = 100;
+        originalHeight = 30;
+        text = diff.baseText || diff.compareText || diff.text || '';
       }
       
       // Keep other important properties
-      id = diff.id;
       type = diff.type || 'text';
       changeType = diff.changeType;
-      text = diff.text || diff.baseText || diff.compareText;
       
       // FIXED COORDINATE TRANSFORMATION:
       
       // 1. Apply scaling to get pixel dimensions
       const scaledX = originalX * scaleFactor * zoom;
       const scaledY = originalY * scaleFactor * zoom;
-      const scaledWidth = originalWidth * scaleFactor * zoom;
-      const scaledHeight = originalHeight * scaleFactor * zoom;
+      const scaledWidth = Math.max(originalWidth * scaleFactor * zoom, 50); // Ensure minimum size for visibility
+      const scaledHeight = Math.max(originalHeight * scaleFactor * zoom, 20);
       
       // 2. Apply container offset to position correctly within the view
       let displayX = scaledX + containerOffset.x;
@@ -176,6 +206,8 @@ const PDFRenderer = ({
         type,
         changeType,
         text,
+        baseText,
+        compareText,
         // Display coordinates (for rendering)
         x: displayX,
         y: displayY,
@@ -191,12 +223,12 @@ const PDFRenderer = ({
       };
     }).filter(Boolean); // Remove any null items
     
-    if (transformed.length > 0) {
+    if (transformed.length > 0 && debugMode) {
       console.log('Transformed coordinates:', transformed[0]);
     }
     
     setAdjustedCoordinates(transformed);
-  }, [differences, scaleFactor, zoom, containerOffset, flipY, dimensions]);
+  }, [differences, scaleFactor, zoom, containerOffset, flipY, dimensions, isBaseDocument, debugMode]);
 
   // Draw highlights on canvas
   useEffect(() => {
@@ -256,6 +288,9 @@ const PDFRenderer = ({
       } else if (diff.changeType === 'deleted') {
         fillColor = 'rgba(244, 67, 54, 0.3)'; // Red for deleted
         strokeColor = 'rgba(244, 67, 54, 0.8)';
+      } else if (diff.changeType === 'modified') {
+        fillColor = 'rgba(255, 152, 0, 0.3)'; // Orange for modified
+        strokeColor = 'rgba(255, 152, 0, 0.8)';
       }
       
       // Draw the highlight with vibrant color
@@ -461,25 +496,27 @@ const PDFRenderer = ({
   return (
     <div className="pdf-renderer" ref={containerRef}>
       {/* Debug mode toggle */}
-      <button 
-        className="debug-toggle"
-        onClick={toggleDebugMode}
-        style={{
-          position: 'absolute',
-          top: '5px',
-          right: '5px',
-          zIndex: 20,
-          background: debugMode ? 'rgba(76, 175, 80, 0.7)' : 'rgba(0, 0, 0, 0.5)',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          padding: '4px 8px',
-          fontSize: '12px',
-          cursor: 'pointer'
-        }}
-      >
-        {debugMode ? 'Debug: ON' : 'Debug: OFF'}
-      </button>
+      {debugMode && (
+        <button 
+          className="debug-toggle"
+          onClick={toggleDebugMode}
+          style={{
+            position: 'absolute',
+            top: '5px',
+            right: '5px',
+            zIndex: 20,
+            background: debugMode ? 'rgba(76, 175, 80, 0.7)' : 'rgba(0, 0, 0, 0.5)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '4px 8px',
+            fontSize: '12px',
+            cursor: 'pointer'
+          }}
+        >
+          {debugMode ? 'Debug: ON' : 'Debug: OFF'}
+        </button>
+      )}
       
       {/* Debug info */}
       {debugMode && (

@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import { getComparisonResult, generateReport, downloadBlob } from '../../services/api';
 import ComparisonSummary from './ComparisonSummary';
-import SideBySideView from '../comparison/SideBySideView';
-import DifferenceList from '../comparison/DifferenceList';
+import SideBySideView from '../comparison/SideBySideView'; // This will now use the simplified version
 import Spinner from '../common/Spinner';
 import './ResultViewer.css';
 
-// Separate error component for better organization
-const ResultViewerError = ({ error, onRetry, onNewComparison }) => {
+// Error component
+const ResultViewerError = memo(({ error, onRetry, onNewComparison }) => {
   return (
     <div className="result-viewer-error">
       <div className="error-icon">
@@ -31,35 +30,43 @@ const ResultViewerError = ({ error, onRetry, onNewComparison }) => {
       </div>
     </div>
   );
-};
+});
 
-const ResultViewer = ({ comparisonId, onNewComparison }) => {
-  const { 
-    state, 
-    setComparisonResult, 
-    setLoading, 
-    setError, 
-    setSelectedPage,
-    setSelectedDifference,
-    updateFilters 
-  } = useComparison();
+// Memoized ComparisonSummary
+const MemoizedSummary = memo(ComparisonSummary);
+
+// Main ResultViewer component - optimized to prevent render loops
+const ResultViewer = memo(({ comparisonId, onNewComparison }) => {
+  console.log("ResultViewer rendering with comparisonId:", comparisonId);
   
+  // State with initializers to prevent default value issues
   const [activeTab, setActiveTab] = useState('overview');
   const [exportFormat, setExportFormat] = useState('pdf');
   const [exportLoading, setExportLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [maxRetries] = useState(20);
   
-  // Use refs to prevent infinite loops
+  // Use refs for values we need to track without triggering rerenders
   const retryCountRef = useRef(retryCount);
   const timerRef = useRef(null);
+  const fetchingRef = useRef(false);
   
-  // Update ref when state changes
+  // Context
+  const {
+    state,
+    setComparisonResult,
+    setLoading,
+    setError,
+    setSelectedPage,
+    setSelectedDifference
+  } = useComparison();
+
+  // Update ref when retryCount changes
   useEffect(() => {
     retryCountRef.current = retryCount;
   }, [retryCount]);
 
-  // Cleanup any pending timers when component unmounts
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) {
@@ -68,11 +75,12 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
     };
   }, []);
 
-  // Function to fetch comparison results
+  // Fetch comparison results - optimized to prevent loops
   const fetchResults = async () => {
-    if (!comparisonId) return;
+    if (!comparisonId || fetchingRef.current) return;
     
     try {
+      fetchingRef.current = true;
       setLoading(true);
       setError(null);
       
@@ -86,6 +94,7 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
         setComparisonResult(result);
         setLoading(false);
         setRetryCount(0);
+        fetchingRef.current = false;
         return;
       } else {
         throw new Error("Empty result received from server");
@@ -94,10 +103,9 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
       console.error('Error fetching comparison results:', err);
       
       // If still processing and under max retries
-      if (err.message.includes("still processing") && retryCountRef.current < maxRetries) {
-        // Increase the delay with each retry (exponential backoff)
+      if (err.message && err.message.includes("still processing") && retryCountRef.current < maxRetries) {
+        // Exponential backoff - increase delay with each retry
         const delay = Math.min(2000 * Math.pow(1.5, retryCountRef.current), 15000);
-      
         
         setError(`Comparison result not available yet. Retrying in ${Math.round(delay/1000)} seconds...`);
         setLoading(false);
@@ -116,37 +124,29 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
         setError(err.message || 'Failed to load comparison results after multiple attempts.');
         setLoading(false);
       }
+      
+      fetchingRef.current = false;
     }
   };
 
-  // Effect for retrying
+  // Effect to trigger retries
   useEffect(() => {
-    // Only run fetch if we're retrying or starting
     if (retryCount > 0 || (!state.comparisonResult && !state.error)) {
       fetchResults();
     }
   }, [retryCount, comparisonId]);
 
-  // Initial fetch when component mounts
+  // Initial fetch
   useEffect(() => {
     if (comparisonId) {
-      // Reset state for new comparison
       setRetryCount(0);
       setError(null);
       setComparisonResult(null);
-      
-      // Start fetching
       fetchResults();
     }
-    
-    // Cleanup function
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-    };
-  }, [comparisonId]); // Only depend on comparisonId
+  }, [comparisonId]);
 
+  // Handle export with memoization
   const handleExport = async () => {
     try {
       setExportLoading(true);
@@ -168,6 +168,7 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
     }
   };
 
+  // Select difference with memoization 
   const handleDifferenceClick = (diffInfo) => {
     // Set the selected page and difference
     if (diffInfo.page) {
@@ -177,10 +178,6 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
     
     // Switch to side-by-side view
     setActiveTab('sideBySide');
-  };
-
-  const handleFilterChange = (filters) => {
-    updateFilters(filters);
   };
 
   // Initial loading state
@@ -282,40 +279,24 @@ const ResultViewer = ({ comparisonId, onNewComparison }) => {
         >
           Side by Side
         </button>
-        <button 
-          className={`tab-button ${activeTab === 'differences' ? 'active' : ''}`}
-          onClick={() => setActiveTab('differences')}
-        >
-          Differences
-        </button>
       </div>
       
       <div className="result-content">
-  {activeTab === 'overview' && (
-    <ComparisonSummary 
-      result={state.comparisonResult}
-      onDifferenceClick={handleDifferenceClick}
-    />
-  )}
-  
-  {activeTab === 'sideBySide' && (
-    
-      <SideBySideView 
-        comparisonId={comparisonId}
-      />
-
-  )}
-  
-  {activeTab === 'differences' && (
-    <DifferenceList 
-      result={state.comparisonResult}
-      onDifferenceClick={handleDifferenceClick}
-      onFilterChange={handleFilterChange}
-    />
-  )}
-</div>
+        {activeTab === 'overview' && (
+          <MemoizedSummary 
+            result={state.comparisonResult}
+            onDifferenceClick={handleDifferenceClick}
+          />
+        )}
+        
+        {activeTab === 'sideBySide' && (
+          <SideBySideView 
+            comparisonId={comparisonId}
+          />
+        )}
+      </div>
     </div>
   );
-};
+});
 
 export default ResultViewer;

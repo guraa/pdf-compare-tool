@@ -1,20 +1,25 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
 import DocumentMatchingView from './DocumentMatchingView';
 import PDFRenderer from './PDFRenderer';
 import DifferenceList from './DifferenceList';
 import Spinner from '../common/Spinner';
 import ZoomControls from './ZoomControls';
-import { getDocumentPairs, getDocumentPageDetails } from '../../services/api';
+import { getDocumentPairs, getComparisonResult } from '../../services/api';
 import './SideBySideView.css';
 
-const SideBySideView = ({ comparisonId }) => {
-  // Refs
-  const containerRef = useRef(null);
+// Create a memoized DifferenceList to prevent unnecessary rerenders
+const MemoizedDifferenceList = memo(DifferenceList);
+
+// Simplified, highly optimized SideBySideView
+const SideBySideView = React.memo(({ comparisonId }) => {
+  console.log("SideBySideView initial render with comparisonId:", comparisonId);
+
+  // Refs to prevent dependency issues
+  const initialFetchDoneRef = useRef(false);
+  const comparisonDataRef = useRef(null);
   const scrollContainerRef = useRef(null);
-  const fetchingRef = useRef(false);
-  const didInitialFetchRef = useRef(false);
-  const visibleDifferencesRef = useRef([]);
+  const visiblePairIndicesRef = useRef([]);
 
   // Context
   const {
@@ -23,7 +28,8 @@ const SideBySideView = ({ comparisonId }) => {
     setLoading,
     setDocumentPairs,
     setSelectedDocumentPairIndex,
-    setSelectedDifference
+    setSelectedDifference,
+    setComparisonResult
   } = useComparison();
 
   // State
@@ -33,268 +39,220 @@ const SideBySideView = ({ comparisonId }) => {
   const [highlightMode, setHighlightMode] = useState('all');
   const [showDifferencePanel, setShowDifferencePanel] = useState(true);
   const [zoom, setZoom] = useState(0.750);
-  const [pageMetadata, setPageMetadata] = useState({});
-  const [visiblePairIndices, setVisiblePairIndices] = useState([]);
-  const [isScrolling, setIsScrolling] = useState(false);
   const [loadingPairs, setLoadingPairs] = useState([]);
+  const [viewKey, setViewKey] = useState(0); // Used to force re-render when needed
   
-  // Basic coordinate adjustment parameters
+  // Calibration parameters
   const adjustmentParams = {
     xOffset: 0,
     yOffset: 0,
     scaleAdjustment: 1.0,
     flipY: true
   };
-  
-  // Get all document pairs from context
-  const documentPairs = state.documentPairs || [];
 
-  // CRITICAL FIX: Only fetch document pairs once on initial render
+  // One-time fetch for comparison data
   useEffect(() => {
-    // Skip if no comparison ID or if we've already fetched
-    if (!comparisonId || didInitialFetchRef.current) {
-      return;
-    }
+    if (!comparisonId || initialFetchDoneRef.current) return;
 
-    const fetchDocumentPairs = async () => {
-      // Set our flag immediately to prevent concurrent fetches
-      didInitialFetchRef.current = true;
-      
-      // Skip if already fetching
-      if (fetchingRef.current) return;
-      
+    const fetchData = async () => {
       try {
-        fetchingRef.current = true;
+        initialFetchDoneRef.current = true;
         setLoading(true);
-        console.log("Fetching document pairs...");
+
+        console.log("Fetching comparison data...");
+        const result = await getComparisonResult(comparisonId);
         
-        const pairs = await getDocumentPairs(comparisonId);
-        console.log("Received document pairs:", pairs);
-        
-        if (pairs && pairs.length > 0) {
-          // Store in context
-          setDocumentPairs(pairs);
-          
-          // Auto-select the first matched pair
-          const matchedPairIndex = pairs.findIndex(pair => pair.matched);
-          const initialIndex = matchedPairIndex >= 0 ? matchedPairIndex : 0;
-          
-          setSelectedDocumentPairIndex(initialIndex);
-          
-          if (matchedPairIndex >= 0) {
-            setActiveView('comparison');
-            
-            // Initialize with all matched pairs visible
-            const matched = pairs.filter(pair => pair.matched);
-            setVisiblePairIndices(matched.map((_, index) => index));
+        if (result) {
+          console.log("Comparison data received:", result);
+          comparisonDataRef.current = result;
+          setComparisonResult(result);
+
+          // Process differences from the data
+          if (result.differencesByPage) {
+            const processedDifferences = processComparisonData(result);
+            setPairDifferences(processedDifferences);
           }
-        }
-      } catch (err) {
-        console.error("Error fetching document pairs:", err);
-        setError("Failed to load document pairs: " + err.message);
-        
-        // Reset flag on serious error so we can retry
-        if (err.message && (
-          err.message.includes("Service temporarily unavailable") ||
-          err.message.includes("Network Error") ||
-          err.message.includes("Circuit breaker is open")
-        )) {
-          didInitialFetchRef.current = false;
-        }
-      } finally {
-        setLoading(false);
-        fetchingRef.current = false;
-      }
-    };
 
-    fetchDocumentPairs();
-  }, [comparisonId]); // Only depend on comparisonId
-
-  // Effect to fetch differences for visible pairs
-  useEffect(() => {
-    const fetchVisiblePairsDifferences = async () => {
-      // Skip if no visible pairs or already fetching
-      if (visiblePairIndices.length === 0 || fetchingRef.current || activeView !== 'comparison') {
-        return;
-      }
-      
-      fetchingRef.current = true;
-      
-      try {
-        // Keep track of loading pairs
-        setLoadingPairs(visiblePairIndices);
-        
-        // For each visible pair, fetch differences if not already loaded
-        for (const pairIndex of visiblePairIndices) {
-          if (!pairDifferences[pairIndex] && documentPairs[pairIndex]?.matched) {
-            console.log(`Fetching differences for pair ${pairIndex}...`);
+          // Also fetch document pairs to get proper metadata
+          const pairs = await getDocumentPairs(comparisonId);
+          
+          if (pairs && pairs.length > 0) {
+            console.log("Document pairs received:", pairs);
+            setDocumentPairs(pairs);
             
-            try {
-              const details = await getDocumentPageDetails(
-                comparisonId,
-                pairIndex,
-                1, // Start with page 1
-                state.filters
-              );
-              
-              if (details) {
-                // Save differences for this pair
-                setPairDifferences(prev => ({
-                  ...prev,
-                  [pairIndex]: {
-                    baseDifferences: details.baseDifferences || [],
-                    compareDifferences: details.compareDifferences || [],
-                    baseWidth: details.baseWidth,
-                    baseHeight: details.baseHeight,
-                    compareWidth: details.compareWidth,
-                    compareHeight: details.compareHeight
-                  }
-                }));
-                
-                // Update page metadata
-                setPageMetadata(prev => ({
-                  ...prev,
-                  [pairIndex]: {
-                    baseWidth: details.baseWidth,
-                    baseHeight: details.baseHeight,
-                    compareWidth: details.compareWidth,
-                    compareHeight: details.compareHeight
-                  }
-                }));
-              }
-            } catch (err) {
-              console.error(`Error fetching differences for pair ${pairIndex}:`, err);
+            // Auto-select the first matched pair
+            const matchedPairIndex = pairs.findIndex(pair => pair.matched);
+            const initialIndex = matchedPairIndex >= 0 ? matchedPairIndex : 0;
+            
+            setSelectedDocumentPairIndex(initialIndex);
+            
+            if (matchedPairIndex >= 0) {
+              setActiveView('comparison');
+              visiblePairIndicesRef.current = [matchedPairIndex];
+              updateVisibleDifferences();
             }
           }
         }
-        
-        // Update visible differences
-        updateVisibleDifferences();
+      } catch (err) {
+        console.error("Error fetching comparison data:", err);
+        setError("Failed to load comparison: " + err.message);
       } finally {
-        fetchingRef.current = false;
-        setLoadingPairs([]);
+        setLoading(false);
       }
     };
-    
-    fetchVisiblePairsDifferences();
-  }, [visiblePairIndices, activeView, comparisonId]);
 
-  // Update visible differences when pairDifferences changes
-  useEffect(() => {
-    updateVisibleDifferences();
-  }, [pairDifferences]);
+    fetchData();
+  }, [comparisonId]); // Only dependency is comparisonId
 
-  // Function to update visible differences
-  const updateVisibleDifferences = useCallback(() => {
-    // Collect all differences from visible pairs
-    let allVisibleDiffs = [];
+  // Process the comparison data into the format needed for rendering
+  const processComparisonData = (data) => {
+    if (!data || !data.pagePairs || !data.differencesByPage) {
+      return {};
+    }
+
+    const processedDifferences = {};
     
-    visiblePairIndices.forEach(pairIndex => {
+    // Process each page pair
+    data.pagePairs.forEach((pair, index) => {
+      const pageKey = pair.id;
+      const differences = data.differencesByPage[pageKey] || [];
+      
+      if (differences.length > 0) {
+        // Split differences for base and compare documents
+        const baseDifferences = differences.map(diff => ({
+          ...diff,
+          id: `base-${diff.id || Math.random().toString(36).substr(2, 11)}`,
+          page: diff.basePageNumber || 1
+        }));
+        
+        const compareDifferences = differences.map(diff => ({
+          ...diff,
+          id: `compare-${diff.id || Math.random().toString(36).substr(2, 11)}`,
+          page: diff.comparePageNumber || 1
+        }));
+        
+        // Store differences for this pair
+        processedDifferences[index] = {
+          baseDifferences,
+          compareDifferences,
+          // Use standard page dimensions
+          baseWidth: 612,
+          baseHeight: 792,
+          compareWidth: 612,
+          compareHeight: 792
+        };
+      }
+    });
+    
+    return processedDifferences;
+  };
+  
+  // Update visible differences based on visible pairs
+  const updateVisibleDifferences = () => {
+    if (!pairDifferences || Object.keys(pairDifferences).length === 0) return;
+    
+    // Get visible pairs
+    const visibleIndices = visiblePairIndicesRef.current;
+    if (visibleIndices.length === 0) return;
+    
+    // Collect differences from visible pairs
+    let allDiffs = [];
+    
+    visibleIndices.forEach(pairIndex => {
       const pairData = pairDifferences[pairIndex];
       if (!pairData) return;
       
-      // Add pair index to each difference
-      const baseDiffsWithInfo = (pairData.baseDifferences || []).map(diff => ({
+      const baseDiffs = (pairData.baseDifferences || []).map(diff => ({
         ...diff,
         pairIndex
       }));
       
-      const compareDiffsWithInfo = (pairData.compareDifferences || []).map(diff => ({
+      const compareDiffs = (pairData.compareDifferences || []).map(diff => ({
         ...diff,
         pairIndex
       }));
       
-      allVisibleDiffs = [...allVisibleDiffs, ...baseDiffsWithInfo, ...compareDiffsWithInfo];
+      allDiffs = [...allDiffs, ...baseDiffs, ...compareDiffs];
     });
     
-    // Deduplicate by difference ID
+    // Deduplicate
     const uniqueDiffs = [];
     const diffIds = new Set();
     
-    allVisibleDiffs.forEach(diff => {
+    allDiffs.forEach(diff => {
       if (!diffIds.has(diff.id)) {
         diffIds.add(diff.id);
         uniqueDiffs.push(diff);
       }
     });
     
-    // Sort by pair index
-    uniqueDiffs.sort((a, b) => {
-      if (a.pairIndex !== b.pairIndex) {
-        return a.pairIndex - b.pairIndex;
-      }
-      return 0;
-    });
-    
     console.log(`Found ${uniqueDiffs.length} visible differences`);
-    
-    // Update state
     setCurrentVisibleDifferences(uniqueDiffs);
-  }, [visiblePairIndices, pairDifferences]);
+  };
 
-  // Handle scroll events to determine visible pairs
-  const handleScroll = useCallback(() => {
-    if (!scrollContainerRef.current || isScrolling || documentPairs.length === 0) return;
+  // Handle scroll events
+  const handleScroll = () => {
+    if (!scrollContainerRef.current) return;
     
-    // Set scrolling state to avoid too many updates
-    setIsScrolling(true);
-    
-    // Get all pair elements
+    // Find visible document pairs
     const pairElements = document.querySelectorAll('.document-pair');
-    if (!pairElements.length) {
-      setIsScrolling(false);
-      return;
-    }
+    if (!pairElements.length) return;
     
-    const scrollContainer = scrollContainerRef.current;
-    const containerRect = scrollContainer.getBoundingClientRect();
-    
-    // Determine which pairs are visible
-    const visible = [];
+    const containerRect = scrollContainerRef.current.getBoundingClientRect();
+    const visiblePairs = [];
     
     pairElements.forEach((element, index) => {
       const rect = element.getBoundingClientRect();
       
-      // Check if element is at least partially visible
+      // Check if element is visible
       if (rect.bottom >= containerRect.top && rect.top <= containerRect.bottom) {
-        visible.push(index);
+        visiblePairs.push(index);
       }
     });
     
-    // Update visible pairs if changed
-    if (JSON.stringify(visible) !== JSON.stringify(visiblePairIndices)) {
-      setVisiblePairIndices(visible);
+    // Only update if changed
+    if (JSON.stringify(visiblePairs) !== JSON.stringify(visiblePairIndicesRef.current)) {
+      visiblePairIndicesRef.current = visiblePairs;
+      updateVisibleDifferences();
     }
-    
-    // Reset scrolling state after a short delay
-    setTimeout(() => {
-      setIsScrolling(false);
-    }, 100);
-  }, [isScrolling, documentPairs, visiblePairIndices]);
+  };
 
-  // Set up scroll event listener
+  // Set up scroll handler
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer || activeView !== 'comparison') return;
     
-    if (scrollContainer && activeView === 'comparison') {
-      scrollContainer.addEventListener('scroll', handleScroll);
+    const throttledScrollHandler = () => {
+      if (!window.requestAnimationFrame) {
+        setTimeout(handleScroll, 100);
+        return;
+      }
       
-      // Initial scroll calculation
-      setTimeout(handleScroll, 100);
-      
-      return () => {
-        scrollContainer.removeEventListener('scroll', handleScroll);
-      };
-    }
-  }, [handleScroll, activeView]);
+      window.requestAnimationFrame(handleScroll);
+    };
+    
+    scrollContainer.addEventListener('scroll', throttledScrollHandler);
+    setTimeout(handleScroll, 100);
+    
+    return () => {
+      scrollContainer.removeEventListener('scroll', throttledScrollHandler);
+    };
+  }, [activeView]);
 
-  // Handle document pair selection
+  // Switch to document pair
   const handleSelectDocumentPair = (pairIndex) => {
     console.log("Selecting document pair:", pairIndex);
     setSelectedDocumentPairIndex(pairIndex);
     setActiveView('comparison');
     
-    // Scroll to this pair
+    // Force rerender to ensure UI updates properly
+    setViewKey(prevKey => prevKey + 1);
+    
+    // Update visible pairs
+    visiblePairIndicesRef.current = [pairIndex];
+    updateVisibleDifferences();
+    
+    // Scroll to the pair
     setTimeout(() => {
       const pairElement = document.getElementById(`document-pair-${pairIndex}`);
       if (pairElement && scrollContainerRef.current) {
@@ -306,11 +264,6 @@ const SideBySideView = ({ comparisonId }) => {
   // Handle zoom change
   const handleZoomChange = (newZoom) => {
     setZoom(newZoom);
-    
-    // Update in comparison context if needed
-    if (state.viewSettings?.zoom !== newZoom) {
-      state.updateViewSettings?.({ zoom: newZoom });
-    }
   };
 
   // If we're in document matching view
@@ -322,6 +275,9 @@ const SideBySideView = ({ comparisonId }) => {
       />
     );
   }
+
+  // Get all document pairs from context
+  const documentPairs = state.documentPairs || [];
 
   // Show loading state if no document pairs
   if (documentPairs.length === 0) {
@@ -344,7 +300,7 @@ const SideBySideView = ({ comparisonId }) => {
   };
   
   return (
-    <div className="pdf-comparison-container" ref={containerRef}>
+    <div className="pdf-comparison-container" key={viewKey}>
       {/* Header */}
       <div className="comparison-header">
         <button 
@@ -372,7 +328,7 @@ const SideBySideView = ({ comparisonId }) => {
         />
       </div>
       
-      {/* Main content with continuous scroll */}
+      {/* Main content */}
       <div className="comparison-content">
         {/* Main scrollable area */}
         <div 
@@ -389,9 +345,6 @@ const SideBySideView = ({ comparisonId }) => {
                 baseDifferences: [],
                 compareDifferences: []
               };
-              
-              // Get metadata for this pair
-              const pairMeta = pageMetadata[pairIndex];
               
               // Calculate page ranges
               const basePageRange = {
@@ -446,7 +399,7 @@ const SideBySideView = ({ comparisonId }) => {
                             onZoomChange={handleZoomChange}
                             isBaseDocument={true}
                             loading={isLoading}
-                            pageMetadata={pairMeta}
+                            pageMetadata={pairData}
                             xOffsetAdjustment={adjustmentParams.xOffset}
                             yOffsetAdjustment={adjustmentParams.yOffset}
                             scaleAdjustment={adjustmentParams.scaleAdjustment}
@@ -481,7 +434,7 @@ const SideBySideView = ({ comparisonId }) => {
                             onZoomChange={handleZoomChange}
                             isBaseDocument={false}
                             loading={isLoading}
-                            pageMetadata={pairMeta}
+                            pageMetadata={pairData}
                             xOffsetAdjustment={adjustmentParams.xOffset}
                             yOffsetAdjustment={adjustmentParams.yOffset}
                             scaleAdjustment={adjustmentParams.scaleAdjustment}
@@ -511,16 +464,17 @@ const SideBySideView = ({ comparisonId }) => {
               </div>
             </div>
             
-            <DifferenceList
+            <MemoizedDifferenceList
               result={{ 
                 baseDifferences: currentVisibleDifferences, 
-                compareDifferences: [] // We're already combining them
+                compareDifferences: [] // Already combined
               }}
               selectedDifference={state.selectedDifference}
               onDifferenceClick={(diff) => {
+                console.log("Selected difference:", diff);
                 setSelectedDifference(diff);
                 
-                // Scroll to the pair containing this difference
+                // Scroll to the pair
                 if (diff.pairIndex !== undefined) {
                   const pairElement = document.getElementById(`document-pair-${diff.pairIndex}`);
                   if (pairElement) {
@@ -561,12 +515,12 @@ const SideBySideView = ({ comparisonId }) => {
           </div>
           
           <div className="page-status">
-            Viewing {visiblePairIndices.length} of {documentPairs.filter(p => p.matched).length} document pairs
+            Viewing {visiblePairIndicesRef.current.length} of {documentPairs.filter(p => p.matched).length} document pairs
           </div>
         </div>
       </div>
     </div>
   );
-};
+});
 
 export default SideBySideView;

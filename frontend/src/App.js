@@ -10,6 +10,37 @@ import Spinner from './components/common/Spinner';
 import { getAppConfiguration } from './services/api';
 import './styles/global.css';
 
+// Add debug logging to help diagnose rendering issues
+const enableDebugLogging = () => {
+  // Keep a count of renders for each component
+  const renderCounts = {};
+  
+  // Monkey patch React.createElement to add logging
+  const originalCreateElement = React.createElement;
+  React.createElement = function(type, props, ...children) {
+    // Only track component renders, not DOM elements
+    if (typeof type === 'function' && type.name) {
+      renderCounts[type.name] = (renderCounts[type.name] || 0) + 1;
+      
+      // Log excessive renders (more than 5 in a short period)
+      if (renderCounts[type.name] > 5) {
+        console.warn(`⚠️ ${type.name} has rendered ${renderCounts[type.name]} times`);
+      }
+    }
+    return originalCreateElement.apply(this, [type, props, ...children]);
+  };
+  
+  // Reset counts periodically
+  setInterval(() => {
+    Object.keys(renderCounts).forEach(key => {
+      renderCounts[key] = 0;
+    });
+  }, 5000);
+};
+
+// Uncomment to enable debug logging
+// enableDebugLogging();
+
 const App = () => {
   const [appState, setAppState] = useState({
     stage: 'upload', // 'upload', 'comparing', 'results'
@@ -24,7 +55,6 @@ const App = () => {
   useEffect(() => {
     const initializeApp = async () => {
       try {
-      
         // Load app configuration from backend
         const config = await getAppConfiguration();
         setAppState(prev => ({

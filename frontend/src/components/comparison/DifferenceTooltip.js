@@ -56,7 +56,7 @@ const DifferenceTooltip = ({
 
   // Format the difference content based on type
   const getFormattedContent = () => {
-    const { type, changeType } = difference;
+    const { type = 'text', changeType } = difference;
 
     // Text difference
     if (type === 'text') {
@@ -80,6 +80,12 @@ const DifferenceTooltip = ({
           
           {!difference.baseText && !difference.compareText && difference.text && (
             <div className="diff-text">{difference.text}</div>
+          )}
+          
+          {difference.similarityScore !== undefined && (
+            <div className="similarity-info">
+              Similarity: {Math.round(difference.similarityScore * 100)}%
+            </div>
           )}
         </div>
       );
