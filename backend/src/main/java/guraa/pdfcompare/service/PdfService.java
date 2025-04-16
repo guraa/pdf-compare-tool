@@ -2,11 +2,17 @@ package guraa.pdfcompare.service;
 
 import guraa.pdfcompare.PDFComparisonEngine;
 import guraa.pdfcompare.model.ComparisonResult;
+import com.itextpdf.kernel.pdf.PdfDate;
+import com.itextpdf.kernel.pdf.PdfDocumentInfo;
+import com.itextpdf.kernel.pdf.PdfReader;
+import com.itextpdf.kernel.pdf.ReaderProperties;
+import guraa.pdfcompare.PDFComparisonEngine;
+import guraa.pdfcompare.model.ComparisonResult;
 import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.repository.PdfRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.apache.pdfbox.pdmodel.PDDocument;
+// Removed: import org.apache.pdfbox.pdmodel.PDDocument;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -274,38 +280,54 @@ public class PdfService {
      * Extract metadata from a document.
      *
      * @param document The document
-     * @return The updated document
-     */
-    private PdfDocument extractMetadata(PdfDocument document) {
-        try (PDDocument pdDocument = PDDocument.load(new File(document.getFilePath()))) {
+ * @return The updated document
+ */
+private PdfDocument extractMetadata(PdfDocument document) {
+    try {
+        // Use ReaderProperties to handle potential encryption without a password
+        ReaderProperties readerProperties = new ReaderProperties();
+        // If you need to handle password-protected files, you'd set the password here:
+        // readerProperties.setPassword("password".getBytes());
+
+        PdfReader reader = new PdfReader(document.getFilePath(), readerProperties);
+        // Use try-with-resources for the iText PdfDocument
+        try (com.itextpdf.kernel.pdf.PdfDocument iTextPdfDocument = new com.itextpdf.kernel.pdf.PdfDocument(reader)) {
             // Set the page count
-            document.setPageCount(pdDocument.getNumberOfPages());
+            document.setPageCount(iTextPdfDocument.getNumberOfPages());
 
             // Extract metadata
-            if (pdDocument.getDocumentInformation() != null) {
-                document.setTitle(pdDocument.getDocumentInformation().getTitle());
-                document.setAuthor(pdDocument.getDocumentInformation().getAuthor());
-                document.setSubject(pdDocument.getDocumentInformation().getSubject());
-                document.setKeywords(pdDocument.getDocumentInformation().getKeywords());
-                document.setCreator(pdDocument.getDocumentInformation().getCreator());
-                document.setProducer(pdDocument.getDocumentInformation().getProducer());
+            PdfDocumentInfo info = iTextPdfDocument.getDocumentInfo();
+            if (info != null) {
+                document.setTitle(info.getTitle());
+                document.setAuthor(info.getAuthor());
+                document.setSubject(info.getSubject());
+                document.setKeywords(info.getKeywords());
+                document.setCreator(info.getCreator());
+                document.setProducer(info.getProducer());
 
-                // Format dates properly to avoid database column length issues
+                // Format dates properly using iText's PdfDate utility and standard keys
                 document.setCreationDate(
-                        formatCalendarDate(pdDocument.getDocumentInformation().getCreationDate())
+                        formatCalendarDate(PdfDate.decode(info.getMoreInfo("CreationDate")))
                 );
                 document.setModificationDate(
-                        formatCalendarDate(pdDocument.getDocumentInformation().getModificationDate())
+                        formatCalendarDate(PdfDate.decode(info.getMoreInfo("ModDate"))) // ModDate is the standard key
                 );
+                // No need for fallback, getMoreInfo handles missing keys returning null
             }
 
-            document.setEncrypted(pdDocument.isEncrypted());
-        } catch (IOException e) {
-            log.error("Error extracting metadata: {}", e.getMessage(), e);
+            // Check encryption status via the reader
+            document.setEncrypted(reader.isEncrypted());
         }
-
-        return document;
+    } catch (IOException e) {
+        // Log specific iText exceptions if needed, e.g., BadPasswordException
+        log.error("Error extracting metadata using iText: {}", e.getMessage(), e);
+    } catch (Exception e) {
+        // Catch broader exceptions during iText processing
+        log.error("Unexpected error during iText metadata extraction: {}", e.getMessage(), e);
     }
+
+    return document;
+}
 
     /**
      * Save a document.

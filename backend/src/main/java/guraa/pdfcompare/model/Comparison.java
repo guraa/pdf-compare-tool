@@ -44,12 +44,12 @@ public class Comparison {
      */
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    public ComparisonStatus status;
+    private ComparisonStatus status;
 
     /**
      * The error message, if any.
      */
-    @Column(name = "error_message")
+    @Column(name = "error_message", length = 2000)
     private String errorMessage;
 
     /**
@@ -83,75 +83,19 @@ public class Comparison {
     }
 
     /**
-     * Get the ID of this comparison.
+     * Set the status of the comparison.
      *
-     * @return The ID
+     * @param status The status as a string
      */
-    public String getId() {
-        return id;
-    }
-
-    /**
-     * Set the ID of this comparison.
-     *
-     * @param id The ID
-     */
-    public void setId(String id) {
-        this.id = id;
-    }
-
-    /**
-     * Get the ID of the base document.
-     *
-     * @return The base document ID
-     */
-    public String getBaseDocumentId() {
-        return baseDocumentId;
-    }
-
-    /**
-     * Set the ID of the base document.
-     *
-     * @param baseDocumentId The base document ID
-     */
-    public void setBaseDocumentId(String baseDocumentId) {
-        this.baseDocumentId = baseDocumentId;
-    }
-
-    /**
-     * Get the ID of the compare document.
-     *
-     * @return The compare document ID
-     */
-    public String getCompareDocumentId() {
-        return compareDocumentId;
-    }
-
-    /**
-     * Set the ID of the compare document.
-     *
-     * @param compareDocumentId The compare document ID
-     */
-    public void setCompareDocumentId(String compareDocumentId) {
-        this.compareDocumentId = compareDocumentId;
-    }
-
-    /**
-     * Get the result of the comparison.
-     *
-     * @return The comparison result
-     */
-    public ComparisonResult getResult() {
-        return result;
-    }
-
-    /**
-     * Set the result of the comparison.
-     *
-     * @param result The comparison result
-     */
-    public void setResult(ComparisonResult result) {
-        this.result = result;
+    public void setStatus(String status) {
+        if (status == null || status.isEmpty()) {
+            throw new IllegalArgumentException("Status cannot be null or empty");
+        }
+        try {
+            this.status = ComparisonStatus.valueOf(status.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid status: " + status);
+        }
     }
 
     /**
@@ -159,8 +103,11 @@ public class Comparison {
      *
      * @param status The status
      */
-    public void setStatus(String status) {
-        this.status = ComparisonStatus.valueOf(status.toUpperCase());
+    public void setStatus(ComparisonStatus status) {
+        if (status == null) {
+            throw new IllegalArgumentException("Status cannot be null");
+        }
+        this.status = status;
     }
 
     /**
@@ -169,12 +116,13 @@ public class Comparison {
      * @return The status as a string
      */
     public String getStatusAsString() {
-        return status != null ? status.name().toLowerCase() : null;
+        return status != null ? status.name() : null;
     }
 
     /**
      * Pre-persist hook to set the created and updated times.
      */
+    @PrePersist
     public void prePersist() {
         LocalDateTime now = LocalDateTime.now();
         if (createdAt == null) {
@@ -186,6 +134,7 @@ public class Comparison {
     /**
      * Pre-update hook to set the updated time.
      */
+    @PreUpdate
     public void preUpdate() {
         updatedAt = LocalDateTime.now();
     }

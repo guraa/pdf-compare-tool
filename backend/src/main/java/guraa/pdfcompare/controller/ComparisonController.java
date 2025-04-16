@@ -77,7 +77,7 @@ public class ComparisonController {
             // Return the comparison ID
             Map<String, Object> response = new HashMap<>();
             response.put("comparisonId", comparison.getId());
-            response.put("status", comparison.getStatusAsString().toUpperCase());
+            response.put("status", comparison.getStatus().name());
             response.put("message", "Comparison initiated successfully");
 
             return ResponseEntity.accepted().body(response);
@@ -101,20 +101,35 @@ public class ComparisonController {
 
         try {
             // First check if comparison exists
-            if (!comparisonRepository.existsById(comparisonId)) {
+            Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
+            if (comparisonOpt.isEmpty()) {
                 log.debug("Comparison {} not found", comparisonId);
                 return ResponseEntity.notFound().build();
             }
 
-            boolean isReady = comparisonService.isComparisonCompleted(comparisonId);
-            if (isReady) {
+            Comparison comparison = comparisonOpt.get();
+            Comparison.ComparisonStatus status = comparison.getStatus();
+
+            // Return appropriate status code
+            if (status == Comparison.ComparisonStatus.COMPLETED) {
                 log.debug("Comparison {} is ready", comparisonId);
-                return ResponseEntity.ok().build();
-            } else if (comparisonService.isComparisonInProgress(comparisonId)) {
-                log.debug("Comparison {} is in progress", comparisonId);
+
+                // Double-check result is actually available
+                if (resultStorage.resultExists(comparisonId)) {
+                    return ResponseEntity.ok().build();
+                } else {
+                    log.warn("Comparison {} marked as COMPLETED but result not found in storage", comparisonId);
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+                }
+            } else if (status == Comparison.ComparisonStatus.PROCESSING ||
+                    status == Comparison.ComparisonStatus.PENDING) {
+                log.debug("Comparison {} is in progress ({})", comparisonId, status);
                 return ResponseEntity.accepted().build();
+            } else if (status == Comparison.ComparisonStatus.FAILED) {
+                log.debug("Comparison {} failed", comparisonId);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             } else {
-                log.debug("Comparison {} is in an unexpected state", comparisonId);
+                log.debug("Comparison {} is in an unexpected state: {}", comparisonId, status);
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             }
         } catch (Exception e) {
@@ -143,21 +158,22 @@ public class ComparisonController {
             }
 
             Comparison comparison = comparisonOpt.get();
-            String status = comparison.getStatusAsString();
+            String status = comparison.getStatus().name();
 
             Map<String, Object> response = new HashMap<>();
-            response.put("status", status.toUpperCase());
+            response.put("status", status);
             response.put("comparisonId", comparisonId);
 
             if (comparison.getErrorMessage() != null) {
                 response.put("errorMessage", comparison.getErrorMessage());
             }
 
-            if ("completed".equalsIgnoreCase(status)) {
+            if (comparison.getStatus() == Comparison.ComparisonStatus.COMPLETED) {
                 return ResponseEntity.ok(response);
-            } else if ("processing".equalsIgnoreCase(status) || "pending".equalsIgnoreCase(status)) {
+            } else if (comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
+                    comparison.getStatus() == Comparison.ComparisonStatus.PENDING) {
                 return ResponseEntity.accepted().body(response);
-            } else if ("failed".equalsIgnoreCase(status)) {
+            } else if (comparison.getStatus() == Comparison.ComparisonStatus.FAILED) {
                 response.put("message", "Comparison failed");
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
             } else {
@@ -174,7 +190,7 @@ public class ComparisonController {
     }
 
     /**
-     * Get comparison result.
+     * Get comparison result with improved status checking.
      *
      * @param comparisonId The comparison ID
      * @return The comparison result
@@ -184,30 +200,53 @@ public class ComparisonController {
         log.info("Getting result for comparison: {}", comparisonId);
 
         try {
+            // First check directly if the result exists, regardless of status
+            if (resultStorage.resultExists(comparisonId)) {
+                log.info("Result exists for comparison: {}", comparisonId);
+
+                // Get the comparison to check its status
+                Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
+                if (comparisonOpt.isPresent()) {
+                    Comparison comparison = comparisonOpt.get();
+
+                    // If status is not COMPLETED, fix it
+                    if (comparison.getStatus() != Comparison.ComparisonStatus.COMPLETED) {
+                        log.warn("Result exists but comparison {} status is {}. Fixing to COMPLETED.",
+                                comparisonId, comparison.getStatus());
+                        comparisonService.updateComparisonStatus(comparisonId,
+                                Comparison.ComparisonStatus.COMPLETED, null);
+                    }
+
+                    // Retrieve and return the result directly
+                    ComparisonResult result = resultStorage.retrieveResult(comparisonId);
+                    if (result != null) {
+                        return ResponseEntity.ok(result);
+                    } else {
+                        log.error("Result exists but couldn't be retrieved for comparison: {}", comparisonId);
+                    }
+                }
+            }
+
             // Check if comparison exists
             Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
             if (comparisonOpt.isEmpty()) {
                 log.warn("Comparison not found: {}", comparisonId);
-                Map<String, Object> response = new HashMap<>();
-                response.put("key1", "value1");
-                response.put("key2", "value2");
-                return ResponseEntity.ok(response);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Comparison not found", "comparisonId", comparisonId));
             }
 
             Comparison comparison = comparisonOpt.get();
 
-            // Check if still processing
-            if (comparisonService.isComparisonInProgress(comparisonId)) {
-                log.info("Comparison {} is still processing", comparisonId);
+            // Check status and return appropriate response
+            if (comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
+                    comparison.getStatus() == Comparison.ComparisonStatus.PENDING) {
+                log.info("Comparison {} is still processing ({})", comparisonId, comparison.getStatus());
                 Map<String, Object> response = new HashMap<>();
-                response.put("status", "PROCESSING");
+                response.put("status", comparison.getStatus().name());
                 response.put("message", "Comparison still processing");
                 response.put("comparisonId", comparisonId);
                 return ResponseEntity.accepted().body(response);
-            }
-
-            // Check if failed
-            if ("failed".equalsIgnoreCase(comparison.getStatusAsString())) {
+            } else if (comparison.getStatus() == Comparison.ComparisonStatus.FAILED) {
                 log.warn("Comparison {} failed: {}", comparisonId, comparison.getErrorMessage());
                 Map<String, Object> response = new HashMap<>();
                 response.put("status", "FAILED");
@@ -216,16 +255,21 @@ public class ComparisonController {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
             }
 
-            // Get the result
+            // Get the result for COMPLETED status
             ComparisonResult result = comparisonService.getComparisonResult(comparisonId);
 
             if (result == null) {
                 log.warn("Comparison result not found for {}", comparisonId);
-                // Try to forcibly reload from storage
-                result = resultStorage.retrieveResult(comparisonId);
-
-                if (result == null) {
-                    log.error("Comparison {} is marked as completed but no result found", comparisonId);
+                // Check if the result exists in storage but failed to deserialize
+                if (resultStorage.resultExists(comparisonId)) {
+                    log.error("Comparison result exists in storage but could not be deserialized for {}", comparisonId);
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("status", "ERROR");
+                    response.put("error", "Comparison result could not be read");
+                    response.put("comparisonId", comparisonId);
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+                } else {
+                    log.error("Comparison {} is marked as completed but no result found in storage", comparisonId);
                     Map<String, Object> response = new HashMap<>();
                     response.put("status", "ERROR");
                     response.put("error", "Comparison result not available");
@@ -241,6 +285,83 @@ public class ComparisonController {
             Map<String, Object> response = new HashMap<>();
             response.put("error", "Failed to get comparison result: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    /**
+     * Emergency fix endpoint to force update a comparison status.
+     * Add this directly to your existing ComparisonController class.
+     *
+     * @param comparisonId The comparison ID
+     * @return Success or error response
+     */
+    @PostMapping("/comparison/{comparisonId}/force-completion")
+    public ResponseEntity<?> forceCompletion(@PathVariable String comparisonId) {
+        try {
+            Optional<Comparison> compOpt = comparisonRepository.findById(comparisonId);
+            if (compOpt.isEmpty()) {
+                log.warn("Comparison not found for force completion: {}", comparisonId);
+                return ResponseEntity.notFound().build();
+            }
+
+            Comparison comparison = compOpt.get();
+            log.info("Forcing completion of comparison: {} from status {}",
+                    comparisonId, comparison.getStatus());
+
+            // Force update to COMPLETED
+            comparison.setStatus(Comparison.ComparisonStatus.COMPLETED);
+            comparisonRepository.save(comparison);
+
+            log.info("Successfully forced completion of comparison: {}", comparisonId);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("comparisonId", comparisonId);
+            result.put("status", "COMPLETED");
+            result.put("message", "Forced completion successful");
+
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Error forcing completion of comparison: {}", comparisonId, e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "error", "Failed to force completion: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Emergency fix endpoint to clear all stalled comparisons.
+     * Add this directly to your existing ComparisonController class.
+     *
+     * @return Success or error response
+     */
+    @PostMapping("/comparisons/clear-stalled")
+    public ResponseEntity<?> clearStalledComparisons() {
+        try {
+            List<Comparison> comparisons = comparisonRepository.findAll();
+            int updated = 0;
+
+            for (Comparison comparison : comparisons) {
+                if (comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
+                        comparison.getStatus() == Comparison.ComparisonStatus.PENDING) {
+
+                    log.info("Clearing stalled comparison: {} from status {}",
+                            comparison.getId(), comparison.getStatus());
+
+                    comparison.setStatus(Comparison.ComparisonStatus.FAILED);
+                    comparison.setErrorMessage("Cleared by emergency fix");
+                    comparisonRepository.save(comparison);
+                    updated++;
+                }
+            }
+
+            log.info("Cleared {} stalled comparisons", updated);
+
+            return ResponseEntity.ok(Map.of(
+                    "clearedCount", updated,
+                    "message", "Successfully cleared " + updated + " stalled comparisons"));
+        } catch (Exception e) {
+            log.error("Error clearing stalled comparisons", e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "error", "Failed to clear stalled comparisons: " + e.getMessage()));
         }
     }
 
@@ -267,17 +388,21 @@ public class ComparisonController {
 
         try {
             // Check if comparison exists
-            if (!comparisonRepository.existsById(comparisonId)) {
+            Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
+            if (comparisonOpt.isEmpty()) {
                 log.warn("Comparison not found: {}", comparisonId);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Comparison not found", "comparisonId", comparisonId));
             }
 
+            Comparison comparison = comparisonOpt.get();
+
             // Check if still processing
-            if (comparisonService.isComparisonInProgress(comparisonId)) {
+            if (comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
+                    comparison.getStatus() == Comparison.ComparisonStatus.PENDING) {
                 log.info("Comparison {} is still processing", comparisonId);
                 Map<String, Object> response = new HashMap<>();
-                response.put("status", "PROCESSING");
+                response.put("status", comparison.getStatus().name());
                 response.put("message", "Comparison still processing");
                 return ResponseEntity.accepted().body(response);
             }
@@ -315,6 +440,8 @@ public class ComparisonController {
         }
     }
 
+
+
     /**
      * Get document pairs for smart comparison mode.
      *
@@ -327,17 +454,21 @@ public class ComparisonController {
 
         try {
             // Check if comparison exists
-            if (!comparisonRepository.existsById(comparisonId)) {
+            Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
+            if (comparisonOpt.isEmpty()) {
                 log.warn("Comparison not found: {}", comparisonId);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Comparison not found", "comparisonId", comparisonId));
             }
 
+            Comparison comparison = comparisonOpt.get();
+
             // Check if still processing
-            if (comparisonService.isComparisonInProgress(comparisonId)) {
+            if (comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
+                    comparison.getStatus() == Comparison.ComparisonStatus.PENDING) {
                 log.info("Comparison {} is still processing", comparisonId);
                 Map<String, Object> response = new HashMap<>();
-                response.put("status", "PROCESSING");
+                response.put("status", comparison.getStatus().name());
                 response.put("message", "Document matching still processing");
                 return ResponseEntity.accepted().body(response);
             }
@@ -345,9 +476,8 @@ public class ComparisonController {
             // Get the document pairs
             List<DocumentPair> documentPairs = comparisonService.getDocumentPairs(comparisonId);
 
-            if (documentPairs == null || documentPairs.isEmpty()) {
+            if (documentPairs == null) {
                 log.warn("No document pairs found for comparison: {}", comparisonId);
-
                 // Send an empty list instead of 404 to prevent frontend issues
                 return ResponseEntity.ok(List.of());
             }
@@ -378,17 +508,21 @@ public class ComparisonController {
 
         try {
             // Check if comparison exists
-            if (!comparisonRepository.existsById(comparisonId)) {
+            Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
+            if (comparisonOpt.isEmpty()) {
                 log.warn("Comparison not found: {}", comparisonId);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Comparison not found", "comparisonId", comparisonId));
             }
 
+            Comparison comparison = comparisonOpt.get();
+
             // Check if still processing
-            if (comparisonService.isComparisonInProgress(comparisonId)) {
+            if (comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
+                    comparison.getStatus() == Comparison.ComparisonStatus.PENDING) {
                 log.info("Comparison {} is still processing", comparisonId);
                 Map<String, Object> response = new HashMap<>();
-                response.put("status", "PROCESSING");
+                response.put("status", comparison.getStatus().name());
                 response.put("message", "Comparison still processing");
                 return ResponseEntity.accepted().body(response);
             }
@@ -404,7 +538,6 @@ public class ComparisonController {
 
             // Get the result for this document pair
             ComparisonResult result = comparisonService.getDocumentPairResult(comparisonId, pairIndex);
-
 
             if (result == null) {
                 log.warn("Document pair result not found for comparison: {}, pair index: {}",
@@ -466,6 +599,32 @@ public class ComparisonController {
             log.info("Received request for page {} of document pair {} in comparison {} with filters: {}",
                     pageNumber, pairIndex, comparisonId, filters);
 
+            // Check if comparison exists and status
+            Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
+            if (comparisonOpt.isEmpty()) {
+                log.warn("Comparison {} not found", comparisonId);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Comparison not found", "comparisonId", comparisonId));
+            }
+
+            Comparison comparison = comparisonOpt.get();
+
+            // Check if still processing
+            if (comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
+                    comparison.getStatus() == Comparison.ComparisonStatus.PENDING) {
+                log.info("Comparison {} is still processing ({})", comparisonId, comparison.getStatus());
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", comparison.getStatus().name());
+                response.put("message", "Comparison still processing");
+                return ResponseEntity.accepted().body(response);
+            } else if (comparison.getStatus() == Comparison.ComparisonStatus.FAILED) {
+                log.warn("Comparison {} failed: {}", comparisonId, comparison.getErrorMessage());
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "FAILED");
+                response.put("error", "Comparison failed: " + comparison.getErrorMessage());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+
             // First check if the document pair exists
             List<DocumentPair> documentPairs = comparisonService.getDocumentPairs(comparisonId);
             if (documentPairs == null || documentPairs.isEmpty() || pairIndex >= documentPairs.size()) {
@@ -496,15 +655,6 @@ public class ComparisonController {
                     comparisonId, pairIndex, pageNumber, filters);
 
             if (pageDetails == null) {
-                // Check if the comparison is still processing
-                if (comparisonService.isComparisonInProgress(comparisonId)) {
-                    log.info("Comparison {} is still processing", comparisonId);
-                    Map<String, Object> response = new HashMap<>();
-                    response.put("status", "PROCESSING");
-                    response.put("message", "Comparison still processing");
-                    return ResponseEntity.accepted().body(response);
-                }
-
                 log.warn("Page details not found for page {} of document pair {} in comparison {}",
                         pageNumber, pairIndex, comparisonId);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -541,17 +691,21 @@ public class ComparisonController {
 
         try {
             // Check if comparison exists
-            if (!comparisonRepository.existsById(comparisonId)) {
+            Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
+            if (comparisonOpt.isEmpty()) {
                 log.warn("Comparison not found: {}", comparisonId);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Comparison not found", "comparisonId", comparisonId));
             }
 
+            Comparison comparison = comparisonOpt.get();
+
             // Check if still processing
-            if (comparisonService.isComparisonInProgress(comparisonId)) {
+            if (comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
+                    comparison.getStatus() == Comparison.ComparisonStatus.PENDING) {
                 log.info("Comparison {} is still processing", comparisonId);
                 Map<String, Object> response = new HashMap<>();
-                response.put("status", "PROCESSING");
+                response.put("status", comparison.getStatus().name());
                 response.put("message", "Cannot generate report while comparison is still processing");
                 return ResponseEntity.accepted().body(response);
             }

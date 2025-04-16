@@ -3,8 +3,15 @@ package guraa.pdfcompare.service;
 import com.github.difflib.DiffUtils;
 import com.github.difflib.patch.AbstractDelta;
 import com.github.difflib.patch.Chunk;
+import com.github.difflib.DiffUtils;
+import com.github.difflib.patch.AbstractDelta;
+import com.github.difflib.patch.Chunk;
 import com.github.difflib.patch.DeltaType;
 import com.github.difflib.patch.Patch;
+import com.itextpdf.kernel.pdf.PdfPage;
+import com.itextpdf.kernel.pdf.PdfReader;
+import com.itextpdf.kernel.pdf.canvas.parser.PdfTextExtractor;
+import com.itextpdf.kernel.pdf.canvas.parser.listener.LocationTextExtractionStrategy;
 import guraa.pdfcompare.comparison.TextElementDifference;
 import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.model.difference.TextDifference;
@@ -15,14 +22,16 @@ import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
+// Removed: import java.util.concurrent.CompletableFuture;
+// Removed: import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
@@ -45,20 +54,20 @@ public class TextElementComparisonService {
      * @param pdfRenderingService The PDF rendering service
      */
     public TextElementComparisonService(
-            @Qualifier("comparisonExecutor") ExecutorService executorService,
+            @Qualifier("comparisonExecutor") ExecutorService executorService, // Keep executor if needed elsewhere, or remove if only used for removed cache
             PdfRenderingService pdfRenderingService) {
-        this.executorService = executorService;
+        this.executorService = executorService; // Keep or remove based on usage
         this.pdfRenderingService = pdfRenderingService;
     }
 
     @Value("${app.comparison.text-similarity-threshold:0.8}")
     private double textSimilarityThreshold;
 
-    // Cache of text comparison results
-    private final ConcurrentHashMap<String, CompletableFuture<List<TextDifference>>> comparisonTasks = new ConcurrentHashMap<>();
+    // Removed cache: private final ConcurrentHashMap<String, CompletableFuture<List<TextDifference>>> comparisonTasks = new ConcurrentHashMap<>();
 
     /**
-     * Compare text elements between two pages.
+     * Compare text elements between two pages synchronously.
+     * The PDFComparisonEngine handles the asynchronous execution.
      *
      * @param baseDocument The base document
      * @param compareDocument The document to compare against the base
@@ -71,21 +80,15 @@ public class TextElementComparisonService {
             PdfDocument baseDocument, PdfDocument compareDocument,
             int basePageNumber, int comparePageNumber) throws IOException {
 
-        String cacheKey = baseDocument.getFileId() + "_" + basePageNumber + "_" +
-                compareDocument.getFileId() + "_" + comparePageNumber;
-
-        // Check if we already have a comparison task for these pages
-        return comparisonTasks.computeIfAbsent(cacheKey, key -> {
-            // Submit a new comparison task
-            return CompletableFuture.supplyAsync(() -> {
-                try {
-                    return doCompareText(baseDocument, compareDocument, basePageNumber, comparePageNumber);
-                } catch (IOException e) {
-                    log.error("Error comparing text: {}", e.getMessage(), e);
-                    return new ArrayList<>();
-                }
-            }, executorService);
-        }).join(); // Wait for the task to complete
+        // Directly perform the comparison without internal caching or async execution
+        // The PDFComparisonEngine is responsible for calling this asynchronously.
+        try {
+            return doCompareText(baseDocument, compareDocument, basePageNumber, comparePageNumber);
+        } catch (IOException e) {
+            log.error("Error comparing text for pages {} and {}: {}", basePageNumber, comparePageNumber, e.getMessage(), e);
+            // Re-throw or return empty list based on how PDFComparisonEngine handles exceptions
+            throw e; 
+        }
     }
 
     /**
@@ -147,9 +150,41 @@ public class TextElementComparisonService {
                 Files.createDirectories(textDir);
             }
 
-            // In a real implementation, this would extract text from the PDF
-            // For now, return an empty list
-            return new ArrayList<>();
+            // --- iText Extraction Logic ---
+            log.debug("Extracted text file not found for document {} page {}. Extracting using iText.",
+                    document.getFileId(), pageNumber);
+            try {
+                PdfReader reader = new PdfReader(document.getFilePath());
+                // Use try-with-resources for the iText PdfDocument
+                try (com.itextpdf.kernel.pdf.PdfDocument pdfDoc = new com.itextpdf.kernel.pdf.PdfDocument(reader)) {
+                    if (pageNumber > 0 && pageNumber <= pdfDoc.getNumberOfPages()) {
+                        PdfPage page = pdfDoc.getPage(pageNumber);
+                        String text = PdfTextExtractor.getTextFromPage(page, new LocationTextExtractionStrategy());
+                        
+                        // Split text into lines using a regex that handles different line endings
+                        List<String> lines = Arrays.asList(text.split("\\R")); 
+                        
+                        // Optional: Save the extracted text to the file for future use
+                        // try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(extractedTextPath))) {
+                        //     writer.write(text);
+                        // } catch (IOException writeEx) {
+                        //     log.warn("Could not write extracted text to cache file {}: {}", extractedTextPath, writeEx.getMessage());
+                        // }
+
+                        return lines;
+                    } else {
+                        log.warn("Invalid page number {} requested for document {} with {} pages.",
+                                pageNumber, document.getFileId(), pdfDoc.getNumberOfPages());
+                        return new ArrayList<>(); // Return empty list for invalid page number
+                    }
+                }
+            } catch (IOException e) {
+                log.error("Error extracting text using iText for document {} page {}: {}",
+                        document.getFileId(), pageNumber, e.getMessage(), e);
+                // Re-throw or return empty list depending on desired error handling
+                throw new IOException("Failed to extract text using iText", e); 
+            }
+            // --- End iText Extraction Logic ---
         }
     }
 

@@ -100,7 +100,9 @@ public class EnhancedVisualMatcher implements VisualMatcher {
                     baseDocument.getFileId(), compareDocument.getFileId(), (endTime - startTime));
 
             // Clear the image cache after matching to free memory
+            log.info("Clear the image cache after matching to free memory");
             clearImageCache();
+            log.info("Return pagePairs");
 
             return pagePairs;
         } catch (Exception e) {

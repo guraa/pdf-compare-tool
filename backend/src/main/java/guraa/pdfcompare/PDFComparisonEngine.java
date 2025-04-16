@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
- * Main engine for PDF comparison with improved performance.
+ * Main engine for PDF comparison with improved completion handling.
  * This class coordinates the comparison process, delegating to specialized
  * services for different types of comparisons.
  */
@@ -34,6 +34,7 @@ public class PDFComparisonEngine {
     private final ImageComparisonService imageComparisonService;
     private final FontComparisonService fontComparisonService;
     private final ExecutorService executorService;
+    private final PerformanceMonitoringService monitoringService;
 
     // Maximum number of concurrent page comparisons
     private static final int MAX_CONCURRENT_PAGE_COMPARISONS = 8;
@@ -52,18 +53,21 @@ public class PDFComparisonEngine {
      * @param imageComparisonService The image comparison service
      * @param fontComparisonService  The font comparison service
      * @param executorService        The executor service for comparison operations
+     * @param monitoringService      The performance monitoring service
      */
     public PDFComparisonEngine(
             SmartDocumentMatcher documentMatcher,
             TextElementComparisonService textComparisonService,
             ImageComparisonService imageComparisonService,
             FontComparisonService fontComparisonService,
-            @Qualifier("comparisonExecutor") ExecutorService executorService) {
+            @Qualifier("comparisonExecutor") ExecutorService executorService,
+            PerformanceMonitoringService monitoringService) {
         this.documentMatcher = documentMatcher;
         this.textComparisonService = textComparisonService;
         this.imageComparisonService = imageComparisonService;
         this.fontComparisonService = fontComparisonService;
         this.executorService = executorService;
+        this.monitoringService = monitoringService;
     }
 
     @Value("${app.comparison.smart-matching-enabled:true}")
@@ -84,7 +88,8 @@ public class PDFComparisonEngine {
      * @throws IOException If there is an error comparing the documents
      */
     public ComparisonResult compareDocuments(PdfDocument baseDocument, PdfDocument compareDocument) throws IOException {
-        log.info("Starting comparison between documents: {} and {}",
+        String logPrefix = "[" + baseDocument.getFileId() + " vs " + compareDocument.getFileId() + "] ";
+        log.info(logPrefix + "Starting comparison between documents: {} and {}",
                 baseDocument.getFileId(), compareDocument.getFileId());
 
         long startTime = System.currentTimeMillis();
@@ -92,26 +97,35 @@ public class PDFComparisonEngine {
         // Generate a cache key
         String cacheKey = baseDocument.getFileId() + "_" + compareDocument.getFileId();
 
+        log.info(logPrefix + "cacheKey: {}", cacheKey);
+
         // Check if the result is already in the cache
         if (cacheEnabled && comparisonCache.containsKey(cacheKey)) {
-            log.info("Retrieved comparison result from cache for documents: {} and {}",
-                    baseDocument.getFileId(), compareDocument.getFileId());
+            log.info(logPrefix + "Retrieved comparison result from cache");
             return comparisonCache.get(cacheKey);
         }
 
         try {
             // Match pages between documents
+            log.info(logPrefix + "Starting document matching phase");
             List<PagePair> pagePairs = matchDocuments(baseDocument, compareDocument);
+            log.info(logPrefix + "Document matching phase completed, found {} page pairs", pagePairs.size());
 
             // Create a comparison summary
+            log.info(logPrefix + "Creating comparison summary");
             PageLevelComparisonSummary summary = createComparisonSummary(baseDocument, compareDocument, pagePairs);
+            log.info(logPrefix + "Comparison summary created with similarity score: {}", summary.getOverallSimilarityScore());
 
             // Compare matched pages
+            log.info(logPrefix + "Starting page comparison phase");
             Map<String, List<Difference>> differencesByPage = comparePages(baseDocument, compareDocument, pagePairs);
+            log.info(logPrefix + "Page comparison phase completed, found differences on {} pages", differencesByPage.size());
 
             // Create the comparison result
+            String resultId = UUID.randomUUID().toString();
+            log.info(logPrefix + "Building final comparison result with ID: {}", resultId);
             ComparisonResult result = ComparisonResult.builder()
-                    .id(UUID.randomUUID().toString())
+                    .id(resultId)
                     .baseDocumentId(baseDocument.getFileId())
                     .compareDocumentId(compareDocument.getFileId())
                     .pagePairs(pagePairs)
@@ -125,17 +139,21 @@ public class PDFComparisonEngine {
                 if (comparisonCache.size() >= MAX_CACHE_SIZE) {
                     evictOldestCacheEntry();
                 }
-
+                log.info(logPrefix + "Storing comparison result in cache");
                 comparisonCache.put(cacheKey, result);
             }
 
             long endTime = System.currentTimeMillis();
-            log.info("Completed comparison between documents: {} and {} in {}ms",
-                    baseDocument.getFileId(), compareDocument.getFileId(), (endTime - startTime));
+            long duration = endTime - startTime;
+            log.info(logPrefix + "Completed comparison between documents in {}ms", duration);
+
+            if (monitoringService != null) {
+                monitoringService.comparisonPerformed(duration);
+            }
 
             return result;
         } catch (Exception e) {
-            log.error("Error during document comparison: {}", e.getMessage(), e);
+            log.error(logPrefix + "Error during document comparison: {}", e.getMessage(), e);
             throw new IOException("Document comparison failed", e);
         }
     }
@@ -219,6 +237,7 @@ public class PDFComparisonEngine {
     private Map<String, List<Difference>> comparePages(
             PdfDocument baseDocument, PdfDocument compareDocument, List<PagePair> pagePairs) throws IOException {
 
+        String logPrefix = "[" + baseDocument.getFileId() + " vs " + compareDocument.getFileId() + "] ";
         Map<String, List<Difference>> differencesByPage = new ConcurrentHashMap<>();
 
         // Filter out only matched pages
@@ -227,8 +246,7 @@ public class PDFComparisonEngine {
                 .collect(Collectors.toList());
 
         if (matchedPairs.isEmpty()) {
-            log.warn("No matched pages found between documents: {} and {}",
-                    baseDocument.getFileId(), compareDocument.getFileId());
+            log.warn(logPrefix + "No matched pages found between documents");
             return differencesByPage;
         }
 
@@ -240,6 +258,7 @@ public class PDFComparisonEngine {
 
         // Create batches for better load balancing
         List<List<PagePair>> batches = createBatches(matchedPairs, batchSize);
+        log.info(logPrefix + "Created {} batches for page comparison", batches.size());
 
         // Track progress
         AtomicInteger completedPages = new AtomicInteger(0);
@@ -248,55 +267,65 @@ public class PDFComparisonEngine {
         // Process each batch in parallel
         List<CompletableFuture<Void>> batchFutures = new ArrayList<>();
 
+        log.info(logPrefix + "Starting comparison of {} matched pages in {} batches", totalPages, batches.size());
         for (List<PagePair> batch : batches) {
             CompletableFuture<Void> batchFuture = CompletableFuture.runAsync(() -> {
                 for (PagePair pagePair : batch) {
                     try {
+                        log.info(logPrefix + "Limit concurrent processing");
                         semaphore.acquire(); // Limit concurrent processing
 
                         try {
+                            log.info(logPrefix + "Create tasks for different comparison types");
                             // Create tasks for different comparison types
                             CompletableFuture<List<TextDifference>> textFuture = CompletableFuture.supplyAsync(() -> {
                                 try {
+                                    log.info(logPrefix + "CompletableFuture TextDifference");
                                     return textComparisonService.compareText(
                                             baseDocument, compareDocument,
                                             pagePair.getBasePageNumber(), pagePair.getComparePageNumber());
                                 } catch (IOException e) {
-                                    log.error("Error comparing text: {}", e.getMessage(), e);
+                                    log.error(logPrefix + "Error comparing text: {}", e.getMessage(), e);
                                     return new ArrayList<>();
                                 }
                             }, executorService);
 
                             CompletableFuture<List<ImageDifference>> imageFuture = CompletableFuture.supplyAsync(() -> {
                                 try {
+                                    log.info(logPrefix + "CompletableFuture ImageDifference");
                                     return imageComparisonService.compareImages(
                                             baseDocument, compareDocument,
                                             pagePair.getBasePageNumber(), pagePair.getComparePageNumber());
                                 } catch (IOException e) {
-                                    log.error("Error comparing images: {}", e.getMessage(), e);
+                                    log.error(logPrefix + "Error comparing images: {}", e.getMessage(), e);
                                     return new ArrayList<>();
                                 }
                             }, executorService);
-
-                            CompletableFuture<List<FontDifference>> fontFuture = CompletableFuture.supplyAsync(() -> {
-                                try {
-                                    return fontComparisonService.compareFonts(
-                                            baseDocument, compareDocument,
-                                            pagePair.getBasePageNumber(), pagePair.getComparePageNumber());
-                                } catch (IOException e) {
-                                    log.error("Error comparing fonts: {}", e.getMessage(), e);
-                                    return new ArrayList<>();
-                                }
-                            }, executorService);
-
+                            log.info(logPrefix + "CompletableFuture ImageDifference - Done");
+                          //  CompletableFuture<List<FontDifference>> fontFuture = CompletableFuture.supplyAsync(() -> {
+                         //       try {
+                          //          log.info(logPrefix + "CompletableFuture FontDifference");
+                          //          return fontComparisonService.compareFonts(
+                          //                  baseDocument, compareDocument,
+                          //                  pagePair.getBasePageNumber(), pagePair.getComparePageNumber());
+                          //      } catch (IOException e) {
+                          //          log.error(logPrefix + "Error comparing fonts: {}", e.getMessage(), e);
+                           //         return new ArrayList<>();
+                          //      }
+                          //  }, executorService);
+                            // Initialize fontFuture with a completed future containing an empty list
+                            CompletableFuture<List<FontDifference>> fontFuture = CompletableFuture.completedFuture(new ArrayList<>());
                             // Wait for all comparisons to complete
-                            CompletableFuture.allOf(textFuture, imageFuture, fontFuture).join();
+                            log.info(logPrefix + "Wait for all comparisons to complete");
+                            // Pass the non-null (but completed) fontFuture to allOf
+                            CompletableFuture.allOf(textFuture, imageFuture, fontFuture).join(); 
 
                             // Combine all differences
+                            log.info(logPrefix + "Combine all differences");
                             List<Difference> allDifferences = new ArrayList<>();
-                            allDifferences.addAll(textFuture.get());
+                            allDifferences.addAll(textFuture.get()); // .get() is safe after .join()
                             allDifferences.addAll(imageFuture.get());
-                            allDifferences.addAll(fontFuture.get());
+                            allDifferences.addAll(fontFuture.get()); // Will get the empty list
 
                             // Store the differences
                             differencesByPage.put(pagePair.getId(), allDifferences);
@@ -309,17 +338,18 @@ public class PDFComparisonEngine {
                             // Log progress
                             int completed = completedPages.incrementAndGet();
                             if (completed % 5 == 0 || completed == totalPages) {
-                                log.info("Page comparison progress: {}/{} pages ({}%)",
+                                log.info(logPrefix + "Page comparison progress: {}/{} pages ({}%)",
                                         completed, totalPages, (completed * 100) / totalPages);
                             }
                         } finally {
+                            // Always release the semaphore
                             semaphore.release(); // Always release the semaphore
                         }
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        log.error("Thread interrupted while waiting for semaphore", e);
+                        log.error(logPrefix + "Thread interrupted while waiting for semaphore", e);
                     } catch (Exception e) {
-                        log.error("Error comparing page pair: {}", e.getMessage(), e);
+                        log.error(logPrefix + "Error comparing page pair: {}", e.getMessage(), e);
                     }
                 }
             }, executorService);
@@ -327,12 +357,13 @@ public class PDFComparisonEngine {
             batchFutures.add(batchFuture);
         }
 
-        // Wait for all batches to complete with timeout
+        // Wait for all batches to complete with timeout handling
         try {
             CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0]))
                     .get(5, TimeUnit.MINUTES);
+            log.info(logPrefix + "All page comparison batches completed successfully");
         } catch (Exception e) {
-            log.error("Error or timeout waiting for page comparisons to complete: {}", e.getMessage(), e);
+            log.error(logPrefix + "Error or timeout waiting for page comparisons to complete: {}", e.getMessage(), e);
             // Continue with partial results rather than failing completely
         }
 
@@ -363,8 +394,8 @@ public class PDFComparisonEngine {
      * @param difference The difference
      * @return The page difference
      */
-    private guraa.pdfcompare.service.PageDifference createPageDifference(Difference difference) {
-        return guraa.pdfcompare.service.PageDifference.builder()
+    private PageDifference createPageDifference(Difference difference) {
+        return PageDifference.builder()
                 .id(UUID.randomUUID().toString())
                 .type(difference.getType())
                 .severity(difference.getSeverity())
