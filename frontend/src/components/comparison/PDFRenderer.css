@@ -2,7 +2,6 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  /* align-items: center; Removed centering */
   min-height: 300px;
   max-width: 100%;
 }
@@ -29,9 +28,9 @@
 
 .canvas-container {
   position: relative;
-  display: block; /* Changed from inline-block */
+  display: block;
   transition: opacity 0.3s ease;
-  margin: 0 auto; /* Center the block container itself */
+  margin: 0 auto;
 }
 
 .pdf-image {
@@ -40,12 +39,98 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.highlight-layer {
+/* Highlight Styles */
+.difference-highlight {
+  position: absolute;
+  border-radius: 4px;
+  pointer-events: all;
+  z-index: 10;
+  box-sizing: border-box;
+  /* Increase visibility */
+  opacity: 0.6; 
+  mix-blend-mode: multiply;
+}
+
+/* Text differences */
+.difference-highlight.text {
+  background-color: rgba(255, 82, 82, 0.4);
+  border: 2px solid rgba(255, 82, 82, 0.8);
+}
+
+/* Image differences */
+.difference-highlight.image {
+  background-color: rgba(33, 150, 243, 0.4);
+  border: 2px solid rgba(33, 150, 243, 0.8);
+}
+
+/* Font differences */
+.difference-highlight.font {
+  background-color: rgba(156, 39, 176, 0.4);
+  border: 2px solid rgba(156, 39, 176, 0.8);
+}
+
+/* Style differences */
+.difference-highlight.style {
+  background-color: rgba(255, 152, 0, 0.4);
+  border: 2px solid rgba(255, 152, 0, 0.8);
+}
+
+/* Change types */
+.difference-highlight.added {
+  background-color: rgba(76, 175, 80, 0.4);
+  border: 2px solid rgba(76, 175, 80, 0.8);
+}
+
+.difference-highlight.deleted {
+  background-color: rgba(244, 67, 54, 0.4);
+  border: 2px solid rgba(244, 67, 54, 0.8);
+}
+
+.difference-highlight.modified {
+  background-color: rgba(255, 152, 0, 0.4);
+  border: 2px solid rgba(255, 152, 0, 0.8);
+}
+
+/* Selected difference */
+.difference-highlight.selected {
+  border: 3px solid rgba(255, 255, 0, 0.9) !important;
+  z-index: 11;
+  box-shadow: 0 0 8px rgba(255, 255, 0, 0.5);
+}
+
+/* Highlight hover effect */
+.difference-highlight:hover {
+  opacity: 0.8;
+  cursor: pointer;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+}
+
+.highlights-container {
   position: absolute;
   top: 0;
   left: 0;
-  pointer-events: auto;
-  z-index: 2;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.diff-count-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .pdf-renderer-empty {
@@ -80,23 +165,24 @@
   fill: var(--error-color);
 }
 
-/* Difference count badge */
-.diff-count-badge {
+/* Debug button */
+.debug-toggle {
   position: absolute;
-  top: 0;
-  right: 0;
-  background-color: var(--primary-color);
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.5);
   color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 5px 10px;
   font-size: 12px;
-  font-weight: bold;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 3;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 20;
+  cursor: pointer;
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .renderer-loading {
+  background-color: rgba(0, 0, 0, 0.5);
 }
 
 /* Tooltip styles */
@@ -151,76 +237,4 @@
 .label {
   font-weight: bold;
   color: rgba(255, 255, 255, 0.7);
-}
-
-/* Zoom controls */
-.pdf-controls {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background-color: rgba(0, 0, 0, 0.7);
-  border-radius: 4px;
-  padding: 4px 8px;
-  z-index: 4;
-}
-
-.pdf-controls button {
-  background: none;
-  border: none;
-  color: white;
-  cursor: pointer;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 3px;
-  transition: background-color 0.2s;
-}
-
-.pdf-controls button:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-.pdf-controls button svg {
-  width: 18px;
-  height: 18px;
-  fill: white;
-}
-
-.zoom-value {
-  color: white;
-  font-size: 12px;
-  min-width: 40px;
-  text-align: center;
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 3px;
-}
-
-.zoom-value:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-.page-indicator {
-  color: white;
-  font-size: 12px;
-  opacity: 0.7;
-  margin-left: 4px;
-}
-
-/* Dark mode adjustments */
-[data-theme="dark"] .renderer-loading {
-  background-color: rgba(0, 0, 0, 0.5);
-}
-
-[data-theme="dark"] .difference-tooltip {
-  background-color: rgba(45, 45, 45, 0.95);
-}
-
-[data-theme="dark"] .difference-tooltip::after {
-  border-top-color: rgba(45, 45, 45, 0.95);
 }

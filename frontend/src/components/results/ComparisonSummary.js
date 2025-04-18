@@ -1,7 +1,136 @@
-import React from 'react';
+// Updated ComparisonSummary.js component
+// This fixes the issue with difference type categorization in the summary view
+
+import React, { useMemo } from 'react';
 import './ComparisonSummary.css';
 
 const ComparisonSummary = ({ result }) => {
+  // Use memoization to process the result data efficiently
+  const processedData = useMemo(() => {
+    if (!result) {
+      return {
+        basePageCount: 0,
+        comparePageCount: 0,
+        totalDifferences: 0,
+        differentPagesCount: 0,
+        textDifferenceCount: 0,
+        imageDifferenceCount: 0,
+        fontDifferenceCount: 0,
+        styleDifferenceCount: 0,
+        structureCount: 0,
+        categoryCounts: {}
+      };
+    }
+
+    // Extract basic counts
+    const basePageCount = result.summary?.baseTotalPages || 0;
+    const comparePageCount = result.summary?.compareTotalPages || 0;
+    const totalDifferences = result.totalDifferences || 0;
+    
+    // Process differences by type
+    let textCount = 0;
+    let imageCount = 0;
+    let fontCount = 0;
+    let styleCount = 0;
+    let structureCount = 0;
+    
+    // Process all differences from all pages
+    const processAllDifferences = () => {
+      // Collect all differences into a single array
+      let allDiffs = [];
+      
+      if (result.differencesByPage) {
+        Object.values(result.differencesByPage).forEach(pageDiffs => {
+          if (Array.isArray(pageDiffs)) {
+            allDiffs = [...allDiffs, ...pageDiffs];
+          }
+        });
+      }
+      
+      // Count by type
+      allDiffs.forEach(diff => {
+        switch (diff.type) {
+          case 'text':
+            textCount++;
+            break;
+          case 'image':
+            imageCount++;
+            break;
+          case 'font':
+            fontCount++;
+            break;
+          case 'style':
+            styleCount++;
+            break;
+          default:
+            // If type is not one of the standard types, count as structure
+            structureCount++;
+        }
+      });
+    };
+    
+    // Call the function to process all differences
+    processAllDifferences();
+    
+    // If no specific type counts, allocate all differences to structure
+    // This is a fallback if the difference data doesn't have proper typing
+    if (textCount === 0 && imageCount === 0 && fontCount === 0 && styleCount === 0 && totalDifferences > 0) {
+      structureCount = totalDifferences;
+    }
+    
+    // Count different pages
+    let differentPages = 0;
+    
+    if (result.pagePairs) {
+      // Count page pairs that have differences
+      differentPages = result.pagePairs.filter(pair => {
+        // Check if this page pair has any differences
+        if (result.differencesByPage && result.differencesByPage[pair.id]) {
+          return result.differencesByPage[pair.id].length > 0;
+        }
+        return false;
+      }).length;
+    }
+    
+    return {
+      basePageCount,
+      comparePageCount,
+      totalDifferences,
+      differentPagesCount: differentPages,
+      textDifferenceCount: textCount,
+      imageDifferenceCount: imageCount,
+      fontDifferenceCount: fontCount,
+      styleDifferenceCount: styleCount,
+      structureCount: structureCount,
+      // Create an object with all category counts for the chart
+      categoryCounts: {
+        content: textCount,
+        style: styleCount,
+        images: imageCount,
+        fonts: fontCount,
+        structure: structureCount
+      }
+    };
+  }, [result]);
+  
+  // Format current timestamp
+  const timestamp = new Date().toLocaleString();
+  
+  // Extract values from processed data
+  const {
+    basePageCount,
+    comparePageCount,
+    totalDifferences,
+    differentPagesCount,
+    textDifferenceCount,
+    imageDifferenceCount,
+    fontDifferenceCount,
+    styleDifferenceCount,
+    structureCount,
+    categoryCounts
+  } = processedData;
+
+  // If no result data available
   if (!result) {
     return (
       <div className="summary-panel empty">
@@ -9,58 +138,6 @@ const ComparisonSummary = ({ result }) => {
       </div>
     );
   }
-
-  const timestamp = new Date().toLocaleString();
-  
-  // Check if we're in smart comparison mode
-  const isSmartMode = result.documentPairs && result.documentPairs.length > 0;
-  
-  // Extract statistics from document pairs if in smart mode
-  let textDifferenceCount = 0;
-  let imageDifferenceCount = 0;
-  let fontDifferenceCount = 0;
-  let styleDifferenceCount = 0;
-  let basePageCount = 0;
-  let comparePageCount = 0;
-  let differentPagesCount = 0;
-  
-  if (isSmartMode) {
-    // Aggregate stats from all document pairs
-    result.documentPairs.forEach(pair => {
-      textDifferenceCount += pair.textDifferences || 0;
-      imageDifferenceCount += pair.imageDifferences || 0;
-      fontDifferenceCount += pair.fontDifferences || 0;
-      styleDifferenceCount += pair.styleDifferences || 0;
-      
-      // Assuming the total page counts from all pairs
-      basePageCount += pair.basePageCount || 0;
-      comparePageCount += pair.comparePageCount || 0;
-      
-      // For now, just count all pages as different if there are differences
-      if (pair.totalDifferences > 0) {
-        differentPagesCount += Math.max(pair.basePageCount || 0, pair.comparePageCount || 0);
-      }
-    });
-  } else {
-    // Use traditional structure
-    textDifferenceCount = result.totalTextDifferences || 0;
-    imageDifferenceCount = result.totalImageDifferences || 0;
-    fontDifferenceCount = result.totalFontDifferences || 0;
-    styleDifferenceCount = result.totalStyleDifferences || 0;
-    basePageCount = result.basePageCount || 0;
-    comparePageCount = result.comparePageCount || 0;
-    differentPagesCount = result.pageDifferences?.filter(page => 
-      page.onlyInBase || 
-      page.onlyInCompare || 
-      page.textDifferences?.differences?.length > 0 ||
-      page.textElementDifferences?.length > 0 ||
-      page.imageDifferences?.length > 0 ||
-      page.fontDifferences?.length > 0
-    ).length || 0;
-  }
-  
-  // Total differences remains the same in both modes
-  const totalDifferences = result.totalDifferences || 0;
 
   return (
     <div className="comparison-summary">
@@ -148,13 +225,7 @@ const ComparisonSummary = ({ result }) => {
           
           <div className="category-chart">
             <div className="chart-bars">
-              {Object.entries({
-                content: textDifferenceCount,
-                style: styleDifferenceCount,
-                images: imageDifferenceCount,
-                fonts: fontDifferenceCount,
-                structure: Math.max(0, totalDifferences - textDifferenceCount - styleDifferenceCount - imageDifferenceCount - fontDifferenceCount)
-              }).map(([category, count]) => (
+              {Object.entries(categoryCounts).map(([category, count]) => (
                 <div className="chart-item" key={category}>
                   <div className="chart-label">{
                     category.charAt(0).toUpperCase() + category.slice(1)
@@ -163,7 +234,7 @@ const ComparisonSummary = ({ result }) => {
                     <div 
                       className={`chart-bar ${category}`}
                       style={{ 
-                        width: `${Math.min(100, count === 0 ? 0 : Math.max(5, count / (result.totalDifferences || 1) * 100))}%` 
+                        width: `${Math.min(100, count === 0 ? 0 : Math.max(5, count / (totalDifferences || 1) * 100))}%` 
                       }}
                     ></div>
                   </div>

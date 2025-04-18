@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getDocumentPage } from '../../services/api';
 import Spinner from '../common/Spinner';
 import DifferenceTooltip from './DifferenceTooltip';
@@ -7,7 +7,7 @@ import './PDFRenderer.css';
 const PDFRenderer = ({
   fileId,
   page,
-  zoom = 0.75,
+  zoom = 0.5,
   highlightMode = 'all',
   differences = [],
   selectedDifference = null,
@@ -20,7 +20,8 @@ const PDFRenderer = ({
   xOffsetAdjustment = 0,
   yOffsetAdjustment = 0,
   scaleAdjustment = 1.0,
-  flipY = true
+  flipY = true,
+  debugMode = false
 }) => {
   // State
   const [imageUrl, setImageUrl] = useState(null);
@@ -33,12 +34,33 @@ const PDFRenderer = ({
   const [scaleFactor, setScaleFactor] = useState(1);
   const [containerOffset, setContainerOffset] = useState({ x: 0, y: 0 });
   const [adjustedCoordinates, setAdjustedCoordinates] = useState([]);
-  const [debugMode, setDebugMode] = useState(false); // Set to false by default in production
-
+  
   // Refs
   const imageRef = useRef(null);
-  const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  const highlightsContainerRef = useRef(null);
+
+  console.log("%c PDFRenderer mounting", "background:#336699;color:white;padding:4px", {
+    page,
+    fileId,
+    differencesCount: differences.length,
+    highlightMode,
+    isBaseDocument
+  });
+  
+  // Debug logging for differences
+  useEffect(() => {
+    if (differences.length > 0 && debugMode) {
+      console.log("%c PDF Renderer Differences", "background:purple;color:white;padding:4px");
+      console.log("Page:", page);
+      console.log("Total differences:", differences.length);
+      console.log("Highlight mode:", highlightMode);
+      console.log("isBaseDocument:", isBaseDocument);
+      
+      // Log a sample difference for debugging
+      console.log("Sample difference:", differences[0]);
+    }
+  }, [differences, page, highlightMode, isBaseDocument, debugMode]);
   
   // Fetch the page image
   useEffect(() => {
@@ -69,57 +91,67 @@ const PDFRenderer = ({
 
   // Calculate scale factor once the image is loaded
   useEffect(() => {
-    if (imageLoaded && imageRef.current && pageMetadata) {
+    if (imageLoaded && imageRef.current) {
       const image = imageRef.current;
       
       // Get the natural dimensions of the loaded image
       const imageNaturalWidth = image.naturalWidth;
       const imageNaturalHeight = image.naturalHeight;
       
-      // Get the actual PDF dimensions from the metadata
-      const pdfWidth = isBaseDocument ? pageMetadata.baseWidth : pageMetadata.compareWidth;
-      const pdfHeight = isBaseDocument ? pageMetadata.baseHeight : pageMetadata.compareHeight;
+      // Get the actual PDF dimensions from the metadata or use defaults
+      const pdfWidth = 612; // Standard letter width in points
+      const pdfHeight = 792; // Standard letter height in points
       
-      if (pdfWidth && pdfHeight) {
-        // Calculate the scale factor between the rendered image and actual PDF
-        const calculatedScaleFactor = (imageNaturalWidth / pdfWidth) * scaleAdjustment;
-        console.log(`PDFRenderer: PDF dimensions: ${pdfWidth}x${pdfHeight}, Scale factor: ${calculatedScaleFactor}`);
-        setScaleFactor(calculatedScaleFactor);
+      // Calculate the scale factor between the rendered image and actual PDF
+      const xRatio = imageNaturalWidth / pdfWidth;
+      const yRatio = imageNaturalHeight / pdfHeight;
+      const calculatedScaleFactor = xRatio * scaleAdjustment;
+      
+      if (debugMode) {
+        console.log(`PDFRenderer: PDF dimensions: ${pdfWidth}x${pdfHeight}`);
+        console.log(`PDFRenderer: Image dimensions: ${imageNaturalWidth}x${imageNaturalHeight}`);
+        console.log(`PDFRenderer: Scale factor: ${calculatedScaleFactor}, X ratio: ${xRatio}, Y ratio: ${yRatio}`);
+      }
+      
+      setScaleFactor(calculatedScaleFactor);
+      
+      // Measure the container to get offsets
+      if (containerRef.current) {
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const imageRect = image.getBoundingClientRect();
         
-        // Measure the container to get offsets
-        if (containerRef.current) {
-          const containerRect = containerRef.current.getBoundingClientRect();
-          const imageRect = image.getBoundingClientRect();
-          
-          // Calculate the actual offset of the image within the container
-          const offsetX = imageRect.left - containerRect.left + xOffsetAdjustment;
-          const offsetY = imageRect.top - containerRect.top + yOffsetAdjustment;
-          
+        // Calculate the actual offset of the image within the container
+        const offsetX = imageRect.left - containerRect.left + xOffsetAdjustment;
+        const offsetY = imageRect.top - containerRect.top + yOffsetAdjustment;
+        
+        if (debugMode) {
           console.log(`PDFRenderer: Container offsets: (${offsetX}, ${offsetY})`);
-          setContainerOffset({ x: offsetX, y: offsetY });
         }
-      } else {
-        // Default to a reasonable scale factor if we don't have PDF dimensions
-        setScaleFactor(0.75 * scaleAdjustment);
+        
+        setContainerOffset({ x: offsetX, y: offsetY });
       }
     }
-  }, [imageLoaded, isBaseDocument, pageMetadata, scaleAdjustment, xOffsetAdjustment, yOffsetAdjustment]);
+  }, [imageLoaded, scaleAdjustment, xOffsetAdjustment, yOffsetAdjustment, debugMode]);
 
-
-  
-
-  // Pre-calculate and store adjusted coordinates when scale factor changes
+  // Transform difference coordinates for display
   useEffect(() => {
-    if (!differences || !scaleFactor || !canvasRef.current) return;
+    if (!differences || !scaleFactor || !imageRef.current) return;
     
-    // Log original differences for debugging
-    if (differences.length > 0 && debugMode) {
-      console.log(`Processing ${differences.length} differences for rendering`);
-      console.log('Sample original difference:', differences[0]);
+    if (debugMode && differences.length > 0) {
+      console.log(`Processing ${differences.length} differences for page ${page}`);
     }
     
-    const canvas = canvasRef.current;
-    const canvasHeight = canvas.height;
+    const image = imageRef.current;
+    const imageWidth = image.naturalWidth;
+    const imageHeight = image.naturalHeight;
+    
+    // Standard PDF dimensions
+    const pdfWidth = 612;  // Letter width in points
+    const pdfHeight = 792; // Letter height in points
+    
+    // Calculate ratios
+    const xRatio = imageWidth / pdfWidth;
+    const yRatio = imageHeight / pdfHeight;
     
     // Transform all difference coordinates
     const transformed = differences.map(diff => {
@@ -130,8 +162,8 @@ const PDFRenderer = ({
       const id = diff.id || `diff-${Math.random().toString(36).substr(2, 9)}`;
       
       // Get coordinates based on the format
-      let x, y, width, height, type, changeType, text, baseText, compareText;
       let originalX, originalY, originalWidth, originalHeight;
+      let text, baseText, compareText, type, changeType;
       
       // Handle the new format
       if (diff.baseX !== undefined || diff.compareX !== undefined) {
@@ -182,28 +214,28 @@ const PDFRenderer = ({
       type = diff.type || 'text';
       changeType = diff.changeType;
       
-      // FIXED COORDINATE TRANSFORMATION:
+      // Apply precise scaling to get pixel dimensions
+      const scaledX = originalX * xRatio * zoom;
+      const scaledY = originalY * yRatio * zoom;
+      const scaledWidth = Math.max(originalWidth * xRatio * zoom, 5);
+      const scaledHeight = Math.max(originalHeight * yRatio * zoom, 5);
       
-      // 1. Apply scaling to get pixel dimensions
-      const scaledX = originalX * scaleFactor * zoom;
-      const scaledY = originalY * scaleFactor * zoom;
-      const scaledWidth = Math.max(originalWidth * scaleFactor * zoom, 50); // Ensure minimum size for visibility
-      const scaledHeight = Math.max(originalHeight * scaleFactor * zoom, 20);
-      
-      // 2. Apply container offset to position correctly within the view
+      // Apply container offset
       let displayX = scaledX + containerOffset.x;
       
-      // 3. Handle Y coordinate flip properly
-      // In PDF coordinates, Y=0 is at the bottom. In canvas, Y=0 is at the top.
+      // Handle Y coordinate flip if needed
       let displayY;
       if (flipY) {
-        // This is the critical fix - properly flip Y coordinate
-        displayY = canvasHeight - scaledY - scaledHeight + containerOffset.y;
+        // Calculate the pixel height of the PDF
+        const pixelPdfHeight = pdfHeight * yRatio * zoom;
+        
+        // Flip the Y coordinate, accounting for the height
+        displayY = pixelPdfHeight - scaledY - scaledHeight + containerOffset.y;
       } else {
         displayY = scaledY + containerOffset.y;
       }
       
-      // 4. Create the transformed coordinates object with both original and display values
+      // Create the transformed coordinates object
       return {
         id,
         type,
@@ -211,12 +243,12 @@ const PDFRenderer = ({
         text,
         baseText,
         compareText,
-        // Display coordinates (for rendering)
+        // Display coordinates for rendering
         x: displayX,
         y: displayY,
         width: scaledWidth,
         height: scaledHeight,
-        // Original coordinates (for reference/debugging)
+        // Original coordinates for reference
         originalX,
         originalY,
         originalWidth,
@@ -226,141 +258,139 @@ const PDFRenderer = ({
       };
     }).filter(Boolean); // Remove any null items
     
-    if (transformed.length > 0 && debugMode) {
-      console.log('Transformed coordinates:', transformed[0]);
+    if (debugMode && transformed.length > 0) {
+      console.log('Transformed coordinates for first difference:', transformed[0]);
     }
     
     setAdjustedCoordinates(transformed);
-  }, [differences, scaleFactor, zoom, containerOffset, flipY, dimensions, isBaseDocument, debugMode]);
+  }, [differences, scaleFactor, zoom, containerOffset, flipY, dimensions, isBaseDocument, 
+      xOffsetAdjustment, yOffsetAdjustment, debugMode, page]);
 
-  // Draw highlights on canvas
+  // Create DOM-based highlights (instead of canvas-based)
   useEffect(() => {
-    if (!canvasRef.current || !imageLoaded || highlightMode === 'none' || !adjustedCoordinates.length) {
+    // Log the current state
+    console.log("%c Attempting to create highlights", "background:orange;color:black;", {
+      highlightMode,
+      adjustedCoordinatesCount: adjustedCoordinates?.length,
+      containerExists: !!highlightsContainerRef.current,
+      imageLoaded
+    });
+  
+    // Skip if highlight mode is none or no coordinates are available
+    if (highlightMode === 'none') {
+      console.log("Highlights disabled - highlight mode is 'none'");
       return;
     }
     
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    if (!adjustedCoordinates || adjustedCoordinates.length === 0) {
+      console.log("No adjusted coordinates available for highlighting");
+      return;
+    }
     
-    // Set canvas dimensions to match the image
-    canvas.width = dimensions.width;
-    canvas.height = dimensions.height;
+    if (!highlightsContainerRef.current) {
+      console.error("Highlights container ref is not available!");
+      return;
+    }
     
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Get the container
+    const container = highlightsContainerRef.current;
     
-    // Draw differences on the canvas
-    adjustedCoordinates.forEach(diff => {
+    // Remove existing highlights
+    const oldHighlightCount = container.childNodes.length;
+    console.log(`Removing ${oldHighlightCount} existing highlights`);
+    
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+    
+    console.log(`Creating ${adjustedCoordinates.length} highlight elements`);
+    
+    // Create new highlight elements for each difference
+    let createdCount = 0;
+    
+    adjustedCoordinates.forEach((diff, index) => {
       // Skip if type doesn't match highlight mode (unless mode is 'all')
       if (highlightMode !== 'all' && diff.type !== highlightMode) {
         return;
       }
       
-      // Get the transformed coordinates
-      const { x, y, width, height, type, originalX, originalY, originalWidth, originalHeight } = diff;
-      
-      // Generate highlight color based on difference type
-      let fillColor;
-      let strokeColor;
-      
-      switch (type) {
-        case 'text':
-          fillColor = 'rgba(255, 82, 82, 0.3)'; // Red
-          strokeColor = 'rgba(255, 82, 82, 0.8)';
-          break;
-        case 'image':
-          fillColor = 'rgba(33, 150, 243, 0.3)'; // Blue
-          strokeColor = 'rgba(33, 150, 243, 0.8)';
-          break;
-        case 'font':
-          fillColor = 'rgba(156, 39, 176, 0.3)'; // Purple
-          strokeColor = 'rgba(156, 39, 176, 0.8)';
-          break;
-        case 'style':
-          fillColor = 'rgba(255, 152, 0, 0.3)'; // Orange
-          strokeColor = 'rgba(255, 152, 0, 0.8)';
-          break;
-        default:
-          fillColor = 'rgba(0, 150, 136, 0.3)'; // Teal
-          strokeColor = 'rgba(0, 150, 136, 0.8)';
-      }
-      
-      // Override colors based on change type if available
-      if (diff.changeType === 'added') {
-        fillColor = 'rgba(76, 175, 80, 0.3)'; // Green for added
-        strokeColor = 'rgba(76, 175, 80, 0.8)';
-      } else if (diff.changeType === 'deleted') {
-        fillColor = 'rgba(244, 67, 54, 0.3)'; // Red for deleted
-        strokeColor = 'rgba(244, 67, 54, 0.8)';
-      } else if (diff.changeType === 'modified') {
-        fillColor = 'rgba(255, 152, 0, 0.3)'; // Orange for modified
-        strokeColor = 'rgba(255, 152, 0, 0.8)';
-      }
-      
-      // Draw the highlight with vibrant color
-      ctx.fillStyle = fillColor;
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 2;
-      
-      // For text differences, use rounded rectangle for better appearance
-      if (type === 'text') {
-        // Draw rounded rectangle
-        const radius = 4;
-        ctx.beginPath();
-        ctx.moveTo(x + radius, y);
-        ctx.lineTo(x + width - radius, y);
-        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-        ctx.lineTo(x + width, y + height - radius);
-        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-        ctx.lineTo(x + radius, y + height);
-        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-        ctx.lineTo(x, y + radius);
-        ctx.quadraticCurveTo(x, y, x + radius, y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+      try {
+        // Create highlight element
+        const highlight = document.createElement('div');
+        highlight.className = `difference-highlight ${diff.type}`;
         
-        // Add coordinate values in debug mode
-        if (debugMode) {
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-          ctx.font = '10px monospace';
-          
-          // Format the coordinate values
-          const coordText = `PDF: (${Math.round(originalX)},${Math.round(originalY)}) ${Math.round(originalWidth)}x${Math.round(originalHeight)}`;
-          const displayText = `Canvas: (${Math.round(x)},${Math.round(y)}) ${Math.round(width)}x${Math.round(height)}`;
-          
-          // Position the coordinate text
-          ctx.fillText(coordText, x + 5, y + height + 12);
-          ctx.fillText(displayText, x + 5, y + height + 24);
+        // Add change type class if present
+        if (diff.changeType) {
+          highlight.classList.add(diff.changeType);
         }
-      } else {
-        // For other differences, use standard rectangle
-        ctx.fillRect(x, y, width, height);
-        ctx.strokeRect(x, y, width, height);
         
-        // Add coordinate values in debug mode
-        if (debugMode && width > 50 && height > 30) {
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-          ctx.font = '10px monospace';
-          
-          // Format the coordinate values
-          const coordText = `PDF: (${Math.round(originalX)},${Math.round(originalY)}) ${Math.round(originalWidth)}x${Math.round(originalHeight)}`;
-          const displayText = `Canvas: (${Math.round(x)},${Math.round(y)}) ${Math.round(width)}x${Math.round(height)}`;
-          
-          // Position the coordinate text
-          ctx.fillText(coordText, x + 5, y + height - 22);
-          ctx.fillText(displayText, x + 5, y + height - 10);
+        // Add selected class if this is the selected difference
+        if (selectedDifference && selectedDifference.id === diff.id) {
+          highlight.classList.add('selected');
         }
-      }
-      
-      // If this is the selected difference, add a more visible indicator
-      if (selectedDifference && selectedDifference.id === diff.id) {
-        ctx.strokeStyle = 'rgba(255, 255, 0, 0.9)';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(x - 3, y - 3, width + 6, height + 6);
+        
+        // Position and size the highlight
+        highlight.style.left = `${diff.x}px`;
+        highlight.style.top = `${diff.y}px`;
+        highlight.style.width = `${diff.width}px`;
+        highlight.style.height = `${diff.height}px`;
+        
+        // Debug style to make it extremely visible
+        highlight.style.backgroundColor = 'rgba(255, 0, 0, 0.7)';  // Bright red
+        highlight.style.border = '3px solid red';
+        highlight.style.opacity = '0.8';
+        highlight.style.zIndex = '1000';
+        
+        // Add a text label
+        highlight.textContent = `${diff.type} ${index}`;
+        highlight.style.color = 'white';
+        highlight.style.fontSize = '10px';
+        highlight.style.display = 'flex';
+        highlight.style.alignItems = 'center';
+        highlight.style.justifyContent = 'center';
+        
+        // Add additional data for interaction
+        highlight.dataset.diffId = diff.id;
+        
+        // Add event listeners
+        highlight.addEventListener('click', () => {
+          if (onDifferenceSelect) {
+            console.log("Difference clicked:", diff);
+            onDifferenceSelect(diff.originalDiff);
+          }
+        });
+        
+        highlight.addEventListener('mouseover', (e) => {
+          console.log("Difference hover:", diff);
+          setHoverDifference(diff.originalDiff);
+          setTooltipPosition({ x: e.clientX, y: e.clientY });
+        });
+        
+        highlight.addEventListener('mouseout', () => {
+          setHoverDifference(null);
+        });
+        
+        // Add to container
+        container.appendChild(highlight);
+        createdCount++;
+        
+        // Log every 50th highlight created for performance
+        if (index % 50 === 0) {
+          console.log(`Created highlight ${index} of ${adjustedCoordinates.length}`);
+        }
+      } catch (err) {
+        console.error("Error creating highlight:", err, diff);
       }
     });
-  }, [adjustedCoordinates, highlightMode, dimensions, selectedDifference, imageLoaded, debugMode]);
-
+    
+    console.log(`Successfully created ${createdCount} highlight elements`);
+    
+    // Force display of the highlights container
+    container.style.display = 'block';
+    container.style.zIndex = '1000';
+    container.style.pointerEvents = 'all';
+    
+  }, [adjustedCoordinates, highlightMode, selectedDifference, onDifferenceSelect]);
   // Handle image load
   const handleImageLoad = (e) => {
     if (!imageRef.current) return;
@@ -372,7 +402,18 @@ const PDFRenderer = ({
     const scaledWidth = naturalWidth * zoom;
     const scaledHeight = naturalHeight * zoom;
     
-    console.log(`Image loaded with dimensions: ${naturalWidth}x${naturalHeight}`);
+    console.log(`Image loaded with dimensions: ${naturalWidth}x${naturalHeight}, scaled to ${scaledWidth}x${scaledHeight}`);
+    
+    // Log container dimensions
+    if (containerRef.current) {
+      const containerRect = containerRef.current.getBoundingClientRect();
+      console.log("Container dimensions:", {
+        width: containerRect.width,
+        height: containerRect.height,
+        top: containerRect.top,
+        left: containerRect.left
+      });
+    }
     
     setDimensions({
       width: scaledWidth,
@@ -383,6 +424,21 @@ const PDFRenderer = ({
     
     setImageLoaded(true);
     setIsLoading(false);
+    
+    // Log highlight container info
+    setTimeout(() => {
+      if (highlightsContainerRef.current) {
+        const highlightContainer = highlightsContainerRef.current;
+        console.log("Highlight container:", {
+          width: highlightContainer.offsetWidth,
+          height: highlightContainer.offsetHeight,
+          childCount: highlightContainer.childNodes.length,
+          display: window.getComputedStyle(highlightContainer).display,
+          zIndex: window.getComputedStyle(highlightContainer).zIndex,
+          position: window.getComputedStyle(highlightContainer).position,
+        });
+      }
+    }, 500);
   };
 
   // Handle image error
@@ -390,82 +446,6 @@ const PDFRenderer = ({
     console.error(`Error loading PDF page ${page}:`, error);
     setRenderError(`Failed to load page ${page}`);
     setIsLoading(false);
-  };
-
-  // Handle canvas mouseover
-  const handleCanvasMouseMove = (e) => {
-    if (!canvasRef.current || !adjustedCoordinates?.length) return;
-    
-    // Get mouse position relative to canvas
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
-    
-    // Find if mouse is over a difference
-    let hoveredDiff = null;
-    
-    for (const diff of adjustedCoordinates) {
-      // Check if the mouse is inside this difference
-      if (
-        mouseX >= diff.x &&
-        mouseX <= diff.x + diff.width &&
-        mouseY >= diff.y &&
-        mouseY <= diff.y + diff.height
-      ) {
-        hoveredDiff = diff.originalDiff;
-        break;
-      }
-    }
-    
-    // Update hover state and tooltip position
-    if (hoveredDiff) {
-      setHoverDifference(hoveredDiff);
-      setTooltipPosition({ x: e.clientX, y: e.clientY });
-    } else {
-      setHoverDifference(null);
-    }
-  };
-
-  // Handle canvas mouseout
-  const handleCanvasMouseOut = () => {
-    setHoverDifference(null);
-  };
-
-  // Handle click on canvas to select a difference
-  const handleCanvasClick = (e) => {
-    if (!canvasRef.current || !onDifferenceSelect || !adjustedCoordinates?.length) return;
-    
-    // Get mouse coordinates
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
-    
-    // Find if we clicked on a difference
-    let clickedDiff = null;
-    
-    for (const diff of adjustedCoordinates) {
-      // Check if the click is inside this difference
-      if (
-        mouseX >= diff.x &&
-        mouseX <= diff.x + diff.width &&
-        mouseY >= diff.y &&
-        mouseY <= diff.y + diff.height
-      ) {
-        clickedDiff = diff.originalDiff;
-        break;
-      }
-    }
-    
-    if (clickedDiff) {
-      onDifferenceSelect(clickedDiff);
-    }
-  };
-
-  // Toggle debug mode
-  const toggleDebugMode = () => {
-    setDebugMode(!debugMode);
   };
 
   // Update dimensions when zoom changes
@@ -497,52 +477,24 @@ const PDFRenderer = ({
   }
 
   return (
-    <div className="pdf-renderer" ref={containerRef}>
-      {/* Debug mode toggle */}
+    <div className="pdf-renderer" ref={containerRef} style={{ position: 'relative', border: debugMode ? '2px solid red' : 'none' }}>
+      {/* Debug mode information */}
       {debugMode && (
-        <button 
-          className="debug-toggle"
-          onClick={toggleDebugMode}
-          style={{
-            position: 'absolute',
-            top: '5px',
-            right: '5px',
-            zIndex: 20,
-            background: debugMode ? 'rgba(76, 175, 80, 0.7)' : 'rgba(0, 0, 0, 0.5)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            padding: '4px 8px',
-            fontSize: '12px',
-            cursor: 'pointer'
-          }}
-        >
-          {debugMode ? 'Debug: ON' : 'Debug: OFF'}
-        </button>
-      )}
-      
-      {/* Debug info */}
-      {debugMode && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '30px',
-            right: '5px',
-            background: 'rgba(0,0,0,0.7)',
-            color: 'white',
-            padding: '8px',
-            borderRadius: '4px',
-            fontSize: '10px',
-            maxWidth: '200px',
-            zIndex: 20
-          }}
-        >
-          <div>Page: {page}</div>
+        <div className="debug-info" style={{
+          position: 'absolute',
+          top: '5px',
+          right: '5px',
+          background: 'rgba(0,0,0,0.6)',
+          color: 'white',
+          padding: '5px',
+          fontSize: '10px',
+          zIndex: 20
+        }}>
+          <div>Page {page}</div>
+          <div>Differences: {differences.length}</div>
+          <div>Adjusted: {adjustedCoordinates.length}</div>
           <div>Scale: {scaleFactor.toFixed(3)}</div>
-          <div>Zoom: {zoom.toFixed(2)}</div>
-          <div>Offset: ({Math.round(containerOffset.x)}, {Math.round(containerOffset.y)})</div>
-          <div>FlipY: {flipY ? 'Yes' : 'No'}</div>
-          <div>Differences: {adjustedCoordinates.length}</div>
+          <div>Highlight Mode: {highlightMode}</div>
         </div>
       )}
       
@@ -558,7 +510,10 @@ const PDFRenderer = ({
       <div
         className="canvas-container"
         style={{
-          opacity: imageLoaded ? 1 : 0.3
+          opacity: imageLoaded ? 1 : 0.3,
+          position: 'relative',
+          width: dimensions.width,
+          height: dimensions.height
         }}
       >
         {imageUrl && (
@@ -569,26 +524,33 @@ const PDFRenderer = ({
             alt={`PDF page ${page}`}
             style={{
               width: dimensions.width,
-              height: dimensions.height
+              height: dimensions.height,
+              position: 'absolute',
+              top: 0,
+              left: 0
             }}
             onLoad={handleImageLoad}
             onError={handleImageError}
           />
         )}
         
-        <canvas
-          ref={canvasRef}
-          className="highlight-layer"
-          onClick={handleCanvasClick}
-          onMouseMove={handleCanvasMouseMove}
-          onMouseOut={handleCanvasMouseOut}
-          width={dimensions.width}
-          height={dimensions.height}
+        {/* DOM-based highlights container */}
+        <div 
+          ref={highlightsContainerRef}
+          className="highlights-container"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none'
+          }}
         />
       </div>
       
       {/* Difference count badge */}
-      {adjustedCoordinates.length > 0 && imageLoaded && (
+      {adjustedCoordinates.length > 0 && imageLoaded && highlightMode !== 'none' && (
         <div className="diff-count-badge">{adjustedCoordinates.length}</div>
       )}
       

@@ -437,3 +437,132 @@
   background-color: var(--primary-color);
   margin-right: var(--spacing-xs);
 }
+.document-pages {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.document-page {
+  margin-bottom: 24px;
+  position: relative;
+  border-bottom: 1px dashed var(--border-color);
+  padding-bottom: 24px;
+}
+
+.document-page:last-child {
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+.page-number-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: var(--primary-color);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  z-index: 10;
+}
+.document-pages {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.document-page {
+  margin-bottom: 24px;
+  position: relative;
+  border-bottom: 1px dashed var(--border-color);
+  padding-bottom: 24px;
+}
+
+.document-page:last-child {
+  margin-bottom: 0;
+  border-bottom: none;
+}
+/* Add these styles to your SideBySideView.css file to style unmatched documents */
+
+/* Unmatched document styling */
+.unmatched-document-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #ff5252;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+
+.unmatched-document-banner svg {
+  width: 24px;
+  height: 24px;
+  fill: white;
+  margin-right: 8px;
+}
+
+.unmatched-pair .pair-header {
+  background-color: #ff5252;
+}
+
+.empty-side {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--background-color);
+  border-right: 1px solid var(--border-color);
+}
+
+.no-match-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 300px;
+  padding: 32px;
+  text-align: center;
+  color: var(--text-secondary);
+  background-color: rgba(0, 0, 0, 0.03);
+  border: 1px dashed var(--border-color);
+  margin: 16px;
+  border-radius: 8px;
+}
+
+.no-match-message svg {
+  width: 48px;
+  height: 48px;
+  fill: var(--text-secondary);
+  margin-bottom: 16px;
+  opacity: 0.7;
+}
+
+.no-match-message p {
+  font-size: 16px;
+  max-width: 250px;
+}
+
+/* Toggle for showing/hiding unmatched documents */
+.filter-controls {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 8px 16px;
+  background-color: var(--background-color);
+  border-radius: 4px;
+}
+
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.filter-checkbox input {
+  margin-right: 8px;
+}
