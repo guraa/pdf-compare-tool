@@ -212,6 +212,69 @@
   margin-left: 4px;
 }
 
+.highlights-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+  z-index: 2;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+.difference-highlight {
+  position: absolute;
+  border-radius: 3px;
+  pointer-events: auto;
+  z-index: 1000;
+  box-sizing: border-box;
+  opacity: 0.7;
+  display: block;
+}
+
+.difference-highlight.text {
+  background-color: rgba(255, 82, 82, 0.5);
+  border: 2px solid rgba(255, 82, 82, 1);
+}
+
+.difference-highlight.image {
+  background-color: rgba(33, 150, 243, 0.5);
+  border: 2px solid rgba(33, 150, 243, 1);
+}
+
+.difference-highlight.font {
+  background-color: rgba(156, 39, 176, 0.5);
+  border: 2px solid rgba(156, 39, 176, 1);
+}
+
+.difference-highlight.style {
+  background-color: rgba(255, 152, 0, 0.5);
+  border: 2px solid rgba(255, 152, 0, 1);
+}
+
+.difference-highlight.selected {
+  border: 3px solid yellow;
+  z-index: 1001;
+  box-shadow: 0 0 10px yellow;
+}
+
+/* Added styles for difference types */
+.difference-highlight.added {
+  background-color: rgba(76, 175, 80, 0.5);
+  border: 2px solid rgba(76, 175, 80, 1);
+}
+
+.difference-highlight.deleted {
+  background-color: rgba(244, 67, 54, 0.5);
+  border: 2px solid rgba(244, 67, 54, 1);
+}
+
+.difference-highlight.modified {
+  background-color: rgba(255, 152, 0, 0.5);
+  border: 2px solid rgba(255, 152, 0, 1);
+}
 /* Dark mode adjustments */
 [data-theme="dark"] .renderer-loading {
   background-color: rgba(0, 0, 0, 0.5);

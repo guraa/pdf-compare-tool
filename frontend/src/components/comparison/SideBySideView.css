@@ -1,21 +1,24 @@
-/* Enhanced SideBySideView styles with continuous scrolling for all document pairs */
+/* Optimized SideBySideView.css - Clean and focused on fixing spacing issues */
+
+/* Main container */
 .pdf-comparison-container {
   display: flex;
   flex-direction: column;
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background-color: var(--background-color);
+  background-color: #333;
 }
 
+/* Header elements */
 .comparison-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-m);
-  background-color: var(--surface-color);
-  border-bottom: 1px solid var(--border-color);
-  z-index: 10;
+  padding: 8px;
+  background-color: #2c6dbd;
+  color: white;
+  border-bottom: 1px solid #1a4f96;
 }
 
 .back-button {
@@ -23,16 +26,9 @@
   align-items: center;
   background: none;
   border: none;
-  color: var(--primary-color);
+  color: white;
   cursor: pointer;
   font-weight: 500;
-}
-
-.back-button svg {
-  width: 24px;
-  height: 24px;
-  margin-right: 8px;
-  fill: currentColor;
 }
 
 .document-info {
@@ -41,31 +37,27 @@
 
 .document-info h3 {
   margin: 0;
-  color: var(--text-primary);
+  color: white;
 }
 
-.page-ranges {
+/* Filter controls */
+.filter-controls {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 4px;
-  color: var(--text-secondary);
-  font-size: 14px;
+  padding: 4px 8px;
+  background-color: #444;
+  border-bottom: 1px solid #333;
 }
 
-.separator {
-  color: var(--text-disabled);
-}
-
+/* Content area */
 .comparison-content {
   display: flex;
   flex: 1;
-  overflow: hidden;
   position: relative;
+  overflow: hidden;
 }
 
-/* Continuous scrolling container */
+/* Document container */
 .documents-scroll-container {
   flex: 1;
   overflow-y: auto;
@@ -74,26 +66,27 @@
 }
 
 .documents-scroll-container.with-panel {
-  width: calc(100% - 350px);
+  width: calc(100% - 300px);
 }
 
-/* Continuous PDF view */
+/* Remove whitespace from PDF view */
 .continuous-pdf-view {
   display: flex;
   flex-direction: column;
   width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
-/* Document pair container */
+/* Document pair - KEY FIX FOR GAP ISSUE */
 .document-pair {
   display: flex;
   flex-direction: column;
-  margin-bottom: var(--spacing-xl);
-  background-color: var(--surface-color);
-  border-radius: var(--border-radius-m);
-  box-shadow: var(--shadow-light);
+  margin: 0;
+  padding: 0;
+  background-color: #333;
   overflow: hidden;
-  position: relative;
+  border-bottom: 1px solid #444;
 }
 
 /* Pair header */
@@ -101,71 +94,36 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-m);
-  background-color: var(--primary-color);
+  padding: 8px;
+  background-color: #1a4f96;
   color: white;
-  position: sticky;
-  top: 0;
-  z-index: 5;
+  margin: 0;
 }
 
 .pair-header h3 {
   margin: 0;
   color: white;
-  font-size: var(--font-size-l);
-  font-weight: 500;
 }
 
-.match-percentage {
-  font-weight: bold;
-  padding: var(--spacing-xs) var(--spacing-s);
-  border-radius: var(--border-radius-s);
-}
-
-/* Individual page container */
-.pdf-page-container {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: var(--spacing-m);
-  border-bottom: 1px solid var(--border-color);
-  position: relative;
-}
-
-.pdf-page-container:last-child {
-  margin-bottom: 0;
-  border-bottom: none;
-}
-
-/* Page header */
-.page-header {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: var(--spacing-s);
-  background-color: var(--primary-light);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.page-header h4 {
-  margin: 0;
-  color: var(--primary-dark);
-  font-size: var(--font-size-m);
-  font-weight: 500;
-}
-
-/* Page content with side-by-side PDFs */
+/* Page content - KEY FIX FOR GAP ISSUE */
 .page-content {
   display: flex;
   flex-direction: row;
+  margin: 0;
+  padding: 0;
+  border: none;
 }
 
-/* Individual side (base or compare) */
+/* Individual sides */
 .page-side {
   flex: 1;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border-color);
-  background-color: var(--surface-color);
+  border-right: 1px solid #444;
+  background-color: #333;
+  max-width: 50%;
+  margin: 0;
+  padding: 0;
 }
 
 .page-side:last-child {
@@ -174,49 +132,77 @@
 
 /* Document headers */
 .document-header {
-  padding: var(--spacing-s) var(--spacing-m);
-  background-color: var(--background-color);
-  border-bottom: 1px solid var(--border-color);
+  padding: 4px 8px;
+  background-color: #444;
+  border-bottom: 1px solid #555;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin: 0;
 }
 
 .document-header h4 {
   margin: 0;
-  color: var(--text-primary);
-  font-size: var(--font-size-s);
-  font-weight: 500;
+  color: white;
 }
 
-.page-info {
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-}
-
+/* Document content area - KEY FIX FOR GAP ISSUE */
 .document-content {
-  padding: var(--spacing-m);
+  padding: 0;
+  margin: 0;
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  min-height: 300px;
+  background-color: #333;
+}
+
+/* Document pages - KEY FIX FOR GAP ISSUE */
+.document-pages {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.document-page {
+  margin: 0;
+  padding: 0;
   position: relative;
+  border-bottom: 1px dashed #444;
+}
+
+.document-page:last-child {
+  border-bottom: none;
+}
+
+.page-number-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: #2c6dbd;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  z-index: 10;
 }
 
 /* Difference panel */
 .difference-panel {
-  width: 350px;
-  border-left: 1px solid var(--border-color);
+  width: 300px;
+  border-left: 1px solid #444;
   display: flex;
   flex-direction: column;
-  background-color: var(--surface-color);
+  background-color: #222;
   overflow: hidden;
 }
 
 .difference-panel-header {
-  padding: var(--spacing-m);
-  background-color: var(--primary-light);
-  border-bottom: 1px solid var(--border-color);
+  padding: 8px;
+  background-color: #1a4f96;
+  border-bottom: 1px solid #444;
   position: sticky;
   top: 0;
   z-index: 5;
@@ -224,127 +210,58 @@
 
 .difference-panel-header h3 {
   margin: 0;
-  color: var(--primary-dark);
-  font-size: var(--font-size-m);
-  font-weight: 500;
+  color: white;
 }
 
-.difference-count {
-  margin-top: var(--spacing-xs);
-  font-size: var(--font-size-s);
-  color: var(--text-secondary);
-}
-
-/* Toggle panel button */
+/* Toggle panel button - FIXED POSITION */
 .toggle-panel-button {
-  position: absolute;
+  position: fixed;
   top: 50%;
-  right: 350px;
   transform: translateY(-50%);
-  background-color: var(--primary-color);
+  background-color: #2c6dbd;
   color: white;
   width: 24px;
   height: 80px;
   border: none;
-  border-radius: var(--border-radius-s) 0 0 var(--border-radius-s);
+  border-radius: 4px 0 0 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 10;
+  z-index: 1000;
   font-weight: bold;
+  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.2);
+  right: 300px;
 }
 
 .toggle-panel-button.hidden {
   right: 0;
 }
 
-/* Comparison footer */
+/* Footer */
 .comparison-footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-m);
-  background-color: var(--surface-color);
-  border-top: 1px solid var(--border-color);
-  z-index: 10;
+  padding: 8px;
+  background-color: #222;
+  border-top: 1px solid #444;
 }
 
-/* View controls */
 .view-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  max-width: 800px;
 }
 
-.highlight-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-s);
-}
-
-.highlight-controls label {
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.highlight-controls select {
-  padding: var(--spacing-xs) var(--spacing-s);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-s);
-  background-color: var(--surface-color);
-  color: var(--text-primary);
-}
-
-.page-status {
-  font-size: var(--font-size-s);
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-/* No content placeholder */
-.no-content {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  padding: var(--spacing-m);
-  background-color: var(--background-color);
-  border: 1px dashed var(--border-color);
-  border-radius: var(--border-radius-s);
-  color: var(--text-secondary);
-}
-
-/* Loading container */
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  padding: var(--spacing-xl);
-}
-
-.loading-container p {
-  margin-top: var(--spacing-m);
-  color: var(--text-secondary);
-}
-
-/* Responsive design */
+/* Media queries */
 @media (max-width: 1024px) {
   .page-content {
     flex-direction: column;
   }
   
   .page-side {
+    max-width: 100%;
     border-right: none;
-    border-bottom: 1px solid var(--border-color);
-  }
-  
-  .page-side:last-child {
-    border-bottom: none;
+    border-bottom: 1px solid #444;
   }
   
   .documents-scroll-container.with-panel {
@@ -356,213 +273,20 @@
     width: 100%;
     height: 300px;
     border-left: none;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid #444;
   }
   
   .toggle-panel-button {
     top: unset;
+    bottom: 300px;
     right: 16px;
-    bottom: 304px;
     transform: none;
     height: 32px;
     width: 80px;
-    border-radius: var(--border-radius-s);
+    border-radius: 4px;
   }
   
   .toggle-panel-button.hidden {
     bottom: 16px;
   }
-}
-
-@media (max-width: 768px) {
-  .comparison-header {
-    flex-direction: column;
-    gap: var(--spacing-s);
-    padding: var(--spacing-s) var(--spacing-m);
-  }
-  
-  .back-button {
-    align-self: flex-start;
-  }
-  
-  .view-controls {
-    flex-direction: column;
-    gap: var(--spacing-s);
-  }
-  
-  .highlight-controls {
-    width: 100%;
-  }
-  
-  .highlight-controls select {
-    flex: 1;
-  }
-}
-
-/* Special styling for pairs */
-.document-pair:nth-child(odd) .pair-header {
-  background-color: var(--primary-dark);
-}
-
-.document-pair:nth-child(even) .pair-header {
-  background-color: var(--primary-color);
-}
-/* Highlight the current (most visible) document pair */
-.document-pair {
-  border-left: 5px solid transparent;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-.document-pair.current-pair {
-  border-left-color: var(--primary-color);
-  box-shadow: var(--shadow-medium);
-}
-
-/* Update the difference panel header to show current document info */
-.difference-panel-header h3 {
-  margin: 0;
-  color: var(--primary-dark);
-  font-size: var(--font-size-m);
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-}
-
-.difference-panel-header h3::before {
-  content: '';
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: var(--primary-color);
-  margin-right: var(--spacing-xs);
-}
-.document-pages {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.document-page {
-  margin-bottom: 24px;
-  position: relative;
-  border-bottom: 1px dashed var(--border-color);
-  padding-bottom: 24px;
-}
-
-.document-page:last-child {
-  margin-bottom: 0;
-  border-bottom: none;
-}
-
-.page-number-indicator {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background-color: var(--primary-color);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: bold;
-  z-index: 10;
-}
-.document-pages {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.document-page {
-  margin-bottom: 24px;
-  position: relative;
-  border-bottom: 1px dashed var(--border-color);
-  padding-bottom: 24px;
-}
-
-.document-page:last-child {
-  margin-bottom: 0;
-  border-bottom: none;
-}
-/* Add these styles to your SideBySideView.css file to style unmatched documents */
-
-/* Unmatched document styling */
-.unmatched-document-banner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #ff5252;
-  color: white;
-  padding: 8px 16px;
-  border-radius: 4px;
-  margin-bottom: 16px;
-  font-weight: 500;
-}
-
-.unmatched-document-banner svg {
-  width: 24px;
-  height: 24px;
-  fill: white;
-  margin-right: 8px;
-}
-
-.unmatched-pair .pair-header {
-  background-color: #ff5252;
-}
-
-.empty-side {
-  display: flex;
-  flex-direction: column;
-  background-color: var(--background-color);
-  border-right: 1px solid var(--border-color);
-}
-
-.no-match-message {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 300px;
-  padding: 32px;
-  text-align: center;
-  color: var(--text-secondary);
-  background-color: rgba(0, 0, 0, 0.03);
-  border: 1px dashed var(--border-color);
-  margin: 16px;
-  border-radius: 8px;
-}
-
-.no-match-message svg {
-  width: 48px;
-  height: 48px;
-  fill: var(--text-secondary);
-  margin-bottom: 16px;
-  opacity: 0.7;
-}
-
-.no-match-message p {
-  font-size: 16px;
-  max-width: 250px;
-}
-
-/* Toggle for showing/hiding unmatched documents */
-.filter-controls {
-  display: flex;
-  align-items: center;
-  margin-bottom: 16px;
-  padding: 8px 16px;
-  background-color: var(--background-color);
-  border-radius: 4px;
-}
-
-.filter-checkbox {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  user-select: none;
-}
-
-.filter-checkbox input {
-  margin-right: 8px;
 }
