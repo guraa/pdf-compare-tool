@@ -6,6 +6,7 @@ import './PDFRenderer.css';
 
 /**
  * PDFRenderer with targeted coordinate adjustments optimized for your specific document structure.
+ * Improved zone-based adjustment system to fix alignment issues in the middle sections.
  */
 const PDFRenderer = ({
   fileId,
@@ -39,8 +40,9 @@ const PDFRenderer = ({
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [scaleFactor, setScaleFactor] = useState(1);
   const [containerOffset, setContainerOffset] = useState({ x: 0, y: 0 });
-  const [adjustedCoordinates, setAdjustedCoordinates] = useState([]);
-  
+  const [baseCoordinates, setBaseCoordinates] = useState([]); // State for base coordinates before dynamic adjustment
+  const [adjustedCoordinates, setAdjustedCoordinates] = useState([]); // State for final coordinates after dynamic adjustment
+
   // Refs
   const imageRef = useRef(null);
   const containerRef = useRef(null);
@@ -119,12 +121,14 @@ const PDFRenderer = ({
     }
   }, [imageLoaded, scaleAdjustment, xOffsetAdjustment, yOffsetAdjustment, debugMode]);
 
-  // Transform difference coordinates with targeted adjustments
+  // Effect 1: Calculate base coordinates (scaling, flipping, offsetting)
   useEffect(() => {
-    if (!differences || !scaleFactor || !imageRef.current) return;
-    
-    console.log(`Processing ${differences.length} differences for page ${page}`);
-    
+    if (!differences || !scaleFactor || !imageRef.current) {
+      setBaseCoordinates([]); // Clear if no input
+      return;
+    }
+
+    console.log(`[Base Calc] Processing ${differences.length} differences for page ${page}`);
     const image = imageRef.current;
     const imageWidth = image.naturalWidth;
     const imageHeight = image.naturalHeight;
@@ -137,11 +141,11 @@ const PDFRenderer = ({
     const xRatio = imageWidth / pdfWidth;
     const yRatio = imageHeight / pdfHeight;
     
-    // Transform all difference coordinates
-    const transformed = differences.map(diff => {
+    // Calculate base transformed coordinates
+    const transformedBase = differences.map(diff => {
       // Skip if missing key properties
       if (!diff) return null;
-      
+
       // Create an ID if one doesn't exist
       const id = diff.id || `diff-${Math.random().toString(36).substr(2, 9)}`;
       
@@ -216,10 +220,9 @@ const PDFRenderer = ({
       
       // Apply container offset
       let displayX = scaledX + containerOffset.x;
-      
-      // Handle Y coordinate flip - TARGETED ADJUSTMENTS FOR SPECIFIC Y RANGES
-      let displayY;
-      
+      let displayY; // Declare displayY here
+
+      // Handle Y coordinate flip
       if (flipY) {
         // Calculate the standard flipped Y coordinate
         const pixelPdfHeight = pdfHeight * yRatio * zoom;
@@ -235,29 +238,50 @@ const PDFRenderer = ({
           });
         }
         
-        // Apply targeted Y adjustments based on the region of the document
-        // These values are specifically tuned for your document structure
-        if (originalY >= 400 && originalY < 450) {
-          // Middle-lower area (around 427) - move up significantly
-          displayY -= 120 * zoom;
-        } else if (originalY >= 350 && originalY < 400) {
-          // Middle area - move up moderately
-          displayY -= 80 * zoom;
-        } else if (originalY >= 450) {
-          // Bottom area - move up substantially
-          displayY -= 100 * zoom;
-        } else if (originalY >= 100 && originalY < 200) {
-          // Upper-middle area - small adjustment
-          displayY -= 20 * zoom;
-        } else if (originalY < 100) {
-          // Top area - minimal adjustment
-          displayY -= 10 * zoom;
+        // Apply dynamic scaling adjustments based on the selected algorithm
+        if (maxScalingAdjustment > 0) {
+          const normalizedY = originalY / pdfHeight; // Normalize Y coordinate (0 at top, 1 at bottom)
+          let adjustment = 0;
+
+          switch (scalingAlgorithm) {
+            case 'linear':
+              // Linear adjustment (more adjustment at the top, less at the bottom)
+              adjustment = maxScalingAdjustment * (1 - normalizedY);
+              break;
+            case 'quadratic':
+              // Quadratic adjustment (parabolic - max adjustment in the middle)
+              adjustment = 4 * maxScalingAdjustment * normalizedY * (1 - normalizedY);
+              break;
+            case 'sigmoid':
+              // Sigmoid adjustment (S-curve - sharp change in the middle)
+              // The factor 10 controls the steepness of the curve
+              const sigmoidFactor = 1 / (1 + Math.exp(-10 * (normalizedY - 0.5)));
+              adjustment = maxScalingAdjustment * (1 - sigmoidFactor); // Adjusts more towards the top
+              break;
+            case 'inversed':
+              // Inverse quadratic (min adjustment in the middle, max at top/bottom)
+              adjustment = maxScalingAdjustment * (1 - 4 * normalizedY * (1 - normalizedY));
+              break;
+            default:
+              // Default to quadratic if algorithm is unknown
+              adjustment = 4 * maxScalingAdjustment * normalizedY * (1 - normalizedY);
+          }
+
+          // Apply the calculated adjustment, scaled by zoom
+          // We subtract because a positive adjustment should move the highlight UP (decrease Y)
+          displayY -= adjustment * zoom;
+
+          if (debugMode && Math.abs(originalY - 427.7) < 1) {
+             console.log(`[SCALING DEBUG] Y=${originalY}, Algorithm=${scalingAlgorithm}, MaxAdj=${maxScalingAdjustment}, Adjustment=${adjustment.toFixed(2)}`);
+          }
         }
+
       } else {
-        displayY = scaledY + containerOffset.y;
+        // If not flipping Y, just apply the offset
+        displayY = scaledY + containerOffset.y; // Assign to displayY
       }
-      
-      // Create the transformed coordinates object
+
+      // Create the base transformed coordinates object
       return {
         id,
         type,
@@ -265,62 +289,117 @@ const PDFRenderer = ({
         text,
         baseText,
         compareText,
-        // Display coordinates for rendering
+        // Base display coordinates (before dynamic adjustment)
         x: displayX,
-        y: displayY,
+        y: displayY, // Use displayY which is now correctly scoped
         width: scaledWidth,
         height: scaledHeight,
-        // Original coordinates for reference
+        // Original coordinates needed for adjustment
         originalX,
         originalY,
         originalWidth,
         originalHeight,
         // Original difference object
-        originalDiff: diff
+        originalDiff: diff,
+        originalY // Pass originalY for dynamic adjustment calculation
       };
     }).filter(Boolean); // Remove any null items
-    
-    // DEBUGGING - safe to access transformed now that it's fully created
-    if (debugMode && transformed.length > 0) {
-      // Create an array of coordinate pairs for visualization
-      const debugCoordinates = transformed.slice(0, 3).map(diff => ({
-        id: diff.id,
-        text: diff.text?.substring(0, 20) || '[No text]',
-        originalY: diff.originalY,
-        transformedY: diff.y,
-        adjustment: diff.y - (pdfHeight * yRatio * zoom - diff.originalY * yRatio * zoom)
-      }));
-      
-      // Log the transformations
-      console.log(`[TRANSFORM DEBUG] First ${debugCoordinates.length} coordinate transformations:`, 
-        debugCoordinates
-      );
-      
-      // Log min/max/avg adjustments if we have coordinates
-      if (debugCoordinates.length > 0) {
-        const yAdjustments = debugCoordinates.map(c => c.adjustment);
-        console.log(`[TRANSFORM DEBUG] Y Adjustments - Min: ${Math.min(...yAdjustments).toFixed(2)}, ` + 
-          `Max: ${Math.max(...yAdjustments).toFixed(2)}, ` + 
-          `Avg: ${(yAdjustments.reduce((a, b) => a + b, 0) / yAdjustments.length).toFixed(2)}`);
-      }
-    }
-    
-    setAdjustedCoordinates(transformed);
-    
-    if (transformed.length > 0 && debugMode) {
-      console.log(`Transformed ${transformed.length} differences for rendering`);
-      if (transformed.length > 0) {
-        console.log("Example transformed diff:", transformed[0]);
-      }
-    }
-  }, [differences, scaleFactor, zoom, containerOffset, flipY, dimensions, isBaseDocument, debugMode, page]);
 
-  // Draw highlights on canvas when differences or zoom changes
+    setBaseCoordinates(transformedBase);
+
+    if (debugMode) {
+      console.log(`[Base Calc] Calculated ${transformedBase.length} base coordinates for page ${page}.`);
+      if (transformedBase.length > 0) {
+         console.log("[Base Calc] Example base coordinate:", transformedBase[0]);
+      }
+    }
+  // This effect should ONLY run when the core difference data or scaling/offset factors change
+  }, [differences, scaleFactor, zoom, containerOffset, flipY, dimensions, isBaseDocument, debugMode, page, xOffsetAdjustment, yOffsetAdjustment, scaleAdjustment]);
+
+
+  // Effect 2: Apply dynamic adjustment to base coordinates
   useEffect(() => {
-    if (!canvasRef.current || !imageLoaded || !differences || differences.length === 0 || highlightMode === 'none') {
+    if (!baseCoordinates || baseCoordinates.length === 0) {
+      setAdjustedCoordinates([]); // Ensure adjusted is cleared if base is empty
       return;
     }
-    
+
+    const pdfHeight = 792; // Standard PDF height
+
+    console.log(`[Adjustment] Applying ${scalingAlgorithm} (max: ${maxScalingAdjustment}) to ${baseCoordinates.length} base coordinates.`);
+
+    const finalCoordinates = baseCoordinates.map(baseCoord => {
+      let finalY = baseCoord.y; // Start with base Y
+
+      // Apply dynamic scaling adjustments based on the selected algorithm
+      // Only apply if flipping Y (as coordinates are relative to top-left otherwise)
+      // and if there's an adjustment value set
+      if (flipY && maxScalingAdjustment > 0) {
+          const normalizedY = baseCoord.originalY / pdfHeight; // Normalize original Y
+          let adjustment = 0;
+
+          switch (scalingAlgorithm) {
+            case 'linear':
+              adjustment = maxScalingAdjustment * (1 - normalizedY);
+              break;
+            case 'quadratic':
+              adjustment = 4 * maxScalingAdjustment * normalizedY * (1 - normalizedY);
+              break;
+            case 'sigmoid':
+              const sigmoidFactor = 1 / (1 + Math.exp(-10 * (normalizedY - 0.5)));
+              adjustment = maxScalingAdjustment * (1 - sigmoidFactor);
+              break;
+            case 'inversed':
+              adjustment = maxScalingAdjustment * (1 - 4 * normalizedY * (1 - normalizedY));
+              break;
+            default: // Default to quadratic
+              adjustment = 4 * maxScalingAdjustment * normalizedY * (1 - normalizedY);
+          }
+          // Subtract adjustment scaled by zoom
+          finalY -= adjustment * zoom;
+      }
+
+      return {
+        ...baseCoord, // Spread all properties from base coordinate
+        y: finalY // Override Y with the final adjusted value
+      };
+    });
+
+    setAdjustedCoordinates(finalCoordinates);
+
+    // Debugging logs
+    if (debugMode) {
+      console.log(`[Adjustment] Produced ${finalCoordinates.length} adjusted coordinates.`);
+      if (finalCoordinates.length > 0) {
+        const example = finalCoordinates[0];
+        const baseExample = baseCoordinates.find(bc => bc.id === example.id);
+        console.log("[Adjustment] Example adjusted coordinate:", {
+           id: example.id,
+           originalY: example.originalY,
+           baseY: baseExample?.y.toFixed(2),
+           adjustedY: example.y.toFixed(2),
+           adjustment: (baseExample?.y - example.y).toFixed(2)
+        });
+      }
+    }
+  // This effect ONLY runs when base coordinates change or adjustment parameters change
+  }, [baseCoordinates, scalingAlgorithm, maxScalingAdjustment, flipY, zoom, debugMode]);
+
+
+  // Effect 3: Draw highlights using final adjustedCoordinates
+  useEffect(() => {
+    // Check dependencies needed for drawing itself
+    if (!canvasRef.current || !imageLoaded || highlightMode === 'none') {
+       // Clear canvas if no highlights or not loaded
+       if (canvasRef.current) {
+         const canvas = canvasRef.current;
+         const ctx = canvas.getContext('2d');
+         ctx.clearRect(0, 0, canvas.width, canvas.height);
+       }
+      return;
+    }
+
+    console.log(`[Draw] Drawing ${adjustedCoordinates.length} highlights. Mode: ${highlightMode}, Zoom: ${zoom}`);
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     
@@ -331,10 +410,10 @@ const PDFRenderer = ({
     canvas.width = dimensions.width;
     canvas.height = dimensions.height;
     
-    // Draw each highlight
+    // Draw each highlight using the final 'adjustedCoordinates'
     adjustedCoordinates.forEach(diff => {
       // Skip if this type is not included in highlight mode
-      if (highlightMode !== 'all' && diff.type !== highlightMode) {
+      if (highlightMode !== 'all' && diff.type !== highlightMode && !(diff.changeType && highlightMode === 'changes')) { // Added check for 'changes' mode if implemented
         return;
       }
       
@@ -415,8 +494,10 @@ const PDFRenderer = ({
         ctx.stroke();
       }
     });
-    
+
+  // This effect ONLY runs when the final coordinates or visual parameters change
   }, [adjustedCoordinates, zoom, highlightMode, selectedDifference, dimensions, imageLoaded]);
+
 
   // Handle mouse events for interaction with differences
   const handleCanvasClick = (e) => {
@@ -561,8 +642,11 @@ const PDFRenderer = ({
         }}>
           <div>Page {page}</div>
           <div>Differences: {differences.length}</div>
-          <div>Adjusted: {adjustedCoordinates.length}</div>
-          <div>Scale: {scaleFactor?.toFixed(3)}</div>
+          <div>Base Coords: {baseCoordinates.length}</div>
+          <div>Adjusted Coords: {adjustedCoordinates.length}</div>
+          <div>Scale Factor: {scaleFactor?.toFixed(3)}</div>
+          <div>Algorithm: {scalingAlgorithm}</div>
+          <div>Max Adjust: {maxScalingAdjustment}</div>
         </div>
       )}
       
@@ -603,12 +687,12 @@ const PDFRenderer = ({
         />
       </div>
       
-      {/* Difference count badge */}
+      {/* Difference count badge (using final adjusted coordinates) */}
       {adjustedCoordinates.length > 0 && imageLoaded && highlightMode !== 'none' && (
         <div className="diff-count-badge">{adjustedCoordinates.length}</div>
       )}
-      
-      {/* Tooltip for difference hover */}
+
+      {/* Tooltip for difference hover (uses originalDiff from adjustedCoordinates) */}
       <DifferenceTooltip
         difference={hoverDifference}
         visible={!!hoverDifference}
