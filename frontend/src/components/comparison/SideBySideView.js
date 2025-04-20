@@ -5,8 +5,11 @@ import PDFRenderer from './PDFRenderer';
 import DifferenceList from './DifferenceList';
 import Spinner from '../common/Spinner';
 import ZoomControls from './ZoomControls';
-import { getDocumentPairs } from '../../services/api';
+import { getDocumentPairs, getDocumentPairResult, getDocumentPageDetails } from '../../services/api';
+import DifferenceDebugDisplay from './DifferenceDebugDisplay'; // Import debug component
 import './SideBySideView.css';
+import PDFCoordinateAnalyzer from './PDFCoordinateAnalyzer';
+
 
 const SideBySideView = ({ comparisonId }) => {
   // Refs
@@ -30,15 +33,33 @@ const SideBySideView = ({ comparisonId }) => {
   const [highlightMode, setHighlightMode] = useState('all');
   const [showDifferencePanel, setShowDifferencePanel] = useState(true);
   const [zoom, setZoom] = useState(0.4); // Start with a lower zoom level
-  const [loadingPairs, setLoadingPairs] = useState([]);
+  const [loadingPairs, setLoadingPairs] = useState(false);
   const [showUnpairedDocuments, setShowUnpairedDocuments] = useState(true);
+  const [scalingAlgorithm, setScalingAlgorithm] = useState('quadratic');
+const [maxScalingAdjustment, setMaxScalingAdjustment] = useState(15);
+  
+  // New state for pair details
+  const [currentPairResult, setCurrentPairResult] = useState(null);
+  const [loadingPairResult, setLoadingPairResult] = useState(false);
+  const [pageDifferences, setPageDifferences] = useState({});
+  
+  // Debug state
+  const [showDebugDisplay, setShowDebugDisplay] = useState(true);
+  const [debugDifferences, setDebugDifferences] = useState([]);
   
   // Calibration parameters for coordinate mapping
   const calibrationParams = {
     xOffset: 0,
-    yOffset: 16,
-    scaleAdjustment: 1.0,
+    yOffset: 30, // Increased from 16 to 30 to move highlights down
+    scaleAdjustment: 1.5,
     flipY: true
+  };
+
+
+  const handleApplyCorrection = (algorithm, maxAdjustment) => {
+    // Update PDFRenderer's correction parameters
+    setScalingAlgorithm(algorithm);
+    setMaxScalingAdjustment(maxAdjustment);
   };
 
   // Fetch document pairs when component mounts
@@ -84,8 +105,93 @@ const SideBySideView = ({ comparisonId }) => {
     fetchDocumentPairs();
   }, [comparisonId]);
 
+  // Load pair details when selected pair changes
+  useEffect(() => {
+    if (!comparisonId || state.selectedDocumentPairIndex === undefined || activeView !== 'comparison') {
+      return;
+    }
+    
+    const fetchPairResult = async () => {
+      try {
+        setLoadingPairResult(true);
+        console.log(`Fetching details for pair index ${state.selectedDocumentPairIndex}`);
+        
+        const result = await getDocumentPairResult(
+          comparisonId,
+          state.selectedDocumentPairIndex
+        );
+        
+        console.log("Pair result:", result);
+        setCurrentPairResult(result);
+        
+        // Preload first page differences for both base and compare
+        if (result.pagePairIds && result.pagePairIds.length > 0) {
+          const pagePairId = result.pagePairIds[0];
+          
+          // If we have differencesByPage data in the response, use it
+          if (result.differencesByPage && result.differencesByPage[pagePairId]) {
+            setPageDifferences(prev => ({
+              ...prev,
+              [pagePairId]: result.differencesByPage[pagePairId]
+            }));
+          } else {
+            // Otherwise fetch page details
+            await fetchPageDifferences(state.selectedDocumentPairIndex, 1);
+          }
+        }
+      } catch (err) {
+        console.error(`Error loading pair result:`, err);
+        setError(`Failed to load comparison details: ${err.message}`);
+      } finally {
+        setLoadingPairResult(false);
+      }
+    };
+    
+    fetchPairResult();
+  }, [comparisonId, state.selectedDocumentPairIndex, activeView]);
 
-  
+  // Function to fetch page differences
+  const fetchPageDifferences = async (pairIndex, pageNumber) => {
+    if (!comparisonId) return {};
+    
+    try {
+      console.log(`Fetching differences for pair ${pairIndex}, page ${pageNumber}`);
+      
+      const response = await getDocumentPageDetails(
+        comparisonId,
+        pairIndex,
+        pageNumber,
+        {
+          differenceTypes: ['text', 'font', 'image', 'style', 'metadata'],
+          minSeverity: 'all'
+        }
+      );
+      
+      console.log(`Page differences for pair ${pairIndex}, page ${pageNumber}:`, response);
+      
+      // Store the differences by page pair ID
+      const pagePairId = response.pagePairId || `pair-${pairIndex}-page-${pageNumber}`;
+      
+      setPageDifferences(prev => ({
+        ...prev,
+        [pagePairId]: {
+          baseDifferences: response.baseDifferences || [],
+          compareDifferences: response.compareDifferences || []
+        }
+      }));
+      
+      return {
+        baseDifferences: response.baseDifferences || [],
+        compareDifferences: response.compareDifferences || []
+      };
+    } catch (err) {
+      console.error(`Error fetching page differences:`, err);
+      return {
+        baseDifferences: [],
+        compareDifferences: []
+      };
+    }
+  };
 
   // Handle selecting a document pair
   const handleSelectDocumentPair = (pairIndex) => {
@@ -93,79 +199,104 @@ const SideBySideView = ({ comparisonId }) => {
     setSelectedDocumentPairIndex(pairIndex);
     setActiveView('comparison');
     
+    // Reset page differences when selecting a new pair
+    setPageDifferences({});
+    
     // Update visible pairs for difference panel
     visiblePairIndicesRef.current = [pairIndex];
-    updateVisibleDifferences();
   };
 
-
+  // Get page differences - completely reworked with direct differencesByPage access
   const getPageDifferences = (pairIndex, pageNum, isBaseDocument) => {
-    // Get the correct pair ID
-    const currentPair = documentPairs[pairIndex];
-    if (!currentPair) return [];
+    console.log(`Getting differences for pair ${pairIndex}, page ${pageNum}, isBase: ${isBaseDocument}`);
     
-    // For multi-page documents, we need the page pair ID
-    const pagePairId = state.comparisonResult?.pagePairs?.[pairIndex]?.id;
-    if (!pagePairId) return [];
+    // This is the main issue - we need to directly access the differencesByPage
+    if (state.comparisonResult && state.comparisonResult.differencesByPage) {
+      // Get all pagePairs
+      const pagePairs = state.comparisonResult.pagePairs || [];
+      
+      if (pagePairs.length > 0) {
+        // First find the relevant pagePair for the current page
+        let pagePair = null;
+        let pagePairId = null;
+        
+        // Log all pagePairs for debugging
+        console.log("All pagePairs:", pagePairs);
+        
+        // Try to find the specific page pair for this page number
+        for (const pair of pagePairs) {
+          // Check if this pair includes the requested page
+          if (isBaseDocument) {
+            if (pair.basePageNumber === pageNum || 
+               (pair.basePageStart <= pageNum && pair.basePageEnd >= pageNum)) {
+              pagePair = pair;
+              pagePairId = pair.id;
+              break;
+            }
+          } else {
+            if (pair.comparePageNumber === pageNum || 
+               (pair.comparePageStart <= pageNum && pair.comparePageEnd >= pageNum)) {
+              pagePair = pair;
+              pagePairId = pair.id;
+              break;
+            }
+          }
+        }
+        
+        // If we didn't find a specific page pair, just use the first one
+        // This is a fallback approach
+        if (!pagePair) {
+          // Try a different approach - use the page index
+          pagePair = pagePairs[pageNum - 1] || pagePairs[0];
+          if (pagePair) {
+            pagePairId = pagePair.id;
+          }
+        }
+        
+        if (pagePairId) {
+          // Now get all differences for this page pair
+          const allDifferences = state.comparisonResult.differencesByPage[pagePairId] || [];
+          console.log(`Found ${allDifferences.length} differences for pagePairId ${pagePairId}`);
+          
+          // IMPORTANT: Show ALL differences for now to help debug
+          // We'll filter later once we confirm differences are showing
+          return allDifferences;
+          
+          // Filter differences for the specific page and document side
+          // return allDifferences.filter(diff => {
+          //   if (isBaseDocument) {
+          //     return (diff.basePageNumber || diff.page) === pageNum;
+          //   } else {
+          //     return (diff.comparePageNumber || diff.page) === pageNum;
+          //   }
+          // });
+        }
+      }
+    }
     
-    // Get all differences for this page pair
-    const allDifferences = state.comparisonResult?.differencesByPage?.[pagePairId] || [];
+    // Get differences from our pageDifferences state if available
+    const pagePairId = currentPairResult?.pagePairIds ? 
+      currentPairResult.pagePairIds[pageNum - 1] : // Adjust for zero-based indexing
+      `pair-${pairIndex}-page-${pageNum}`;
     
-    // Filter differences for the specific page
-    return allDifferences.filter(diff => {
+    if (pageDifferences[pagePairId]) {
+      console.log(`Found cached differences for pagePairId ${pagePairId}`);
       if (isBaseDocument) {
-        // For base document, check basePageNumber
-        return (diff.basePageNumber || diff.page) === pageNum;
+        return pageDifferences[pagePairId].baseDifferences || [];
       } else {
-        // For compare document, check comparePageNumber
-        return (diff.comparePageNumber || diff.page) === pageNum;
+        return pageDifferences[pagePairId].compareDifferences || [];
       }
-    });
+    }
+    
+    // Last resort - fetch them directly
+    console.log("No differences found, fetching from API...");
+    fetchPageDifferences(pairIndex, pageNum);
+    
+    // Return empty array in the meantime
+    return [];
   };
 
-  // Update visible differences based on visible pairs
-  const updateVisibleDifferences = () => {
-    if (!pairDifferences || Object.keys(pairDifferences).length === 0) return;
-    
-    // Get visible pairs
-    const visibleIndices = visiblePairIndicesRef.current;
-    if (visibleIndices.length === 0) return;
-    
-    // Collect differences from visible pairs
-    let allDiffs = [];
-    
-    visibleIndices.forEach(pairIndex => {
-      const pairData = pairDifferences[pairIndex];
-      if (!pairData) return;
-      
-      const baseDiffs = (pairData.baseDifferences || []).map(diff => ({
-        ...diff,
-        pairIndex
-      }));
-      
-      const compareDiffs = (pairData.compareDifferences || []).map(diff => ({
-        ...diff,
-        pairIndex
-      }));
-      
-      allDiffs = [...allDiffs, ...baseDiffs, ...compareDiffs];
-    });
-    
-    // Deduplicate by ID
-    const uniqueDiffs = [];
-    const diffIds = new Set();
-    
-    allDiffs.forEach(diff => {
-      if (!diffIds.has(diff.id)) {
-        diffIds.add(diff.id);
-        uniqueDiffs.push(diff);
-      }
-    });
-    
-    setCurrentVisibleDifferences(uniqueDiffs);
-  };
-
-  // Handle zoom change
+  // Update zoom
   const handleZoomChange = (newZoom) => {
     setZoom(newZoom);
   };
@@ -203,13 +334,13 @@ const SideBySideView = ({ comparisonId }) => {
     return '#F44336';
   };
   
-  const renderDocumentPages = (pageRange, fileId, pairData, pairIndex, isBaseDocument, hasMatch) => {
+  const renderDocumentPages = (pageRange, fileId, pairIndex, isBaseDocument, hasMatch) => {
     const pages = [];
     for (let i = pageRange.start; i <= pageRange.end; i++) {
       pages.push(i);
     }
     
-    
+    // Only apply highlights if this is a matched document
     const effectiveHighlightMode = !hasMatch ? 'none' : highlightMode;
     
     // If this is an unmatched document, show a clear indicator
@@ -229,22 +360,24 @@ const SideBySideView = ({ comparisonId }) => {
                 Page {pageNum}
               </div>
               <PDFRenderer
-            fileId={fileId}
-            page={pageNum}
-            zoom={zoom}
-            highlightMode={effectiveHighlightMode}
-            differences={getPageDifferences(pairIndex, pageNum, isBaseDocument)}
-            selectedDifference={state.selectedDifference}
-            onDifferenceSelect={(diff) => setSelectedDifference({...diff, pairIndex, page: pageNum})}
-            onZoomChange={handleZoomChange}
-            isBaseDocument={isBaseDocument}
-            loading={false}
-            pageMetadata={pairData}
-            xOffsetAdjustment={0}
-            yOffsetAdjustment={16}
-            scaleAdjustment={1.0}
-            flipY={true}
-          />
+  fileId={fileId}
+  page={pageNum}
+  zoom={zoom}
+  highlightMode={effectiveHighlightMode}
+  differences={getPageDifferences(pairIndex, pageNum, isBaseDocument)}
+  selectedDifference={state.selectedDifference}
+  onDifferenceSelect={(diff) => setSelectedDifference({...diff, pairIndex, page: pageNum})}
+  onZoomChange={handleZoomChange}
+  isBaseDocument={isBaseDocument}
+  loading={false}
+  xOffsetAdjustment={calibrationParams.xOffset}
+  yOffsetAdjustment={calibrationParams.yOffset}
+  scaleAdjustment={calibrationParams.scaleAdjustment}
+  flipY={calibrationParams.flipY}
+  debugMode={true}
+  scalingAlgorithm={scalingAlgorithm}
+  maxScalingAdjustment={maxScalingAdjustment}
+/>
             </div>
           ))}
         </div>
@@ -254,39 +387,82 @@ const SideBySideView = ({ comparisonId }) => {
     // Regular rendering for matched documents
     return (
       <div className="document-pages">
-        {pages.map(pageNum => (
-          <div key={`page-${pageNum}`} className="document-page">
-            <div className="page-number-indicator">
-              Page {pageNum}
+                  {pages.map(pageNum => {
+          // Get differences for this page
+          const pageDiffs = getPageDifferences(pairIndex, pageNum, isBaseDocument);
+console.log(`[COORDINATE DEBUG] Page ${pageNum} - Raw differences from API:`, 
+  pageDiffs.slice(0, 3).map(diff => ({
+    id: diff.id,
+    type: diff.type,
+    baseX: diff.baseX,
+    baseY: diff.baseY,
+    compareX: diff.compareX,
+    compareY: diff.compareY,
+    position: diff.position,
+    bounds: diff.bounds,
+    text: diff.text?.substring(0, 20) || diff.baseText?.substring(0, 20) || '[No text]'
+  }))
+);
+          console.log(`Rendering ${isBaseDocument ? 'base' : 'compare'} page ${pageNum} with ${pageDiffs.length} differences`);
+          
+          // Debug - log the first difference to see its structure
+          if (pageDiffs.length > 0) {
+            console.log(`First difference example:`, pageDiffs[0]);
+          }
+          
+          return (
+            <div key={`page-${pageNum}`} className="document-page">
+              <div className="page-number-indicator">
+                Page {pageNum}
+              </div>
+              <PDFRenderer
+                fileId={fileId}
+                page={pageNum}
+                zoom={zoom}
+                highlightMode={effectiveHighlightMode}
+                differences={pageDiffs}
+                selectedDifference={state.selectedDifference}
+                onDifferenceSelect={(diff) => setSelectedDifference({...diff, pairIndex, page: pageNum})}
+                onZoomChange={handleZoomChange}
+                isBaseDocument={isBaseDocument}
+                loading={false}
+                xOffsetAdjustment={calibrationParams.xOffset}
+                yOffsetAdjustment={calibrationParams.yOffset}
+                scaleAdjustment={calibrationParams.scaleAdjustment}
+                flipY={calibrationParams.flipY}
+                debugMode={true} // Enable debug mode to see highlight information
+              />
+              
+              {/* Debug info - render difference count on the page */}
+              {pageDiffs.length > 0 && (
+                <div style={{
+                  position: 'absolute', 
+                  top: '40px', 
+                  right: '8px',
+                  background: 'red', 
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  fontWeight: 'bold',
+                  fontSize: '14px'
+                }}>
+                  {pageDiffs.length} diffs
+                </div>
+              )}
             </div>
-            <PDFRenderer
-              fileId={fileId}
-              page={pageNum}
-              zoom={zoom}
-              highlightMode={effectiveHighlightMode}
-              differences={isBaseDocument && pairData.baseDifferences ? 
-                pairData.baseDifferences.filter(d => d.page === pageNum || d.basePageNumber === pageNum) : 
-                pairData.compareDifferences ? pairData.compareDifferences.filter(d => d.page === pageNum || d.comparePageNumber === pageNum) : []
-              }
-              selectedDifference={state.selectedDifference}
-              onDifferenceSelect={(diff) => setSelectedDifference({...diff, pairIndex, page: pageNum})}
-              onZoomChange={handleZoomChange}
-              isBaseDocument={isBaseDocument}
-              loading={false}
-              pageMetadata={pairData}
-              xOffsetAdjustment={calibrationParams.xOffset}
-              yOffsetAdjustment={calibrationParams.yOffset}
-              scaleAdjustment={calibrationParams.scaleAdjustment}
-              flipY={calibrationParams.flipY}
-            />
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
 
   return (
     <div className="pdf-comparison-container">
+      {/* Debug Display */}
+      {showDebugDisplay && debugDifferences.length > 0 && (
+        <DifferenceDebugDisplay differences={debugDifferences} />
+      )}
+    
       {/* Header */}
       <div className="comparison-header">
         <button 
@@ -303,6 +479,9 @@ const SideBySideView = ({ comparisonId }) => {
           <h3>Document Comparison</h3>
           <div className="page-ranges">
             <span>{documentPairs.filter(p => p.matched).length} document pairs matched</span>
+            <span style={{marginLeft: '10px', color: '#FF9800'}}>
+              {state.comparisonResult?.totalDifferences || 0} differences
+            </span>
           </div>
         </div>
         
@@ -325,35 +504,35 @@ const SideBySideView = ({ comparisonId }) => {
           Show unpaired documents
         </label>
         
-        <div style={{ display: 'flex', marginLeft: '20px', gap: '10px' }}>
+        <div className="highlight-type-controls">
           <button 
             onClick={() => setHighlightMode('all')} 
-            style={{
-              padding: '4px 8px',
-              backgroundColor: highlightMode === 'all' ? '#4CAF50' : '#cccccc',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
+            className={`highlight-button ${highlightMode === 'all' ? 'active' : ''}`}
           >
             Show All Highlights
           </button>
           <button 
             onClick={() => setHighlightMode('text')} 
-            style={{
-              padding: '4px 8px',
-              backgroundColor: highlightMode === 'text' ? '#4CAF50' : '#cccccc',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
+            className={`highlight-button ${highlightMode === 'text' ? 'active' : ''}`}
           >
             Text Only
           </button>
+          <button 
+            onClick={() => setHighlightMode('none')} 
+            className={`highlight-button ${highlightMode === 'none' ? 'active' : ''}`}
+          >
+            No Highlights
+          </button>
         </div>
       </div>
+      
+      {/* Loading state for pair result */}
+      {loadingPairResult && (
+        <div className="loading-overlay">
+          <Spinner size="medium" />
+          <p>Loading comparison details...</p>
+        </div>
+      )}
       
       {/* Main content */}
       <div className="comparison-content">
@@ -376,16 +555,6 @@ const SideBySideView = ({ comparisonId }) => {
                   
                   // Skip unmatched pairs if not showing unpaired documents
                   if (!pair.matched && !showUnpairedDocuments) return null;
-                  
-                  // Get differences for this pair (placeholder - normally from API)
-                  const pairData = {
-                    baseDifferences: [],
-                    compareDifferences: [],
-                    baseWidth: 612,
-                    baseHeight: 792,
-                    compareWidth: 612,
-                    compareHeight: 792
-                  };
                   
                   // For unmatched pairs, render them differently
                   if (!pair.matched) {
@@ -427,7 +596,6 @@ const SideBySideView = ({ comparisonId }) => {
                                   {renderDocumentPages(
                                     basePageRange,
                                     state.baseFile.fileId,
-                                    pairData,
                                     pairIndex,
                                     true,
                                     false // No match
@@ -475,7 +643,6 @@ const SideBySideView = ({ comparisonId }) => {
                                   {renderDocumentPages(
                                     comparePageRange,
                                     state.compareFile.fileId,
-                                    pairData,
                                     pairIndex,
                                     false,
                                     false // No match
@@ -528,7 +695,6 @@ const SideBySideView = ({ comparisonId }) => {
                               renderDocumentPages(
                                 basePageRange,
                                 state.baseFile.fileId,
-                                pairData,
                                 pairIndex,
                                 true, // isBaseDocument
                                 true  // Has match
@@ -554,7 +720,6 @@ const SideBySideView = ({ comparisonId }) => {
                               renderDocumentPages(
                                 comparePageRange,
                                 state.compareFile.fileId,
-                                pairData,
                                 pairIndex,
                                 false, // isBaseDocument
                                 true  // Has match
@@ -575,26 +740,34 @@ const SideBySideView = ({ comparisonId }) => {
           </div>
         </div>
         
-        {/* Difference panel - simplified */}
+        {/* Difference panel */}
         {showDifferencePanel && (
           <div className="difference-panel">
             <div className="difference-panel-header">
-              <h3>Visible Differences</h3>
-              <div className="difference-count">
-                Select differences to highlight
-              </div>
+              <h3>Differences</h3>
+              {state.comparisonResult && (
+                <div className="difference-count">
+                  {state.comparisonResult.totalDifferences || 0} differences found
+                </div>
+              )}
             </div>
-            
-            <DifferenceList
-              result={{ 
-                baseDifferences: currentVisibleDifferences, 
-                compareDifferences: [] 
-              }}
-              selectedDifference={state.selectedDifference}
-              onDifferenceClick={(diff) => {
-                setSelectedDifference(diff);
-              }}
-            />
+            <PDFCoordinateAnalyzer 
+  comparisonId={comparisonId}
+  differences={debugDifferences} 
+  onApplyCorrection={handleApplyCorrection}
+/>
+<DifferenceList
+  result={{
+    baseDifferences: state.comparisonResult?.differencesByPage 
+      ? Object.values(state.comparisonResult.differencesByPage).flat() 
+      : debugDifferences || [],
+    compareDifferences: []
+  }}
+  selectedDifference={state.selectedDifference}
+  onDifferenceClick={(diff) => {
+    setSelectedDifference(diff);
+  }}
+/>
           </div>
         )}
         
@@ -607,7 +780,7 @@ const SideBySideView = ({ comparisonId }) => {
         </button>
       </div>
       
-      {/* Footer */}
+      {/* Footer with debug info */}
       <div className="comparison-footer">
         <div className="view-controls">
           <div className="highlight-controls">
@@ -628,6 +801,13 @@ const SideBySideView = ({ comparisonId }) => {
           
           <div className="page-status">
             Viewing document pair {state.selectedDocumentPairIndex + 1} of {documentPairs.length}
+          </div>
+          
+          {/* Debug info */}
+          <div className="debug-info">
+            {currentPairResult && (
+              <span>Total Differences: {currentPairResult.totalDifferences || 0}</span>
+            )}
           </div>
         </div>
       </div>

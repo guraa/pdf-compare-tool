@@ -1,4 +1,4 @@
-/* Optimized SideBySideView.css - Clean and focused on fixing spacing issues */
+/* Enhanced SideBySideView.css with better highlight styling */
 
 /* Main container */
 .pdf-comparison-container {
@@ -8,61 +8,6 @@
   width: 100%;
   overflow: hidden;
   background-color: #333;
-}
-
-/* Header elements */
-.comparison-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px;
-  background-color: #2c6dbd;
-  color: white;
-  border-bottom: 1px solid #1a4f96;
-}
-
-.back-button {
-  display: flex;
-  align-items: center;
-  background: none;
-  border: none;
-  color: white;
-  cursor: pointer;
-  font-weight: 500;
-}
-
-.document-info {
-  text-align: center;
-}
-
-.document-info h3 {
-  margin: 0;
-  color: white;
-}
-
-/* Filter controls */
-.filter-controls {
-  display: flex;
-  align-items: center;
-  padding: 4px 8px;
-  background-color: #444;
-  border-bottom: 1px solid #333;
-}
-
-/* Content area */
-.comparison-content {
-  display: flex;
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-}
-
-/* Document container */
-.documents-scroll-container {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  transition: width 0.3s ease;
 }
 
 .documents-scroll-container.with-panel {
@@ -103,6 +48,13 @@
 .pair-header h3 {
   margin: 0;
   color: white;
+}
+
+.match-percentage {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 14px;
 }
 
 /* Page content - KEY FIX FOR GAP ISSUE */
@@ -189,6 +141,48 @@
   z-index: 10;
 }
 
+/* Unmatched document styles */
+.unmatched-document-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background-color: rgba(244, 67, 54, 0.2);
+  color: #ff8a80;
+  border-bottom: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.unmatched-document-banner svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+  margin-right: 8px;
+}
+
+.empty-side {
+  display: flex;
+  flex-direction: column;
+  background-color: #2a2a2a;
+}
+
+.no-match-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #aaa;
+  text-align: center;
+  padding: 24px;
+}
+
+.no-match-message svg {
+  width: 48px;
+  height: 48px;
+  fill: #aaa;
+  margin-bottom: 16px;
+}
+
 /* Difference panel */
 .difference-panel {
   width: 300px;
@@ -211,6 +205,12 @@
 .difference-panel-header h3 {
   margin: 0;
   color: white;
+}
+
+.difference-count {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 4px;
 }
 
 /* Toggle panel button - FIXED POSITION */
@@ -250,6 +250,37 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  color: white;
+}
+
+.highlight-controls {
+  display: flex;
+  align-items: center;
+}
+
+.highlight-controls label {
+  margin-right: 6px;
+}
+
+.highlight-controls select {
+  background-color: #444;
+  color: white;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+.page-status {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.debug-info {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 /* Media queries */
@@ -289,4 +320,114 @@
   .toggle-panel-button.hidden {
     bottom: 16px;
   }
+}
+
+/* Header elements */
+.comparison-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  background-color: #2c6dbd;
+  color: white;
+  border-bottom: 1px solid #1a4f96;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.back-button svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  margin-right: 4px;
+}
+
+.document-info {
+  text-align: center;
+}
+
+.document-info h3 {
+  margin: 0;
+  color: white;
+}
+
+/* Filter controls */
+.filter-controls {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  background-color: #444;
+  border-bottom: 1px solid #333;
+}
+
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  color: white;
+  font-size: 14px;
+  margin-right: 16px;
+}
+
+.filter-checkbox input {
+  margin-right: 6px;
+}
+
+.highlight-type-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.highlight-button {
+  padding: 4px 8px;
+  background-color: #555;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.highlight-button.active {
+  background-color: #4CAF50;
+}
+
+/* Loading overlay */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  color: white;
+}
+
+/* Content area */
+.comparison-content {
+  display: flex;
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Document container */
+.documents-scroll-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: width 0.3s ease;
+  background-color: #222;
 }

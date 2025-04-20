@@ -3,8 +3,7 @@ import { usePreferences } from '../../context/PreferencesContext';
 import './DifferenceList.css';
 
 /**
- * Completely rewritten DifferenceList component with extreme optimization
- * to prevent rendering loops. Uses memoization heavily.
+ * Enhanced DifferenceList component - optimized to handle any difference format
  */
 const DifferenceList = React.memo(({
   result, 
@@ -14,23 +13,23 @@ const DifferenceList = React.memo(({
   // Get preferences 
   const { preferences } = usePreferences();
   
-  // Component state with proper initialization
+  // Component state
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedTypes, setExpandedTypes] = useState({ text: true, image: true, font: true, style: true });
   const [typeFilters, setTypeFilters] = useState({ text: true, image: true, font: true, style: true });
   
-  // Process differences with memoization to prevent rerenders
+  // Process differences with memoization
   const processedDifferences = useMemo(() => {
+    console.log("Processing differences in DifferenceList", {
+      baseDifferences: result?.baseDifferences?.length || 0,
+      compareDifferences: result?.compareDifferences?.length || 0
+    });
+    
     // Skip if no result
     if (!result || (!result.baseDifferences?.length && !result.compareDifferences?.length)) {
       return {
         allDifferences: [],
-        byType: {
-          text: [],
-          image: [],
-          font: [],
-          style: []
-        },
+        byType: { text: [], image: [], font: [], style: [] },
         filteredDifferences: [],
         differenceTypes: [],
         totalDifferences: 0
@@ -41,11 +40,6 @@ const DifferenceList = React.memo(({
     const baseDiffs = result.baseDifferences || [];
     const compareDiffs = result.compareDifferences || [];
     
-    console.log("Processing differences:", {
-      baseDiffs: baseDiffs.length,
-      compareDiffs: compareDiffs.length
-    });
-    
     // Use a Map to deduplicate differences by ID
     const differencesMap = new Map();
     
@@ -53,6 +47,20 @@ const DifferenceList = React.memo(({
     [...baseDiffs, ...compareDiffs].forEach(diff => {
       // Ensure there's an ID
       const id = diff.id || `diff-${Math.random().toString(36).substring(2, 11)}`;
+      
+      // Ensure there's a type
+      if (!diff.type) {
+        // Try to infer type from properties
+        if (diff.imageData || diff.imageName) {
+          diff.type = 'image';
+        } else if (diff.fontName || diff.fontFamily) {
+          diff.type = 'font';
+        } else if (diff.styleName || diff.styleProperties) {
+          diff.type = 'style';
+        } else {
+          diff.type = 'text'; // Default to text
+        }
+      }
       
       // Only add if not already in the map
       if (!differencesMap.has(id)) {
@@ -68,16 +76,16 @@ const DifferenceList = React.memo(({
       
       if (pageA !== pageB) return pageA - pageB;
       
-      // Then by position
-      const yA = a.baseY || a.compareY || a.position?.y || a.y || 0;
-      const yB = b.baseY || b.compareY || b.position?.y || b.y || 0;
+      // Then by position (if available)
+      if (a.position?.y !== undefined && b.position?.y !== undefined) {
+        return a.position.y - b.position.y;
+      }
       
-      if (yA !== yB) return yA - yB;
+      if (a.baseY !== undefined && b.baseY !== undefined) {
+        return a.baseY - b.baseY;
+      }
       
-      // Then horizontally
-      const xA = a.baseX || a.compareX || a.position?.x || a.x || 0;
-      const xB = b.baseX || b.compareX || b.position?.x || b.x || 0;
-      return xA - xB;
+      return 0;
     });
     
     // Filter differences based on searchTerm and typeFilters
@@ -117,6 +125,17 @@ const DifferenceList = React.memo(({
     
     // Get all non-empty difference types
     const differenceTypes = Object.keys(byType).filter(type => byType[type].length > 0);
+    
+    console.log("Processed differences:", {
+      total: allDifferences.length,
+      filtered: filteredDifferences.length,
+      byType: {
+        text: byType.text.length,
+        image: byType.image.length,
+        font: byType.font.length,
+        style: byType.style.length
+      }
+    });
     
     // Return everything needed for rendering
     return {
@@ -206,6 +225,7 @@ const DifferenceList = React.memo(({
     }
   }, []);
   
+  // Description formatter
   const formatDescription = useCallback((diff) => {
     if (diff.description) return diff.description;
     
@@ -306,6 +326,9 @@ const DifferenceList = React.memo(({
           <div className="no-differences">
             <p>No differences found in current view.</p>
             {searchTerm && <p>Try clearing your search or changing filters.</p>}
+            {!searchTerm && result?.baseDifferences?.length === 0 && (
+              <p>The documents appear to be identical.</p>
+            )}
           </div>
         </div>
       </div>
