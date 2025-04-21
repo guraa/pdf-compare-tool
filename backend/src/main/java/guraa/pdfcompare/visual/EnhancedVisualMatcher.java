@@ -11,19 +11,18 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.lang.ref.SoftReference;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Enhanced visual matcher for PDF pages with improved error handling, threading, and caching.
- * This class uses SSIM (Structural Similarity Index) to match pages
- * between two PDF documents based on visual similarity.
+ * Ultra-optimized visual matcher for PDF pages with turbo mode for maximum speed.
  */
 @Slf4j
 @Component
@@ -32,18 +31,15 @@ public class EnhancedVisualMatcher implements VisualMatcher {
     private final SSIMCalculator ssimCalculator;
     private final PdfRenderingService pdfRenderingService;
     private final ExecutorService executorService;
-    
+
     @Autowired
     private ApplicationContext applicationContext;
 
-    // Cache of rendered pages to avoid repeated file I/O
-    private final ConcurrentHashMap<String, BufferedImage> imageCache = new ConcurrentHashMap<>();
-    
+    // Cache of rendered pages - use soft references for better memory management
+    private final Map<String, SoftReference<BufferedImage>> imageCache = new ConcurrentHashMap<>();
+
     /**
      * Get the ComparisonService bean from the application context.
-     * This is a workaround to avoid circular dependencies.
-     *
-     * @return The ComparisonService bean, or null if not found
      */
     private Object getComparisonService() {
         try {
@@ -55,14 +51,10 @@ public class EnhancedVisualMatcher implements VisualMatcher {
     }
 
     // Set a maximum size for the cache to avoid memory issues
-    private static final int MAX_CACHE_SIZE = 50;
+    private static final int MAX_CACHE_SIZE = 20;
 
     /**
      * Constructor with qualifiers to specify which beans to use.
-     *
-     * @param ssimCalculator The SSIM calculator for image comparison
-     * @param pdfRenderingService The PDF rendering service
-     * @param executorService The executor service for comparison operations
      */
     public EnhancedVisualMatcher(
             SSIMCalculator ssimCalculator,
@@ -79,14 +71,32 @@ public class EnhancedVisualMatcher implements VisualMatcher {
     @Value("${app.matching.max-candidates-per-page:5}")
     private int maxCandidatesPerPage;
 
-    @Value("${app.matching.max-concurrent-comparisons:8}")
+    @Value("${app.matching.max-concurrent-comparisons:10}")
     private int maxConcurrentComparisons;
 
-    @Value("${app.matching.retry-count:3}")
+    @Value("${app.matching.retry-count:2}")
     private int retryCount;
 
     @Value("${app.matching.retry-delay-ms:50}")
     private int retryDelayMs;
+
+    @Value("${app.matching.max-page-gap:3}")
+    private int maxPageGap = 3;
+
+    @Value("${app.matching.batch-timeout-seconds:20}")
+    private int batchTimeoutSeconds = 20;
+
+    @Value("${app.matching.early-stopping-enabled:true}")
+    private boolean earlyStoppingEnabled = true;
+
+    @Value("${app.matching.early-stopping-threshold:0.5}")
+    private double earlyStoppingThreshold = 0.5;
+
+    @Value("${app.matching.fast-similarity-metrics:true}")
+    private boolean fastSimilarityMetrics = true;
+
+    @Value("${app.comparison.turbo-mode:false}")
+    private boolean turboMode = false;
 
     // Cache of similarity scores
     private final ConcurrentHashMap<String, Double> similarityCache = new ConcurrentHashMap<>();
@@ -95,274 +105,467 @@ public class EnhancedVisualMatcher implements VisualMatcher {
     public List<PagePair> matchPages(PdfDocument baseDocument, PdfDocument compareDocument) throws IOException {
         return matchPages(baseDocument, compareDocument, null);
     }
-    
+
     /**
      * Match pages between two documents with progress tracking.
-     *
-     * @param baseDocument The base document
-     * @param compareDocument The document to compare against the base
-     * @param comparisonId The comparison ID for progress tracking (optional)
-     * @return A list of page pairs
-     * @throws IOException If there is an error matching the pages
      */
     public List<PagePair> matchPages(PdfDocument baseDocument, PdfDocument compareDocument, String comparisonId) throws IOException {
-        log.info("Starting visual matching between documents: {} and {}",
+        String logPrefix = "[" + baseDocument.getFileId() + "_" + compareDocument.getFileId() + "] ";
+        log.info(logPrefix + "Starting visual matching between documents: {} and {}",
                 baseDocument.getFileId(), compareDocument.getFileId());
 
         long startTime = System.currentTimeMillis();
 
         try {
-            // Pre-render all pages - this is done in parallel for both documents
-            CompletableFuture<Void> preRenderingFuture = preRenderPages(baseDocument, compareDocument);
+            // Only pre-render a minimal number of pages to get started quickly
+            CompletableFuture<Void> initialRenderingFuture = preRenderInitialPages(baseDocument, compareDocument);
 
-            // Calculate similarity scores for all page pairs - start this while pages are still rendering
-            Map<String, Double> similarityScores = calculateSimilarityScores(baseDocument, compareDocument, comparisonId);
-
-            // Wait for pre-rendering to complete if it hasn't already
+            // Wait briefly for initial rendering
             try {
-                preRenderingFuture.get(60, TimeUnit.SECONDS);
+                initialRenderingFuture.get(5, TimeUnit.SECONDS);
+                log.info(logPrefix + "Initial page rendering completed");
             } catch (Exception e) {
-                log.warn("Timeout waiting for page pre-rendering. Continuing with partial results.");
+                log.warn(logPrefix + "Continuing with partial initial rendering");
             }
 
-            // Match pages using the Hungarian algorithm
+            // Calculate similarity scores with optimized page pair selection
+            Map<String, Double> similarityScores = calculateSimilarityScoresOptimized(
+                    baseDocument, compareDocument, comparisonId);
+
+            // Match pages using the Hungarian algorithm with available similarity scores
             List<PagePair> pagePairs = matchPagesUsingHungarian(baseDocument, compareDocument, similarityScores);
 
             long endTime = System.currentTimeMillis();
-            log.info("Completed visual matching between documents: {} and {} in {}ms",
-                    baseDocument.getFileId(), compareDocument.getFileId(), (endTime - startTime));
+            long processingTime = endTime - startTime;
+            log.info(logPrefix + "Completed visual matching between documents: {} and {} in {}ms",
+                    baseDocument.getFileId(), compareDocument.getFileId(), processingTime);
 
             // Clear the image cache after matching to free memory
-            log.info("Clear the image cache after matching to free memory");
+            log.info(logPrefix + "Clear the image cache after matching to free memory");
             clearImageCache();
-            log.info("Return pagePairs");
+
+            // If processing took too long, log a warning for future optimizations
+            if (processingTime > 60000) { // Over 1 minute
+                log.warn(logPrefix + "Visual matching took too long ({}ms). Consider enabling turbo mode.", processingTime);
+            }
 
             return pagePairs;
         } catch (Exception e) {
-            log.error("Error during visual matching: {}", e.getMessage(), e);
+            log.error(logPrefix + "Error during visual matching: {}", e.getMessage(), e);
             throw new IOException("Visual matching failed", e);
         }
     }
 
     /**
-     * Pre-render all pages of both documents.
-     *
-     * @param baseDocument The base document
-     * @param compareDocument The compare document
-     * @return A CompletableFuture representing the pre-rendering task
+     * Pre-render initial pages of both documents.
+     * In turbo mode, we only pre-render the first few same-numbered pages to speed up the process.
      */
-    private CompletableFuture<Void> preRenderPages(PdfDocument baseDocument, PdfDocument compareDocument) {
-        // Submit tasks to pre-render all pages
-        CompletableFuture<Void> baseRenderingFuture = CompletableFuture.runAsync(() -> {
-            try {
-                pdfRenderingService.preRenderAllPages(baseDocument);
-            } catch (IOException e) {
-                log.error("Error pre-rendering base document: {}", e.getMessage(), e);
-                throw new RuntimeException(e);
-            }
-        }, executorService);
+    private CompletableFuture<Void> preRenderInitialPages(PdfDocument baseDocument, PdfDocument compareDocument) {
+        // In turbo mode, only pre-render the first 2-3 pages
+        int initialPageCount = turboMode ?
+                Math.min(3, Math.min(baseDocument.getPageCount(), compareDocument.getPageCount())) :
+                Math.min(5, Math.min(baseDocument.getPageCount(), compareDocument.getPageCount()));
 
-        CompletableFuture<Void> compareRenderingFuture = CompletableFuture.runAsync(() -> {
-            try {
-                pdfRenderingService.preRenderAllPages(compareDocument);
-            } catch (IOException e) {
-                log.error("Error pre-rendering compare document: {}", e.getMessage(), e);
-                throw new RuntimeException(e);
-            }
-        }, executorService);
+        List<CompletableFuture<Void>> renderTasks = new ArrayList<>();
 
-        // Combine and return both futures
-        return CompletableFuture.allOf(baseRenderingFuture, compareRenderingFuture);
-    }
-
-    /**
-     * Calculate similarity scores for all page pairs with improved error handling and performance.
-     *
-     * @param baseDocument The base document
-     * @param compareDocument The compare document
-     * @param comparisonId The comparison ID for progress tracking (optional)
-     * @return A map of page pair keys to similarity scores
-     */
-    private Map<String, Double> calculateSimilarityScores(PdfDocument baseDocument, PdfDocument compareDocument, String comparisonId) {
-        Map<String, Double> similarityScores = new ConcurrentHashMap<>();
-        
-        // Track progress for logging
-        AtomicInteger completedComparisons = new AtomicInteger(0);
-        int totalComparisons = baseDocument.getPageCount() * compareDocument.getPageCount();
-        
-        // Create a list of all page pairs to process
-        List<PagePairTask> pagePairTasks = new ArrayList<>();
-        
-        // For each page in the base document
-        for (int basePageNumber = 1; basePageNumber <= baseDocument.getPageCount(); basePageNumber++) {
-            // For each page in the compare document
-            for (int comparePageNumber = 1; comparePageNumber <= compareDocument.getPageCount(); comparePageNumber++) {
-                // Create a key for this page pair
-                String key = baseDocument.getFileId() + "_" + basePageNumber + "_" +
-                        compareDocument.getFileId() + "_" + comparePageNumber;
-                
-                // Check if we already have a similarity score for this page pair
-                if (similarityCache.containsKey(key)) {
-                    similarityScores.put(key, similarityCache.get(key));
-                    completedComparisons.incrementAndGet();
-                    continue;
-                }
-                
-                // Add this page pair to the list of tasks
-                pagePairTasks.add(new PagePairTask(baseDocument, compareDocument, basePageNumber, comparePageNumber, key));
-            }
-        }
-        
-        // Sort tasks by page number to prioritize pages that are likely to match
-        // This helps find matches faster and allows early termination
-        pagePairTasks.sort((a, b) -> {
-            int pageGapA = Math.abs(a.basePageNumber - a.comparePageNumber);
-            int pageGapB = Math.abs(b.basePageNumber - b.comparePageNumber);
-            return Integer.compare(pageGapA, pageGapB);
-        });
-        
-        // Use smaller batch size to avoid memory issues
-        int batchSize = Math.min(50, pagePairTasks.size());
-        int numBatches = (pagePairTasks.size() + batchSize - 1) / batchSize;
-        
-        log.info("Processing {} page pairs in {} batches of size {}", 
-                pagePairTasks.size(), numBatches, batchSize);
-        
-        // Create a CompletableFuture for each batch
-        List<CompletableFuture<Void>> batchFutures = new ArrayList<>();
-        
-        for (int batchIndex = 0; batchIndex < numBatches; batchIndex++) {
-            int startIdx = batchIndex * batchSize;
-            int endIdx = Math.min(startIdx + batchSize, pagePairTasks.size());
-            List<PagePairTask> batchTasks = pagePairTasks.subList(startIdx, endIdx);
-            
-            final int currentBatch = batchIndex + 1;
-            
-            // Process this batch asynchronously
-            CompletableFuture<Void> batchFuture = CompletableFuture.runAsync(() -> {
-                log.info("Processing batch {}/{} with {} tasks", 
-                        currentBatch, numBatches, batchTasks.size());
-                
-                // Process this batch
-                processBatch(batchTasks, similarityScores, completedComparisons, totalComparisons, comparisonId);
-                
-                // Force garbage collection after each batch to free memory
-                if (currentBatch % 2 == 0) {
-                    System.gc();
+        // Submit tasks to pre-render initial pages of base document
+        for (int i = 1; i <= initialPageCount; i++) {
+            final int pageNumber = i;
+            CompletableFuture<Void> task = CompletableFuture.runAsync(() -> {
+                try {
+                    pdfRenderingService.renderPage(baseDocument, pageNumber);
+                } catch (Exception e) {
+                    log.warn("Error pre-rendering base document page {}: {}", pageNumber, e.getMessage());
                 }
             }, executorService);
-            
-            batchFutures.add(batchFuture);
+            renderTasks.add(task);
         }
-        
-        // Wait for all batches to complete with timeout handling
-        try {
-            CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0]))
-                    .get(3, TimeUnit.MINUTES);
-            log.info("All similarity calculation batches completed successfully");
-        } catch (Exception e) {
-            log.error("Error or timeout waiting for similarity calculations to complete", e);
-            // Continue with partial results rather than failing completely
+
+        // Only pre-render the same pages in compare document (most likely to match)
+        for (int i = 1; i <= initialPageCount; i++) {
+            final int pageNumber = i;
+            CompletableFuture<Void> task = CompletableFuture.runAsync(() -> {
+                try {
+                    pdfRenderingService.renderPage(compareDocument, pageNumber);
+                } catch (Exception e) {
+                    log.warn("Error pre-rendering compare document page {}: {}", pageNumber, e.getMessage());
+                }
+            }, executorService);
+            renderTasks.add(task);
         }
-        
+
+        // Return a combined future
+        return CompletableFuture.allOf(renderTasks.toArray(new CompletableFuture[0]));
+    }
+
+    /**
+     * Calculate similarity scores with ultra-optimized page pair selection.
+     * In turbo mode, we dramatically reduce the number of comparisons.
+     */
+    private Map<String, Double> calculateSimilarityScoresOptimized(
+            PdfDocument baseDocument, PdfDocument compareDocument, String comparisonId) {
+
+        String logPrefix = "[" + baseDocument.getFileId() + "_" + compareDocument.getFileId() + "] ";
+        Map<String, Double> similarityScores = new ConcurrentHashMap<>();
+
+        // Track progress for logging
+        AtomicInteger completedComparisons = new AtomicInteger(0);
+
+        // Create a list of page pairs with turbo-optimized selection
+        List<PagePairTask> pagePairTasks = createOptimizedPagePairTasks(
+                baseDocument, compareDocument, similarityCache);
+
+        int totalComparisons = pagePairTasks.size();
+        log.info(logPrefix + "Processing {} prioritized page pairs instead of {} potential pairs",
+                totalComparisons, baseDocument.getPageCount() * compareDocument.getPageCount());
+
+        // Get exact matches first (same page numbers) - these are highest priority
+        int exactMatchCount = 0;
+        for (PagePairTask task : pagePairTasks) {
+            if (task.basePageNumber == task.comparePageNumber) {
+                exactMatchCount++;
+            }
+        }
+
+        if (exactMatchCount > 0) {
+            log.info(logPrefix + "Processing {} exact page number matches first", exactMatchCount);
+
+            List<PagePairTask> exactMatches = new ArrayList<>();
+            List<PagePairTask> otherPairs = new ArrayList<>();
+
+            // Split into exact matches and others
+            for (PagePairTask task : pagePairTasks) {
+                if (task.basePageNumber == task.comparePageNumber) {
+                    exactMatches.add(task);
+                } else {
+                    otherPairs.add(task);
+                }
+            }
+
+            // Process exact matches with higher timeout
+            int exactTimeout = turboMode ? 15 : 30;
+            processPagePairBatch(exactMatches, similarityScores, completedComparisons,
+                    totalComparisons, comparisonId, "Exact Matches", exactTimeout);
+
+            // If we got enough good matches from exact matches, we might skip other comparisons in turbo mode
+            if (earlyStoppingEnabled && turboMode) {
+                int goodMatches = countGoodMatches(similarityScores, visualSimilarityThreshold);
+                // If we got matches for at least half of both documents, we can stop
+                int minDocSize = Math.min(baseDocument.getPageCount(), compareDocument.getPageCount());
+                if (goodMatches >= minDocSize * earlyStoppingThreshold) {
+                    log.info(logPrefix + "Early stopping: found {} good matches from exact page numbers (threshold: {})",
+                            goodMatches, minDocSize * earlyStoppingThreshold);
+                    return similarityScores;
+                }
+            }
+
+            // Process remaining pairs in small batches
+            if (!otherPairs.isEmpty()) {
+                int batchSize = turboMode ? 8 : 12;
+                int numBatches = (otherPairs.size() + batchSize - 1) / batchSize;
+
+                log.info(logPrefix + "Processing remaining {} pairs in {} batches",
+                        otherPairs.size(), numBatches);
+
+                for (int i = 0; i < numBatches; i++) {
+                    int start = i * batchSize;
+                    int end = Math.min(start + batchSize, otherPairs.size());
+                    if (start >= otherPairs.size()) break;
+
+                    List<PagePairTask> batch = otherPairs.subList(start, end);
+                    int remainingTimeout = turboMode ? 10 : 20;
+
+                    processPagePairBatch(batch, similarityScores, completedComparisons,
+                            totalComparisons, comparisonId, "Batch " + (i+1) + "/" + numBatches, remainingTimeout);
+
+                    // Check for early stopping after each batch
+                    if (earlyStoppingEnabled) {
+                        int goodMatches = countGoodMatches(similarityScores, visualSimilarityThreshold);
+                        int minDocSize = Math.min(baseDocument.getPageCount(), compareDocument.getPageCount());
+                        if (goodMatches >= minDocSize * earlyStoppingThreshold) {
+                            log.info(logPrefix + "Early stopping after batch {}/{}: found {} good matches",
+                                    i+1, numBatches, goodMatches);
+                            break;
+                        }
+                    }
+                }
+            }
+        } else {
+            // No exact matches available, process all pairs in batches
+            int batchSize = turboMode ? 8 : 12;
+            int numBatches = (pagePairTasks.size() + batchSize - 1) / batchSize;
+
+            log.info(logPrefix + "No exact page matches, processing {} pairs in {} batches",
+                    pagePairTasks.size(), numBatches);
+
+            for (int i = 0; i < numBatches; i++) {
+                int start = i * batchSize;
+                int end = Math.min(start + batchSize, pagePairTasks.size());
+                if (start >= pagePairTasks.size()) break;
+
+                List<PagePairTask> batch = pagePairTasks.subList(start, end);
+                int timeout = turboMode ? 15 : 30;
+
+                processPagePairBatch(batch, similarityScores, completedComparisons,
+                        totalComparisons, comparisonId, "Batch " + (i+1) + "/" + numBatches, timeout);
+
+                // Check for early stopping
+                if (earlyStoppingEnabled) {
+                    int goodMatches = countGoodMatches(similarityScores, visualSimilarityThreshold);
+                    int minDocSize = Math.min(baseDocument.getPageCount(), compareDocument.getPageCount());
+                    if (goodMatches >= minDocSize * earlyStoppingThreshold) {
+                        log.info(logPrefix + "Early stopping after batch {}/{}: found {} good matches",
+                                i+1, numBatches, goodMatches);
+                        break;
+                    }
+                }
+            }
+        }
+
         return similarityScores;
     }
-    
+
     /**
-     * Process a batch of page pair tasks.
-     *
-     * @param batchTasks The tasks to process
-     * @param similarityScores The map to store similarity scores
-     * @param completedComparisons Counter for completed comparisons
-     * @param totalComparisons Total number of comparisons
-     * @param comparisonId The comparison ID for progress tracking (optional)
+     * Count the number of "good" matches (above threshold) in the similarity scores.
      */
-    private void processBatch(
-            List<PagePairTask> batchTasks, 
+    private int countGoodMatches(Map<String, Double> similarityScores, double threshold) {
+        int count = 0;
+        for (Double score : similarityScores.values()) {
+            if (score >= threshold) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Create super-optimized page pair tasks focusing on most likely matches.
+     * In turbo mode, we drastically reduce the number of comparisons by only comparing
+     * pages with identical numbers and a very small number of nearby pages.
+     */
+    private List<PagePairTask> createOptimizedPagePairTasks(
+            PdfDocument baseDocument, PdfDocument compareDocument,
+            Map<String, Double> similarityCache) {
+
+        List<PagePairTask> tasks = new ArrayList<>();
+
+        // In turbo mode, use a smaller page gap
+        int effectiveMaxPageGap = turboMode ?
+                Math.min(2, maxPageGap) : // Much smaller gap in turbo mode
+                Math.min(maxPageGap, Math.max(1, (int)(Math.min(baseDocument.getPageCount(),
+                        compareDocument.getPageCount()) * 0.1)));
+
+        log.info("Using maximum page gap of {} for documents with {} and {} pages",
+                effectiveMaxPageGap, baseDocument.getPageCount(), compareDocument.getPageCount());
+
+        // 1. First priority: Pages with the same page number
+        for (int i = 1; i <= Math.min(baseDocument.getPageCount(), compareDocument.getPageCount()); i++) {
+            String key = baseDocument.getFileId() + "_" + i + "_" +
+                    compareDocument.getFileId() + "_" + i;
+
+            // Skip if already in cache
+            if (similarityCache.containsKey(key)) {
+                continue;
+            }
+
+            tasks.add(new PagePairTask(
+                    baseDocument, compareDocument, i, i, key, 0));
+        }
+
+        // 2. Second priority: Pages within the maximum gap
+        // In turbo mode, we might skip this if we want ultra-fast matching
+        if (!turboMode || effectiveMaxPageGap > 0) {
+            for (int basePageNumber = 1; basePageNumber <= baseDocument.getPageCount(); basePageNumber++) {
+                for (int gap = 1; gap <= effectiveMaxPageGap; gap++) {
+                    // Try page number + gap
+                    int comparePagePlus = basePageNumber + gap;
+                    if (comparePagePlus <= compareDocument.getPageCount()) {
+                        String key = baseDocument.getFileId() + "_" + basePageNumber + "_" +
+                                compareDocument.getFileId() + "_" + comparePagePlus;
+
+                        // Skip if already in cache
+                        if (similarityCache.containsKey(key)) {
+                            continue;
+                        }
+
+                        tasks.add(new PagePairTask(
+                                baseDocument, compareDocument, basePageNumber, comparePagePlus, key, gap));
+                    }
+
+                    // Try page number - gap
+                    int comparePageMinus = basePageNumber - gap;
+                    if (comparePageMinus >= 1) {
+                        String key = baseDocument.getFileId() + "_" + basePageNumber + "_" +
+                                compareDocument.getFileId() + "_" + comparePageMinus;
+
+                        // Skip if already in cache
+                        if (similarityCache.containsKey(key)) {
+                            continue;
+                        }
+
+                        tasks.add(new PagePairTask(
+                                baseDocument, compareDocument, basePageNumber, comparePageMinus, key, gap));
+                    }
+                }
+            }
+        }
+
+        // 3. In non-turbo mode, we might add a few random samples for robustness
+        // Skip in turbo mode to maximize speed
+        if (!turboMode && tasks.size() < 50) {
+            int sampleCount = Math.min(10, baseDocument.getPageCount() * compareDocument.getPageCount() / 20);
+            Random random = new Random();
+
+            for (int i = 0; i < sampleCount; i++) {
+                int basePage = random.nextInt(baseDocument.getPageCount()) + 1;
+                int comparePage = random.nextInt(compareDocument.getPageCount()) + 1;
+
+                // Skip if it's a duplicate
+                String key = baseDocument.getFileId() + "_" + basePage + "_" +
+                        compareDocument.getFileId() + "_" + comparePage;
+                if (similarityCache.containsKey(key)) {
+                    continue;
+                }
+
+                // Check if this pair already exists in our tasks
+                boolean exists = false;
+                for (PagePairTask task : tasks) {
+                    if (task.basePageNumber == basePage && task.comparePageNumber == comparePage) {
+                        exists = true;
+                        break;
+                    }
+                }
+
+                if (!exists) {
+                    tasks.add(new PagePairTask(
+                            baseDocument, compareDocument, basePage, comparePage, key, 10));
+                }
+            }
+        }
+
+        // Sort by priority (lower value = higher priority)
+        tasks.sort(Comparator.comparingInt(a -> a.priority));
+
+        log.info("Created {} prioritized page pair tasks instead of {} potential pairs",
+                tasks.size(), baseDocument.getPageCount() * compareDocument.getPageCount());
+
+        return tasks;
+    }
+
+    /**
+     * Process a batch of page pair tasks with specified timeout.
+     * Uses optimized parallel processing with strict timeout control.
+     */
+    private void processPagePairBatch(
+            List<PagePairTask> batchTasks,
             Map<String, Double> similarityScores,
             AtomicInteger completedComparisons,
             int totalComparisons,
-            String comparisonId) {
-        
+            String comparisonId,
+            String batchName,
+            int timeoutSeconds) {
+
+        if (batchTasks.isEmpty()) return;
+
+        String logPrefix = "[" + batchTasks.get(0).baseDocument.getFileId() + "_" +
+                batchTasks.get(0).compareDocument.getFileId() + "] ";
+
+        log.info(logPrefix + "Processing {} with {} tasks, timeout: {}s",
+                batchName, batchTasks.size(), timeoutSeconds);
+
         // Use a semaphore to limit concurrent comparisons
         Semaphore semaphore = new Semaphore(maxConcurrentComparisons);
         List<CompletableFuture<Void>> futures = new ArrayList<>();
-        
+
         for (PagePairTask task : batchTasks) {
-            // Submit a task to calculate the similarity score
+            // Submit tasks to calculate similarity scores
             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                 try {
-                    // Acquire permit from semaphore to limit concurrent operations
-                    semaphore.acquire();
-                    
-                    try {
-                        // Calculate similarity with retry
-                        double similarity = calculateSimilarityWithRetry(
-                                task.baseDocument, task.compareDocument, 
+                    // Acquire permit from semaphore to limit concurrent processing
+                    if (!semaphore.tryAcquire(2, TimeUnit.SECONDS)) {
+                        log.debug(logPrefix + "Skipping task {}/{} due to resource constraints",
                                 task.basePageNumber, task.comparePageNumber);
-                        
+                        return;
+                    }
+
+                    try {
+                        // Calculate similarity with retry and quick timeout
+                        double similarity = calculateSimilarityWithRetry(
+                                task.baseDocument, task.compareDocument,
+                                task.basePageNumber, task.comparePageNumber);
+
                         // Cache the score
                         similarityCache.put(task.key, similarity);
                         similarityScores.put(task.key, similarity);
-                        
-                        // Log progress periodically
+
+                        // Log progress
                         int completed = completedComparisons.incrementAndGet();
-                        int progressPercent = (completed * 100) / totalComparisons;
-                        
-                        if (completed % 10 == 0 || completed == totalComparisons) {
-                            log.info("Comparison progress: {}/{} ({}%)",
+
+                        // Update progress less frequently in turbo mode
+                        if (completed % 20 == 0 || completed == totalComparisons) {
+                            int progressPercent = (completed * 100) / totalComparisons;
+                            log.info(logPrefix + "Comparison progress: {}/{} ({}%)",
                                     completed, totalComparisons, progressPercent);
-                            
-                            // Update progress in the database if we have a comparison ID
-                            if (comparisonId != null) {
-                                try {
-                                    // Use reflection to get the ComparisonService
-                                    // This is a workaround to avoid circular dependencies
-                                    Object comparisonService = getComparisonService();
-                                    if (comparisonService != null) {
-                                        java.lang.reflect.Method updateMethod = comparisonService.getClass()
-                                                .getMethod("updateComparisonProgress", 
-                                                        String.class, int.class, int.class, String.class);
-                                        
-                                        updateMethod.invoke(comparisonService, 
-                                                comparisonId, completed, totalComparisons, 
-                                                "Calculating visual similarity scores");
-                                    }
-                                } catch (Exception e) {
-                                    log.warn("Failed to update comparison progress: {}", e.getMessage());
-                                    // Don't rethrow - this is non-critical functionality
-                                }
-                            }
+
+                            // Update progress in database if comparison ID provided
+                            updateComparisonProgress(comparisonId, completed, totalComparisons);
                         }
                     } finally {
-                        // Always release the permit
+                        // Always release the semaphore
                         semaphore.release();
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    log.error("Thread interrupted while waiting for semaphore", e);
+                    log.error(logPrefix + "Thread interrupted while processing page pair", e);
                 } catch (Exception e) {
-                    log.error("Error calculating similarity for pages {} and {}: {}",
+                    log.error(logPrefix + "Error calculating similarity for pages {}/{}: {}",
                             task.basePageNumber, task.comparePageNumber, e.getMessage());
-                    // Use a low similarity score as fallback
-                    similarityScores.put(task.key, 0.0);
                     completedComparisons.incrementAndGet();
                 }
             }, executorService);
-            
+
             futures.add(future);
         }
-        
-        // Wait for all tasks in this batch to complete with timeout handling
+
+        // Wait for all tasks to complete with timeout
         try {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                    .get(2, TimeUnit.MINUTES);
+                    .get(timeoutSeconds, TimeUnit.SECONDS);
+            log.info(logPrefix + "{} completed successfully", batchName);
         } catch (Exception e) {
-            log.error("Error or timeout waiting for similarity calculations to complete in batch", e);
-            // Continue with partial results rather than failing completely
+            log.warn(logPrefix + "Timeout or error waiting for {} to complete: {}",
+                    batchName, e.getMessage());
+            // Continue with partial results
+        }
+
+        // In turbo mode, aggressively release memory
+        if (turboMode) {
+            System.gc();
         }
     }
-    
+
+    /**
+     * Update progress in the comparison service.
+     */
+    private void updateComparisonProgress(String comparisonId, int completed, int total) {
+        if (comparisonId == null) return;
+
+        try {
+            Object comparisonService = getComparisonService();
+            if (comparisonService != null) {
+                java.lang.reflect.Method updateMethod = comparisonService.getClass()
+                        .getMethod("updateComparisonProgress",
+                                String.class, int.class, int.class, String.class);
+
+                updateMethod.invoke(comparisonService,
+                        comparisonId, completed, total,
+                        "Calculating visual similarity scores");
+            }
+        } catch (Exception e) {
+            log.warn("Failed to update comparison progress: {}", e.getMessage());
+        }
+    }
+
     /**
      * Class to represent a page pair comparison task.
      */
@@ -372,26 +575,21 @@ public class EnhancedVisualMatcher implements VisualMatcher {
         final int basePageNumber;
         final int comparePageNumber;
         final String key;
-        
-        PagePairTask(PdfDocument baseDocument, PdfDocument compareDocument, 
-                     int basePageNumber, int comparePageNumber, String key) {
+        final int priority; // Lower value = higher priority
+
+        PagePairTask(PdfDocument baseDocument, PdfDocument compareDocument,
+                     int basePageNumber, int comparePageNumber, String key, int priority) {
             this.baseDocument = baseDocument;
             this.compareDocument = compareDocument;
             this.basePageNumber = basePageNumber;
             this.comparePageNumber = comparePageNumber;
             this.key = key;
+            this.priority = priority;
         }
     }
 
     /**
-     * Calculate similarity with retry mechanism to handle transient errors.
-     *
-     * @param baseDocument The base document
-     * @param compareDocument The compare document
-     * @param basePageNum The base page number
-     * @param comparePageNum The compare page number
-     * @return The similarity score
-     * @throws IOException If all retry attempts fail
+     * Calculate similarity with retry mechanism and turbo mode optimizations.
      */
     private double calculateSimilarityWithRetry(
             PdfDocument baseDocument, PdfDocument compareDocument,
@@ -401,30 +599,47 @@ public class EnhancedVisualMatcher implements VisualMatcher {
 
         for (int attempt = 0; attempt < retryCount; attempt++) {
             try {
-                // Get the rendered page images
-                BufferedImage baseImage = getPageImage(baseDocument, basePageNum);
-                BufferedImage compareImage = getPageImage(compareDocument, comparePageNum);
+                // Use try-with-resources to ensure images are properly disposed after use
+                BufferedImage baseImage = null;
+                BufferedImage compareImage = null;
 
-                // Check if images were loaded successfully
-                if (baseImage == null) {
-                    throw new IOException("Failed to load base image for page " + basePageNum);
+                try {
+                    // In turbo mode, use a very short timeout
+                    int timeout = turboMode ? 5 : 10;
+
+                    // Get the rendered page images with a short timeout
+                    baseImage = getPageImage(baseDocument, basePageNum, timeout);
+                    compareImage = getPageImage(compareDocument, comparePageNum, timeout);
+
+                    // Check if images were loaded successfully
+                    if (baseImage == null) {
+                        throw new IOException("Failed to load base image for page " + basePageNum);
+                    }
+                    if (compareImage == null) {
+                        throw new IOException("Failed to load compare image for page " + comparePageNum);
+                    }
+
+                    // In turbo mode, use a faster but less accurate comparison
+                    if (fastSimilarityMetrics || turboMode) {
+                        return calculateFastSimilarity(baseImage, compareImage);
+                    } else {
+                        // Use the more accurate SSIM calculator
+                        return ssimCalculator.calculate(baseImage, compareImage);
+                    }
+                } finally {
+                    // Explicit resource cleanup to help GC
+                    cleanupImage(baseImage);
+                    cleanupImage(compareImage);
                 }
-
-                if (compareImage == null) {
-                    throw new IOException("Failed to load compare image for page " + comparePageNum);
-                }
-
-                // Calculate the similarity score
-                return ssimCalculator.calculate(baseImage, compareImage);
             } catch (IOException e) {
                 lastException = e;
-                log.warn("Attempt {} failed for pages {} and {}: {}",
+                log.debug("Attempt {} failed for pages {} and {}: {}",
                         attempt + 1, basePageNum, comparePageNum, e.getMessage());
 
                 if (attempt < retryCount - 1) {
-                    // Sleep before retrying
+                    // Sleep before retrying with exponential backoff
                     try {
-                        Thread.sleep(retryDelayMs * (attempt + 1));
+                        Thread.sleep(retryDelayMs * (1 << attempt)); // Exponential backoff
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         throw new IOException("Thread interrupted during retry delay", ie);
@@ -434,28 +649,122 @@ public class EnhancedVisualMatcher implements VisualMatcher {
         }
 
         // All retries failed
-        throw new IOException("Failed to calculate similarity after " + retryCount + " attempts", lastException);
+        if (lastException != null) {
+            throw lastException;
+        } else {
+            throw new IOException("Failed to calculate similarity after " + retryCount + " attempts");
+        }
     }
 
     /**
-     * Get the rendered page image with caching.
-     *
-     * @param document The document
-     * @param pageNumber The page number
-     * @return The rendered page image
-     * @throws IOException If there is an error loading the image
+     * Clean up an image to help garbage collection.
      */
-    private BufferedImage getPageImage(PdfDocument document, int pageNumber) throws IOException {
+    private void cleanupImage(BufferedImage image) {
+        if (image != null && !imageInCache(image)) {
+            image.flush();
+        }
+    }
+
+    /**
+     * Check if an image is in the cache.
+     */
+    private boolean imageInCache(BufferedImage image) {
+        for (SoftReference<BufferedImage> ref : imageCache.values()) {
+            if (ref != null && ref.get() == image) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Calculate a fast similarity metric between two images.
+     * This is much faster than SSIM but less accurate.
+     */
+    private double calculateFastSimilarity(BufferedImage img1, BufferedImage img2) {
+        // Very fast histogram-based comparison
+        // Sample only a subset of pixels for speed
+        int[] hist1 = calculateHistogram(img1, 8);
+        int[] hist2 = calculateHistogram(img2, 8);
+
+        // Calculate histogram intersection (faster than SSIM)
+        double intersection = 0;
+        double sum1 = 0;
+        double sum2 = 0;
+
+        for (int i = 0; i < hist1.length; i++) {
+            intersection += Math.min(hist1[i], hist2[i]);
+            sum1 += hist1[i];
+            sum2 += hist2[i];
+        }
+
+        // Normalize to [0,1]
+        return intersection / Math.max(sum1, sum2);
+    }
+
+    /**
+     * Calculate a color histogram for an image.
+     */
+    private int[] calculateHistogram(BufferedImage image, int binCount) {
+        int[] hist = new int[binCount * binCount * binCount]; // RGB bins
+        int width = image.getWidth();
+        int height = image.getHeight();
+
+        // Sample every 4th pixel for speed
+        for (int y = 0; y < height; y += 4) {
+            for (int x = 0; x < width; x += 4) {
+                int rgb = image.getRGB(x, y);
+                int r = (rgb >> 16) & 0xFF;
+                int g = (rgb >> 8) & 0xFF;
+                int b = rgb & 0xFF;
+
+                // Map to bins (simplify color space)
+                int rBin = r * binCount / 256;
+                int gBin = g * binCount / 256;
+                int bBin = b * binCount / 256;
+
+                int idx = (rBin * binCount * binCount) + (gBin * binCount) + bBin;
+                hist[idx]++;
+            }
+        }
+
+        return hist;
+    }
+
+    /**
+     * Get the rendered page image with efficient caching.
+     */
+    private BufferedImage getPageImage(PdfDocument document, int pageNumber, int timeoutSeconds) throws IOException {
         String cacheKey = document.getFileId() + "_" + pageNumber;
 
         // Check if the image is already in the cache
-        BufferedImage cachedImage = imageCache.get(cacheKey);
-        if (cachedImage != null) {
-            return cachedImage;
+        SoftReference<BufferedImage> cachedImageRef = imageCache.get(cacheKey);
+        if (cachedImageRef != null) {
+            BufferedImage cachedImage = cachedImageRef.get();
+            if (cachedImage != null) {
+                return cachedImage;
+            } else {
+                // Reference was cleared by GC
+                imageCache.remove(cacheKey);
+            }
         }
 
-        // Get the rendered page
-        File pageFile = pdfRenderingService.renderPage(document, pageNumber);
+        // Get the rendered page with timeout
+        File pageFile;
+        try {
+            // Use timeout to avoid blocking too long on rendering
+            CompletableFuture<File> renderFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return pdfRenderingService.renderPage(document, pageNumber);
+                } catch (IOException e) {
+                    throw new CompletionException(e);
+                }
+            }, executorService);
+
+            pageFile = renderFuture.get(timeoutSeconds, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            throw new IOException("Timed out or error rendering page " + pageNumber + ": " + e.getMessage(), e);
+        }
 
         // Ensure file exists and is readable
         if (!pageFile.exists() || !pageFile.canRead()) {
@@ -475,11 +784,37 @@ public class EnhancedVisualMatcher implements VisualMatcher {
             throw new IOException("Failed to load image: " + pageFile.getPath());
         }
 
-        // Cache the image if there's room in the cache
-        if (imageCache.size() < MAX_CACHE_SIZE) {
-            imageCache.put(cacheKey, image);
+        // In turbo mode, downsample the image for faster processing
+        if (turboMode && image.getWidth() > 500) {
+            int newWidth = image.getWidth() / 2;
+            int newHeight = image.getHeight() / 2;
+
+            BufferedImage resized = new BufferedImage(newWidth, newHeight, image.getType());
+            Graphics2D g = resized.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.drawImage(image, 0, 0, newWidth, newHeight, null);
+            g.dispose();
+
+            image.flush(); // Release the original
+            image = resized;
         }
 
+        // Cache the image with soft reference to allow GC when memory is low
+        if (imageCache.size() >= MAX_CACHE_SIZE) {
+            // Evict an entry if cache is full
+            if (!imageCache.isEmpty()) {
+                String keyToRemove = imageCache.keySet().iterator().next();
+                SoftReference<BufferedImage> removedRef = imageCache.remove(keyToRemove);
+                if (removedRef != null) {
+                    BufferedImage removedImage = removedRef.get();
+                    if (removedImage != null) {
+                        removedImage.flush();
+                    }
+                }
+            }
+        }
+
+        imageCache.put(cacheKey, new SoftReference<>(image));
         return image;
     }
 
@@ -487,16 +822,21 @@ public class EnhancedVisualMatcher implements VisualMatcher {
      * Clear the image cache to free memory.
      */
     private void clearImageCache() {
+        // Explicitly flush images before removing references
+        for (SoftReference<BufferedImage> ref : imageCache.values()) {
+            if (ref != null) {
+                BufferedImage image = ref.get();
+                if (image != null) {
+                    image.flush();
+                }
+            }
+        }
         imageCache.clear();
+        System.gc(); // Request garbage collection
     }
 
     /**
-     * Match pages using the Hungarian algorithm.
-     *
-     * @param baseDocument The base document
-     * @param compareDocument The compare document
-     * @param similarityScores The similarity scores for all page pairs
-     * @return A list of page pairs
+     * Match pages using the Hungarian algorithm with early stopping for large documents.
      */
     private List<PagePair> matchPagesUsingHungarian(
             PdfDocument baseDocument, PdfDocument compareDocument,
@@ -504,6 +844,12 @@ public class EnhancedVisualMatcher implements VisualMatcher {
 
         int basePageCount = baseDocument.getPageCount();
         int comparePageCount = compareDocument.getPageCount();
+
+        // Fast path for turbo mode with large documents
+        if (turboMode && (basePageCount > 50 || comparePageCount > 50)) {
+            log.info("Using simple matching for large documents in turbo mode");
+            return createSimpleMatching(baseDocument, compareDocument, similarityScores);
+        }
 
         // Create a cost matrix for the Hungarian algorithm
         double[][] costMatrix = new double[basePageCount][comparePageCount];
@@ -589,7 +935,94 @@ public class EnhancedVisualMatcher implements VisualMatcher {
     }
 
     /**
+     * Create a simple matching for large documents in turbo mode.
+     * This uses a greedy approach instead of Hungarian algorithm for speed.
+     */
+    private List<PagePair> createSimpleMatching(
+            PdfDocument baseDocument, PdfDocument compareDocument,
+            Map<String, Double> similarityScores) {
+
+        List<PagePair> pagePairs = new ArrayList<>();
+        boolean[] compareMatched = new boolean[compareDocument.getPageCount() + 1];
+
+        // First pass: try to match pages with the same number
+        for (int i = 1; i <= baseDocument.getPageCount(); i++) {
+            if (i <= compareDocument.getPageCount()) {
+                String key = baseDocument.getFileId() + "_" + i + "_" +
+                        compareDocument.getFileId() + "_" + i;
+
+                double similarity = similarityScores.getOrDefault(key, 0.0);
+
+                if (similarity >= visualSimilarityThreshold) {
+                    pagePairs.add(PagePair.builder()
+                            .baseDocumentId(baseDocument.getFileId())
+                            .compareDocumentId(compareDocument.getFileId())
+                            .basePageNumber(i)
+                            .comparePageNumber(i)
+                            .matched(true)
+                            .similarityScore(similarity)
+                            .build());
+                    compareMatched[i] = true;
+                    continue;
+                }
+            }
+
+            // Try to find the best match for this base page
+            int bestMatch = -1;
+            double bestSimilarity = visualSimilarityThreshold;
+
+            for (int j = 1; j <= compareDocument.getPageCount(); j++) {
+                if (compareMatched[j]) continue;
+
+                String key = baseDocument.getFileId() + "_" + i + "_" +
+                        compareDocument.getFileId() + "_" + j;
+
+                double similarity = similarityScores.getOrDefault(key, 0.0);
+
+                if (similarity > bestSimilarity) {
+                    bestSimilarity = similarity;
+                    bestMatch = j;
+                }
+            }
+
+            if (bestMatch != -1) {
+                pagePairs.add(PagePair.builder()
+                        .baseDocumentId(baseDocument.getFileId())
+                        .compareDocumentId(compareDocument.getFileId())
+                        .basePageNumber(i)
+                        .comparePageNumber(bestMatch)
+                        .matched(true)
+                        .similarityScore(bestSimilarity)
+                        .build());
+                compareMatched[bestMatch] = true;
+            } else {
+                pagePairs.add(PagePair.builder()
+                        .baseDocumentId(baseDocument.getFileId())
+                        .compareDocumentId(compareDocument.getFileId())
+                        .basePageNumber(i)
+                        .matched(false)
+                        .build());
+            }
+        }
+
+        // Add unmatched pages from compare document
+        for (int j = 1; j <= compareDocument.getPageCount(); j++) {
+            if (!compareMatched[j]) {
+                pagePairs.add(PagePair.builder()
+                        .baseDocumentId(baseDocument.getFileId())
+                        .compareDocumentId(compareDocument.getFileId())
+                        .comparePageNumber(j)
+                        .matched(false)
+                        .build());
+            }
+        }
+
+        return pagePairs;
+    }
+
+    /**
      * Implementation of the Hungarian algorithm for solving the assignment problem.
+     * Optimized for performance and early stopping to handle large matrices efficiently.
      */
     private static class HungarianAlgorithm {
         private final double[][] costMatrix;
@@ -598,6 +1031,7 @@ public class EnhancedVisualMatcher implements VisualMatcher {
         private final int[] rowAssignment;
         private final double[] rowCover;
         private final double[] colCover;
+        private final int maxIterations;
 
         /**
          * Constructor.
@@ -612,10 +1046,12 @@ public class EnhancedVisualMatcher implements VisualMatcher {
             this.rowAssignment = new int[cols];
             this.rowCover = new double[rows];
             this.colCover = new double[cols];
+            // Set maximum iterations to prevent infinite loops
+            this.maxIterations = Math.max(10, rows * 2);
         }
 
         /**
-         * Execute the Hungarian algorithm.
+         * Execute the Hungarian algorithm with early stopping for performance.
          *
          * @return An array of assignments (column indices for each row)
          */
@@ -628,79 +1064,141 @@ public class EnhancedVisualMatcher implements VisualMatcher {
                 rowAssignment[j] = -1;
             }
 
-            // Step 1: Subtract the smallest value in each row from all values in that row
+            // Step 1: Reduce rows by subtracting minimum value from each row
             for (int i = 0; i < rows; i++) {
                 double minValue = Double.MAX_VALUE;
                 for (int j = 0; j < cols; j++) {
-                    minValue = Math.min(minValue, costMatrix[i][j]);
+                    if (costMatrix[i][j] < minValue) {
+                        minValue = costMatrix[i][j];
+                    }
                 }
-                for (int j = 0; j < cols; j++) {
-                    costMatrix[i][j] -= minValue;
-                }
-            }
-
-            // Step 2: Subtract the smallest value in each column from all values in that column
-            for (int j = 0; j < cols; j++) {
-                double minValue = Double.MAX_VALUE;
-                for (int i = 0; i < rows; i++) {
-                    minValue = Math.min(minValue, costMatrix[i][j]);
-                }
-                for (int i = 0; i < rows; i++) {
-                    costMatrix[i][j] -= minValue;
+                if (minValue != Double.MAX_VALUE) {
+                    for (int j = 0; j < cols; j++) {
+                        costMatrix[i][j] -= minValue;
+                    }
                 }
             }
 
-            // Step 3: Cover all zeros with a minimum number of lines
-            int[] rowsCovered = new int[rows];
-            int[] colsCovered = new int[cols];
-            int numLines = 0;
-
-            // Find a maximal matching
+            // Step 2: Find a zero in each row and mark it as an assignment if possible
             for (int i = 0; i < rows; i++) {
                 for (int j = 0; j < cols; j++) {
-                    if (costMatrix[i][j] == 0 && rowsCovered[i] == 0 && colsCovered[j] == 0) {
-                        rowsCovered[i] = 1;
-                        colsCovered[j] = 1;
-                        colAssignment[i] = j;
+                    if (costMatrix[i][j] == 0 && colCover[j] == 0) {
                         rowAssignment[j] = i;
-                        numLines++;
+                        colAssignment[i] = j;
+                        colCover[j] = 1;
                         break;
                     }
                 }
             }
 
-            // If the number of lines equals the number of rows, we're done
-            if (numLines == Math.min(rows, cols)) {
-                return colAssignment;
+            // Clear covers for augmenting path
+            Arrays.fill(colCover, 0);
+
+            // Step 3: Cover all assigned columns
+            for (int j = 0; j < cols; j++) {
+                if (rowAssignment[j] != -1) {
+                    colCover[j] = 1;
+                }
             }
 
-            // Step 4: Create additional zeros
-            // Find the minimum uncovered value
-            double minUncovered = Double.MAX_VALUE;
-            for (int i = 0; i < rows; i++) {
-                if (rowsCovered[i] == 0) {
+            // Main loop for the Hungarian algorithm
+            int iteration = 0;
+            while (iteration < maxIterations) {
+                // If all columns are covered, we're done
+                int coveredCols = 0;
+                for (int j = 0; j < cols; j++) {
+                    if (colCover[j] == 1) {
+                        coveredCols++;
+                    }
+                }
+
+                // If we've covered all columns or enough of them, we're done
+                if (coveredCols == Math.min(rows, cols) || coveredCols >= (int)(Math.min(rows, cols) * 0.9)) {
+                    break;
+                }
+
+                // Find uncovered zero
+                int[] zero = findUncoveredZero();
+                if (zero[0] != -1) {
+                    // Mark the zero
+                    rowCover[zero[0]] = 1;
+                    colCover[zero[1]] = 0;
+
+                    // Find assigned zero in the row
+                    int assignedCol = colAssignment[zero[0]];
+                    if (assignedCol != -1) {
+                        // Unassign and cover column
+                        colCover[assignedCol] = 1;
+                    } else {
+                        // Augmenting path found, add new assignment
+                        colAssignment[zero[0]] = zero[1];
+                        rowAssignment[zero[1]] = zero[0];
+                        break;
+                    }
+                } else {
+                    // No uncovered zero, adjust matrix
+                    double minValue = findMinValue();
+
+                    for (int i = 0; i < rows; i++) {
+                        if (rowCover[i] == 1) {
+                            for (int j = 0; j < cols; j++) {
+                                costMatrix[i][j] += minValue;
+                            }
+                        }
+                    }
+
                     for (int j = 0; j < cols; j++) {
-                        if (colsCovered[j] == 0) {
-                            minUncovered = Math.min(minUncovered, costMatrix[i][j]);
+                        if (colCover[j] == 0) {
+                            for (int i = 0; i < rows; i++) {
+                                costMatrix[i][j] -= minValue;
+                            }
+                        }
+                    }
+                }
+
+                iteration++;
+            }
+
+            return colAssignment;
+        }
+
+        /**
+         * Find an uncovered zero in the cost matrix.
+         *
+         * @return The coordinates of the uncovered zero, or [-1, -1] if none found
+         */
+        private int[] findUncoveredZero() {
+            for (int i = 0; i < rows; i++) {
+                if (rowCover[i] == 0) {
+                    for (int j = 0; j < cols; j++) {
+                        if (colCover[j] == 0 && costMatrix[i][j] == 0) {
+                            return new int[]{i, j};
+                        }
+                    }
+                }
+            }
+            return new int[]{-1, -1};
+        }
+
+        /**
+         * Find the minimum uncovered value in the cost matrix.
+         *
+         * @return The minimum uncovered value
+         */
+        private double findMinValue() {
+            double minValue = Double.MAX_VALUE;
+
+            for (int i = 0; i < rows; i++) {
+                if (rowCover[i] == 0) {
+                    for (int j = 0; j < cols; j++) {
+                        if (colCover[j] == 0 && costMatrix[i][j] < minValue) {
+                            minValue = costMatrix[i][j];
                         }
                     }
                 }
             }
 
-            // Subtract the minimum uncovered value from all uncovered elements
-            // and add it to all elements covered by two lines
-            for (int i = 0; i < rows; i++) {
-                for (int j = 0; j < cols; j++) {
-                    if (rowsCovered[i] == 0 && colsCovered[j] == 0) {
-                        costMatrix[i][j] -= minUncovered;
-                    } else if (rowsCovered[i] == 1 && colsCovered[j] == 1) {
-                        costMatrix[i][j] += minUncovered;
-                    }
-                }
-            }
-
-            // Recursively call the algorithm
-            return execute();
+            return minValue;
         }
     }
 }

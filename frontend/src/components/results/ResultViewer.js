@@ -5,6 +5,7 @@ import ComparisonSummary from './ComparisonSummary';
 import SideBySideView from '../comparison/SideBySideView'; // This will now use the simplified version
 import Spinner from '../common/Spinner';
 import './ResultViewer.css';
+import PDFBattleLoadingScreen from '../../utilities/PDFBattleLoadingScreen';
 
 // Error component
 const ResultViewerError = memo(({ error, onRetry, onNewComparison }) => {
@@ -238,7 +239,7 @@ const ResultViewer = memo(({ comparisonId, onNewComparison }) => {
 
     return (
       <div className="result-viewer-loading">
-        <Spinner size="large" />
+        <PDFBattleLoadingScreen />
         <p>Processing comparison... {retryCount > 0 ? `(Attempt ${retryCount}/${maxRetries})` : ''}</p>
         
         {hasProgress && (
