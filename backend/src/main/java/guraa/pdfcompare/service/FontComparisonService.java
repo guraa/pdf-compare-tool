@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -143,9 +144,34 @@ public class FontComparisonService {
      * @throws IOException If there is an error extracting the font information
      */
     private Map<String, FontInfo> extractFontInfo(PdfDocument document, int pageNumber) throws IOException {
+        // Create a path for extracted font info
+        String extractedFontsPath = document.getFilePath() + "_fonts_" + pageNumber;
+        
+        // Check if we've already extracted fonts for this page
+        File extractedFontsFile = new File(extractedFontsPath);
+        if (extractedFontsFile.exists()) {
+            log.info("Found cached font information for document {} page {}", 
+                    document.getFileId(), pageNumber);
+            
+            // In a real implementation, this would deserialize the font info from the file
+            // For now, we'll return an empty map
+            return new HashMap<>();
+        }
+        
         // In a real implementation, this would use iText to extract font information from the PDF
-        // For now, we'll return an empty map
-        return new HashMap<>();
+        // and then serialize it to a file for future use
+        Map<String, FontInfo> fontInfo = new HashMap<>();
+        
+        // Create a dummy file to indicate that we've extracted fonts for this page
+        try {
+            extractedFontsFile.createNewFile();
+            log.info("Created font cache file for document {} page {}", 
+                    document.getFileId(), pageNumber);
+        } catch (IOException e) {
+            log.warn("Failed to create font cache file: {}", e.getMessage());
+        }
+        
+        return fontInfo;
     }
 
     /**

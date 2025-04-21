@@ -12,6 +12,13 @@ const initialState = {
   selectedDifference: null,
   selectedDocumentPairIndex: 0, // Add this to track the selected document pair
   documentPairs: [], // Add this to store all document pairs
+  progress: {
+    status: null,
+    progress: 0,
+    completedOperations: 0,
+    totalOperations: 0,
+    currentPhase: null
+  },
   filters: {
     differenceTypes: ['text', 'font', 'image', 'style', 'metadata'],
     minSeverity: 'all', // 'all', 'minor', 'major', 'critical'
@@ -40,6 +47,7 @@ const actions = {
   SET_SELECTED_DOCUMENT_PAIR_INDEX: 'SET_SELECTED_DOCUMENT_PAIR_INDEX',
   UPDATE_FILTERS: 'UPDATE_FILTERS',
   UPDATE_VIEW_SETTINGS: 'UPDATE_VIEW_SETTINGS',
+  UPDATE_PROGRESS: 'UPDATE_PROGRESS',
   RESET_COMPARISON: 'RESET_COMPARISON'
 };
 
@@ -91,6 +99,12 @@ const comparisonReducer = (state, action) => {
         viewSettings: { ...state.viewSettings, ...action.payload } 
       };
     
+    case actions.UPDATE_PROGRESS:
+      return {
+        ...state,
+        progress: { ...state.progress, ...action.payload }
+      };
+    
     case actions.RESET_COMPARISON:
       return { 
         ...initialState,
@@ -129,6 +143,7 @@ export const ComparisonProvider = ({ children }) => {
     setSelectedDocumentPairIndex: (index) => dispatch({ type: actions.SET_SELECTED_DOCUMENT_PAIR_INDEX, payload: index }),
     updateFilters: (filters) => dispatch({ type: actions.UPDATE_FILTERS, payload: filters }),
     updateViewSettings: (settings) => dispatch({ type: actions.UPDATE_VIEW_SETTINGS, payload: settings }),
+    updateProgress: (progress) => dispatch({ type: actions.UPDATE_PROGRESS, payload: progress }),
     resetComparison: () => dispatch({ type: actions.RESET_COMPARISON })
   };
 

@@ -51,6 +51,30 @@ public class Comparison {
      */
     @Column(name = "error_message", length = 2000)
     private String errorMessage;
+    
+    /**
+     * The current progress of the comparison (0-100).
+     */
+    @Column(name = "progress", nullable = false, columnDefinition = "INTEGER DEFAULT 0")
+    private int progress = 0;
+    
+    /**
+     * The total number of operations to be performed.
+     */
+    @Column(name = "total_operations", nullable = false, columnDefinition = "INTEGER DEFAULT 0")
+    private int totalOperations = 0;
+    
+    /**
+     * The number of completed operations.
+     */
+    @Column(name = "completed_operations", nullable = false, columnDefinition = "INTEGER DEFAULT 0")
+    private int completedOperations = 0;
+    
+    /**
+     * The current phase of the comparison.
+     */
+    @Column(name = "current_phase", length = 100, columnDefinition = "VARCHAR(100) DEFAULT 'Initializing'")
+    private String currentPhase = "Initializing";
 
     /**
      * The time the comparison was created.

@@ -420,6 +420,7 @@ public class TextElementComparisonService {
                         // Use default height if calculation fails
                     }
 
+                    
                     textElements.add(new TextElement(
                             text,
                             textRect.getX(),

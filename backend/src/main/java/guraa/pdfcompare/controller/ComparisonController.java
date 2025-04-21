@@ -167,6 +167,15 @@ public class ComparisonController {
             if (comparison.getErrorMessage() != null) {
                 response.put("errorMessage", comparison.getErrorMessage());
             }
+            
+            // Add progress information if available
+            if (comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
+                    comparison.getStatus() == Comparison.ComparisonStatus.PENDING) {
+                response.put("progress", comparison.getProgress());
+                response.put("completedOperations", comparison.getCompletedOperations());
+                response.put("totalOperations", comparison.getTotalOperations());
+                response.put("currentPhase", comparison.getCurrentPhase());
+            }
 
             if (comparison.getStatus() == Comparison.ComparisonStatus.COMPLETED) {
                 return ResponseEntity.ok(response);
@@ -185,6 +194,50 @@ public class ComparisonController {
             Map<String, Object> response = new HashMap<>();
             response.put("status", "ERROR");
             response.put("message", "Failed to get comparison status: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+    
+    /**
+     * Get the progress of a comparison.
+     *
+     * @param comparisonId The comparison ID
+     * @return The comparison progress
+     */
+    @GetMapping("/comparison/{comparisonId}/progress")
+    public ResponseEntity<?> getComparisonProgress(@PathVariable String comparisonId) {
+        log.debug("Getting progress for comparison: {}", comparisonId);
+
+        try {
+            // Check if comparison exists
+            Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
+            if (comparisonOpt.isEmpty()) {
+                log.warn("Comparison not found: {}", comparisonId);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("status", "NOT_FOUND", "message", "Comparison not found"));
+            }
+
+            Comparison comparison = comparisonOpt.get();
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("comparisonId", comparisonId);
+            response.put("status", comparison.getStatus().name());
+            response.put("progress", comparison.getProgress());
+            response.put("completedOperations", comparison.getCompletedOperations());
+            response.put("totalOperations", comparison.getTotalOperations());
+            response.put("currentPhase", comparison.getCurrentPhase());
+            
+            if (comparison.getErrorMessage() != null) {
+                response.put("errorMessage", comparison.getErrorMessage());
+            }
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error getting comparison progress for {}: {}", comparisonId, e.getMessage(), e);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "ERROR");
+            response.put("message", "Failed to get comparison progress: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
     }

@@ -35,6 +35,7 @@ public class PDFComparisonEngine {
     private final FontComparisonService fontComparisonService;
     private final ExecutorService executorService;
     private final PerformanceMonitoringService monitoringService;
+    private ComparisonService comparisonService;
 
     // Maximum number of concurrent page comparisons
     private static final int MAX_CONCURRENT_PAGE_COMPARISONS = 8;
@@ -69,6 +70,16 @@ public class PDFComparisonEngine {
         this.executorService = executorService;
         this.monitoringService = monitoringService;
     }
+    
+    /**
+     * Setter for ComparisonService to break circular dependency.
+     * 
+     * @param comparisonService The comparison service
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setComparisonService(ComparisonService comparisonService) {
+        this.comparisonService = comparisonService;
+    }
 
     @Value("${app.comparison.smart-matching-enabled:true}")
     private boolean smartMatchingEnabled;
@@ -88,6 +99,19 @@ public class PDFComparisonEngine {
      * @throws IOException If there is an error comparing the documents
      */
     public ComparisonResult compareDocuments(PdfDocument baseDocument, PdfDocument compareDocument) throws IOException {
+        return compareDocuments(baseDocument, compareDocument, null);
+    }
+    
+    /**
+     * Compare two PDF documents with a specific comparison ID for progress tracking.
+     *
+     * @param baseDocument    The base document
+     * @param compareDocument The document to compare against the base
+     * @param comparisonId    The comparison ID for progress tracking (optional)
+     * @return The comparison result
+     * @throws IOException If there is an error comparing the documents
+     */
+    public ComparisonResult compareDocuments(PdfDocument baseDocument, PdfDocument compareDocument, String comparisonId) throws IOException {
         String logPrefix = "[" + baseDocument.getFileId() + " vs " + compareDocument.getFileId() + "] ";
         log.info(logPrefix + "Starting comparison between documents: {} and {}",
                 baseDocument.getFileId(), compareDocument.getFileId());
@@ -108,7 +132,7 @@ public class PDFComparisonEngine {
         try {
             // Match pages between documents
             log.info(logPrefix + "Starting document matching phase");
-            List<PagePair> pagePairs = matchDocuments(baseDocument, compareDocument);
+            List<PagePair> pagePairs = matchDocuments(baseDocument, compareDocument, comparisonId);
             log.info(logPrefix + "Document matching phase completed, found {} page pairs", pagePairs.size());
 
             // Create a comparison summary
@@ -118,7 +142,7 @@ public class PDFComparisonEngine {
 
             // Compare matched pages
             log.info(logPrefix + "Starting page comparison phase");
-            Map<String, List<Difference>> differencesByPage = comparePages(baseDocument, compareDocument, pagePairs);
+            Map<String, List<Difference>> differencesByPage = comparePages(baseDocument, compareDocument, pagePairs, comparisonId);
             log.info(logPrefix + "Page comparison phase completed, found differences on {} pages", differencesByPage.size());
 
             // Create the comparison result
@@ -184,11 +208,35 @@ public class PDFComparisonEngine {
      * @throws IOException If there is an error matching the documents
      */
     private List<PagePair> matchDocuments(PdfDocument baseDocument, PdfDocument compareDocument) throws IOException {
+        return matchDocuments(baseDocument, compareDocument, null);
+    }
+    
+    /**
+     * Match pages between two documents with progress tracking.
+     *
+     * @param baseDocument    The base document
+     * @param compareDocument The document to compare against the base
+     * @param comparisonId    The comparison ID for progress tracking (optional)
+     * @return A list of page pairs
+     * @throws IOException If there is an error matching the documents
+     */
+    private List<PagePair> matchDocuments(PdfDocument baseDocument, PdfDocument compareDocument, String comparisonId) throws IOException {
         // Use the document matcher to match pages
         DocumentMatchingStrategy matcher = documentMatcher;
         Map<String, Object> options = new HashMap<>();
         options.put("parallelProcessing", true);
         options.put("batchSize", batchSize);
+        
+        // Add the comparison ID for progress tracking if provided
+        if (comparisonId != null) {
+            options.put("comparisonId", comparisonId);
+            
+            // Update progress in the database if we have a comparison ID
+            if (comparisonService != null) {
+                comparisonService.updateComparisonProgress(
+                        comparisonId, 0, 100, "Matching document pages");
+            }
+        }
 
         return matcher.matchDocuments(baseDocument, compareDocument, options);
     }
@@ -235,7 +283,7 @@ public class PDFComparisonEngine {
      * @throws IOException If there is an error comparing the pages
      */
     private Map<String, List<Difference>> comparePages(
-            PdfDocument baseDocument, PdfDocument compareDocument, List<PagePair> pagePairs) throws IOException {
+            PdfDocument baseDocument, PdfDocument compareDocument, List<PagePair> pagePairs, String comparisonId) throws IOException {
 
         String logPrefix = "[" + baseDocument.getFileId() + " vs " + compareDocument.getFileId() + "] ";
         Map<String, List<Difference>> differencesByPage = new ConcurrentHashMap<>();
@@ -335,12 +383,19 @@ public class PDFComparisonEngine {
                                 pagePair.addDifference(createPageDifference(difference));
                             }
 
-                            // Log progress
-                            int completed = completedPages.incrementAndGet();
-                            if (completed % 5 == 0 || completed == totalPages) {
-                                log.info(logPrefix + "Page comparison progress: {}/{} pages ({}%)",
-                                        completed, totalPages, (completed * 100) / totalPages);
-                            }
+            // Log progress
+            int completed = completedPages.incrementAndGet();
+            if (completed % 5 == 0 || completed == totalPages) {
+                int progressPercent = (completed * 100) / totalPages;
+                log.info(logPrefix + "Page comparison progress: {}/{} pages ({}%)",
+                        completed, totalPages, progressPercent);
+                
+                // Update progress in the database if we have a comparison ID
+                if (comparisonId != null && comparisonService != null) {
+                    comparisonService.updateComparisonProgress(
+                            comparisonId, completed, totalPages, "Comparing page contents");
+                }
+            }
                         } finally {
                             // Always release the semaphore
                             semaphore.release(); // Always release the semaphore

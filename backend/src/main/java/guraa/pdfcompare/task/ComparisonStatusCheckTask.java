@@ -38,8 +38,9 @@ public class ComparisonStatusCheckTask {
         try {
             // Find all comparisons in PROCESSING or PENDING state
             List<Comparison> inProgressComparisons = comparisonRepository.findAll().stream()
-                    .filter(c -> c.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
-                            c.getStatus() == Comparison.ComparisonStatus.PENDING)
+                    .filter(c -> c != null && c.getStatus() != null && 
+                           (c.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
+                            c.getStatus() == Comparison.ComparisonStatus.PENDING))
                     .collect(Collectors.toList());
 
             if (inProgressComparisons.isEmpty()) {
@@ -82,9 +83,10 @@ public class ComparisonStatusCheckTask {
             // Find comparisons completed more than 24 hours ago
             LocalDateTime cutoff = LocalDateTime.now().minusHours(24);
             List<Comparison> oldCompletedComparisons = comparisonRepository.findAll().stream()
-                    .filter(c -> c.getStatus() == Comparison.ComparisonStatus.COMPLETED ||
-                            c.getStatus() == Comparison.ComparisonStatus.FAILED)
-                    .filter(c -> c.getUpdatedAt().isBefore(cutoff))
+                    .filter(c -> c != null && c.getStatus() != null && 
+                           (c.getStatus() == Comparison.ComparisonStatus.COMPLETED ||
+                            c.getStatus() == Comparison.ComparisonStatus.FAILED))
+                    .filter(c -> c.getUpdatedAt() != null && c.getUpdatedAt().isBefore(cutoff))
                     .collect(Collectors.toList());
 
             if (oldCompletedComparisons.isEmpty()) {

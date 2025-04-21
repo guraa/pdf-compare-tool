@@ -6,10 +6,7 @@ import DifferenceList from './DifferenceList';
 import Spinner from '../common/Spinner';
 import ZoomControls from './ZoomControls';
 import { getDocumentPairs, getDocumentPairResult, getDocumentPageDetails } from '../../services/api';
-import DifferenceDebugDisplay from './DifferenceDebugDisplay'; // Import debug component
 import './SideBySideView.css';
-import PDFCoordinateAnalyzer from './PDFCoordinateAnalyzer';
-
 
 const SideBySideView = ({ comparisonId }) => {
   // Refs
@@ -35,32 +32,11 @@ const SideBySideView = ({ comparisonId }) => {
   const [zoom, setZoom] = useState(0.4); // Start with a lower zoom level
   const [loadingPairs, setLoadingPairs] = useState(false);
   const [showUnpairedDocuments, setShowUnpairedDocuments] = useState(true);
-  const [scalingAlgorithm, setScalingAlgorithm] = useState('quadratic');
-const [maxScalingAdjustment, setMaxScalingAdjustment] = useState(15);
   
   // New state for pair details
   const [currentPairResult, setCurrentPairResult] = useState(null);
   const [loadingPairResult, setLoadingPairResult] = useState(false);
   const [pageDifferences, setPageDifferences] = useState({});
-  
-  // Debug state
-  const [showDebugDisplay, setShowDebugDisplay] = useState(true);
-  const [debugDifferences, setDebugDifferences] = useState([]);
-  
-  // Calibration parameters for coordinate mapping
-  const calibrationParams = {
-    xOffset: 0,
-    yOffset: 30, // Increased from 16 to 30 to move highlights down
-    scaleAdjustment: 1.5,
-    flipY: true
-  };
-
-
-  const handleApplyCorrection = (algorithm, maxAdjustment) => {
-    // Update PDFRenderer's correction parameters
-    setScalingAlgorithm(algorithm);
-    setMaxScalingAdjustment(maxAdjustment);
-  };
 
   // Fetch document pairs when component mounts
   useEffect(() => {
@@ -261,15 +237,6 @@ const [maxScalingAdjustment, setMaxScalingAdjustment] = useState(15);
           // IMPORTANT: Show ALL differences for now to help debug
           // We'll filter later once we confirm differences are showing
           return allDifferences;
-          
-          // Filter differences for the specific page and document side
-          // return allDifferences.filter(diff => {
-          //   if (isBaseDocument) {
-          //     return (diff.basePageNumber || diff.page) === pageNum;
-          //   } else {
-          //     return (diff.comparePageNumber || diff.page) === pageNum;
-          //   }
-          // });
         }
       }
     }
@@ -360,24 +327,18 @@ const [maxScalingAdjustment, setMaxScalingAdjustment] = useState(15);
                 Page {pageNum}
               </div>
               <PDFRenderer
-  fileId={fileId}
-  page={pageNum}
-  zoom={zoom}
-  highlightMode={effectiveHighlightMode}
-  differences={getPageDifferences(pairIndex, pageNum, isBaseDocument)}
-  selectedDifference={state.selectedDifference}
-  onDifferenceSelect={(diff) => setSelectedDifference({...diff, pairIndex, page: pageNum})}
-  onZoomChange={handleZoomChange}
-  isBaseDocument={isBaseDocument}
-  loading={false}
-  xOffsetAdjustment={calibrationParams.xOffset}
-  yOffsetAdjustment={calibrationParams.yOffset}
-  scaleAdjustment={calibrationParams.scaleAdjustment}
-  flipY={calibrationParams.flipY}
-  debugMode={true}
-  scalingAlgorithm={scalingAlgorithm}
-  maxScalingAdjustment={maxScalingAdjustment}
-/>
+                key={`pdf-renderer-${pairIndex}-${pageNum}`}
+                fileId={fileId}
+                page={pageNum}
+                zoom={zoom}
+                highlightMode={effectiveHighlightMode}
+                differences={getPageDifferences(pairIndex, pageNum, isBaseDocument)}
+                selectedDifference={state.selectedDifference}
+                onDifferenceSelect={(diff) => setSelectedDifference({...diff, pairIndex, page: pageNum})}
+                onZoomChange={handleZoomChange}
+                isBaseDocument={isBaseDocument}
+                loading={false}
+              />
             </div>
           ))}
         </div>
@@ -387,22 +348,22 @@ const [maxScalingAdjustment, setMaxScalingAdjustment] = useState(15);
     // Regular rendering for matched documents
     return (
       <div className="document-pages">
-                  {pages.map(pageNum => {
+        {pages.map(pageNum => {
           // Get differences for this page
           const pageDiffs = getPageDifferences(pairIndex, pageNum, isBaseDocument);
-console.log(`[COORDINATE DEBUG] Page ${pageNum} - Raw differences from API:`, 
-  pageDiffs.slice(0, 3).map(diff => ({
-    id: diff.id,
-    type: diff.type,
-    baseX: diff.baseX,
-    baseY: diff.baseY,
-    compareX: diff.compareX,
-    compareY: diff.compareY,
-    position: diff.position,
-    bounds: diff.bounds,
-    text: diff.text?.substring(0, 20) || diff.baseText?.substring(0, 20) || '[No text]'
-  }))
-);
+          console.log(`[COORDINATE DEBUG] Page ${pageNum} - Raw differences from API:`, 
+            pageDiffs.slice(0, 3).map(diff => ({
+              id: diff.id,
+              type: diff.type,
+              baseX: diff.baseX,
+              baseY: diff.baseY,
+              compareX: diff.compareX,
+              compareY: diff.compareY,
+              position: diff.position,
+              bounds: diff.bounds,
+              text: diff.text?.substring(0, 20) || diff.baseText?.substring(0, 20) || '[No text]'
+            }))
+          );
           console.log(`Rendering ${isBaseDocument ? 'base' : 'compare'} page ${pageNum} with ${pageDiffs.length} differences`);
           
           // Debug - log the first difference to see its structure
@@ -416,6 +377,7 @@ console.log(`[COORDINATE DEBUG] Page ${pageNum} - Raw differences from API:`,
                 Page {pageNum}
               </div>
               <PDFRenderer
+                key={`pdf-renderer-${pairIndex}-${pageNum}`}
                 fileId={fileId}
                 page={pageNum}
                 zoom={zoom}
@@ -426,11 +388,6 @@ console.log(`[COORDINATE DEBUG] Page ${pageNum} - Raw differences from API:`,
                 onZoomChange={handleZoomChange}
                 isBaseDocument={isBaseDocument}
                 loading={false}
-                xOffsetAdjustment={calibrationParams.xOffset}
-                yOffsetAdjustment={calibrationParams.yOffset}
-                scaleAdjustment={calibrationParams.scaleAdjustment}
-                flipY={calibrationParams.flipY}
-                debugMode={true} // Enable debug mode to see highlight information
               />
               
               {/* Debug info - render difference count on the page */}
@@ -458,11 +415,6 @@ console.log(`[COORDINATE DEBUG] Page ${pageNum} - Raw differences from API:`,
 
   return (
     <div className="pdf-comparison-container">
-      {/* Debug Display */}
-      {showDebugDisplay && debugDifferences.length > 0 && (
-        <DifferenceDebugDisplay differences={debugDifferences} />
-      )}
-    
       {/* Header */}
       <div className="comparison-header">
         <button 
@@ -751,23 +703,18 @@ console.log(`[COORDINATE DEBUG] Page ${pageNum} - Raw differences from API:`,
                 </div>
               )}
             </div>
-            <PDFCoordinateAnalyzer 
-  comparisonId={comparisonId}
-  differences={debugDifferences} 
-  onApplyCorrection={handleApplyCorrection}
-/>
-<DifferenceList
-  result={{
-    baseDifferences: state.comparisonResult?.differencesByPage 
-      ? Object.values(state.comparisonResult.differencesByPage).flat() 
-      : debugDifferences || [],
-    compareDifferences: []
-  }}
-  selectedDifference={state.selectedDifference}
-  onDifferenceClick={(diff) => {
-    setSelectedDifference(diff);
-  }}
-/>
+            <DifferenceList
+              result={{
+                baseDifferences: state.comparisonResult?.differencesByPage 
+                ? Object.values(state.comparisonResult.differencesByPage).flat() 
+                : [],
+                compareDifferences: []
+              }}
+              selectedDifference={state.selectedDifference}
+              onDifferenceClick={(diff) => {
+                setSelectedDifference(diff);
+              }}
+            />
           </div>
         )}
         

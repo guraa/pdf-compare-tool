@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
 import { useComparison } from '../../context/ComparisonContext';
-import { getComparisonResult, generateReport, downloadBlob } from '../../services/api';
+import { getComparisonResult, generateReport, downloadBlob, getComparisonProgress } from '../../services/api';
 import ComparisonSummary from './ComparisonSummary';
 import SideBySideView from '../comparison/SideBySideView'; // This will now use the simplified version
 import Spinner from '../common/Spinner';
@@ -58,7 +58,8 @@ const ResultViewer = memo(({ comparisonId, onNewComparison }) => {
     setLoading,
     setError,
     setSelectedPage,
-    setSelectedDifference
+    setSelectedDifference,
+    updateProgress
   } = useComparison();
 
   // Update ref when retryCount changes
@@ -180,6 +181,30 @@ const ResultViewer = memo(({ comparisonId, onNewComparison }) => {
     setActiveTab('sideBySide');
   };
 
+  // Add progress tracking function
+  const fetchProgress = async () => {
+    if (comparisonId && !state.progress.status) {
+      try {
+        const progressData = await getComparisonProgress(comparisonId);
+        if (progressData) {
+          updateProgress(progressData);
+        }
+      } catch (err) {
+        console.error('Error fetching progress:', err);
+      }
+    }
+  };
+
+  // Fetch progress on first render and when retrying - moved to top level
+  useEffect(() => {
+    // Only fetch progress when in processing state
+    if (!state.comparisonResult && retryCount < maxRetries) {
+      fetchProgress();
+      const progressInterval = setInterval(fetchProgress, 2000); // Update every 2 seconds
+      return () => clearInterval(progressInterval);
+    }
+  }, [retryCount, comparisonId, state.comparisonResult, maxRetries]);
+
   // Initial loading state
   if (state.loading && !state.comparisonResult && retryCount === 0) {
     return (
@@ -206,10 +231,32 @@ const ResultViewer = memo(({ comparisonId, onNewComparison }) => {
 
   // Processing state - still retrying
   if (!state.comparisonResult && retryCount < maxRetries) {
+    // Show progress information if available
+    const hasProgress = state.progress && state.progress.totalOperations > 0;
+    const progressPercent = hasProgress ? state.progress.progress : 0;
+    const currentPhase = hasProgress ? state.progress.currentPhase : 'Initializing comparison';
+
     return (
       <div className="result-viewer-loading">
         <Spinner size="large" />
         <p>Processing comparison... {retryCount > 0 ? `(Attempt ${retryCount}/${maxRetries})` : ''}</p>
+        
+        {hasProgress && (
+          <div className="progress-container">
+            <div className="progress-bar">
+              <div 
+                className="progress-fill" 
+                style={{ width: `${progressPercent}%` }}
+              ></div>
+            </div>
+            <div className="progress-info">
+              <span>{progressPercent}% complete</span>
+              <span>{state.progress.completedOperations} of {state.progress.totalOperations} operations</span>
+            </div>
+            <p className="progress-phase">{currentPhase}</p>
+          </div>
+        )}
+        
         {state.error && <p className="retry-message">{state.error}</p>}
       </div>
     );
@@ -239,7 +286,7 @@ const ResultViewer = memo(({ comparisonId, onNewComparison }) => {
             <span className="document-name">{state.compareFile?.fileName}</span>
           </div>
         </div>
-        
+         
         <div className="result-actions">
           <div className="export-controls">
             <select 

@@ -37,27 +37,8 @@ public class PdfRenderingConfig {
         return executor;
     }
 
-    /**
-     * Configure a dedicated thread pool for PDF page processing tasks.
-     * This allows page-level operations to be parallelized.
-     *
-     * @return The executor for PDF page processing tasks
-     */
-    @Bean(name = "pdfPageProcessingExecutor")
-    public Executor pdfPageProcessingExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-
-        // Calculate optimal thread count based on available processors
-        int processors = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
-        int coreSize = Math.min(processors, 4); // Cap at 4 to avoid excessive memory usage
-
-        executor.setCorePoolSize(coreSize);
-        executor.setMaxPoolSize(coreSize);
-        executor.setQueueCapacity(50);
-        executor.setThreadNamePrefix("pdf-page-");
-
-        return executor;
-    }
+    // This bean has been moved to ConcurrencyConfig to centralize thread pool management
+    // and avoid bean definition conflicts
 
     /**
      * Configure a general-purpose task executor for asynchronous operations.

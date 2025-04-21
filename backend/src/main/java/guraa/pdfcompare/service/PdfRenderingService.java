@@ -57,6 +57,12 @@ public class PdfRenderingService {
 
     @Value("${app.rendering.thumbnail-height:280}")
     private int thumbnailHeight;
+    
+    @Value("${app.rendering.fast-mode:false}")
+    private boolean fastMode;
+    
+    @Value("${app.rendering.fast-mode-dpi:150}")
+    private float fastModeDpi;
 
     // Concurrent processing parameters
     private static final int BATCH_SIZE = 4;
@@ -258,7 +264,12 @@ public class PdfRenderingService {
         }
 
         try {
-            return renderer.renderImageWithDPI(pageIndex, renderingDpi, imageType);
+            // Use fast mode DPI if enabled
+            float dpi = fastMode ? fastModeDpi : renderingDpi;
+            if (fastMode) {
+                log.info("Using fast mode rendering with DPI: {}", dpi);
+            }
+            return renderer.renderImageWithDPI(pageIndex, dpi, imageType);
         } catch (Exception e) {
             log.warn("Standard rendering failed using ImageType {}, attempting fallback: {}", imageType, e.getMessage());
             return createFallbackImage(document, pageIndex);
@@ -270,8 +281,11 @@ public class PdfRenderingService {
         float width = page.getMediaBox().getWidth();
         float height = page.getMediaBox().getHeight();
 
-        int pixelWidth = Math.round(width * renderingDpi / 72);
-        int pixelHeight = Math.round(height * renderingDpi / 72);
+        // Use fast mode DPI if enabled
+        float dpi = fastMode ? fastModeDpi : renderingDpi;
+        
+        int pixelWidth = Math.round(width * dpi / 72);
+        int pixelHeight = Math.round(height * dpi / 72);
 
         BufferedImage image = new BufferedImage(pixelWidth, pixelHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = image.createGraphics();

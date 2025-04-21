@@ -53,8 +53,8 @@ public class ConcurrencyConfig {
     @Getter @Setter
     private int shutdownTimeoutSeconds = 30;
 
-    @Value("${app.concurrency.memory-per-thread:256}")
-    private int memoryPerThreadMB = 256; // Estimated memory usage per thread in MB
+    @Value("${app.concurrency.memory-per-thread:96}")
+    private int memoryPerThreadMB = 96; // Reduced memory estimate per thread in MB
 
     /**
      * Calculate optimal core pool size based on system resources.
@@ -91,8 +91,9 @@ public class ConcurrencyConfig {
      * @return The optimal number of comparison threads
      */
     private int calculateOptimalComparisonThreads() {
-        // PDF comparison is CPU and memory intensive
-        return Math.max(2, availableProcessors / 2);
+        // PDF comparison is CPU and memory intensive, but we can use more processors
+        // Increase the number of threads to handle more concurrent operations
+        return Math.max(6, (int)(availableProcessors * 0.9));
     }
 
     /**
@@ -102,7 +103,8 @@ public class ConcurrencyConfig {
      */
     private int calculateOptimalPageProcessingThreads() {
         // Page processing can be parallelized more
-        return Math.max(4, availableProcessors);
+        // Increase the number of threads to handle more concurrent operations
+        return Math.max(6, (int)(availableProcessors * 1.25));
     }
 
     /**
@@ -111,8 +113,9 @@ public class ConcurrencyConfig {
      * @return The optimal number of rendering threads
      */
     private int calculateOptimalRenderingThreads() {
-        // Rendering is very memory-intensive
-        return Math.max(2, availableProcessors / 2);
+        // Rendering is memory-intensive but we can optimize it
+        // Increase the number of threads to handle more concurrent operations
+        return Math.max(4, (int)(availableProcessors * 0.75));
     }
 
     /**

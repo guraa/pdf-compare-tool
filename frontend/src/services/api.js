@@ -443,6 +443,25 @@ export const checkComparisonStatus = async (comparisonId) => {
   }
 };
 
+// Get the progress of a comparison
+export const getComparisonProgress = async (comparisonId) => {
+  try {
+    const response = await api.get(`/pdfs/comparison/${comparisonId}/progress`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching comparison progress for ${comparisonId}:`, error);
+    // Return a default progress object
+    return {
+      comparisonId,
+      status: 'UNKNOWN',
+      progress: 0,
+      completedOperations: 0,
+      totalOperations: 0,
+      currentPhase: 'Unknown'
+    };
+  }
+};
+
 // Export circuit breakers for status monitoring
 export const getCircuitBreakerStatus = (key = 'default') => {
   return circuitBreakers[key]?.getStatus() || null;

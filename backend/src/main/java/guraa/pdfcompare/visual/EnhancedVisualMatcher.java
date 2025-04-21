@@ -4,8 +4,10 @@ import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.service.PagePair;
 import guraa.pdfcompare.service.PdfRenderingService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
@@ -30,9 +32,27 @@ public class EnhancedVisualMatcher implements VisualMatcher {
     private final SSIMCalculator ssimCalculator;
     private final PdfRenderingService pdfRenderingService;
     private final ExecutorService executorService;
+    
+    @Autowired
+    private ApplicationContext applicationContext;
 
     // Cache of rendered pages to avoid repeated file I/O
     private final ConcurrentHashMap<String, BufferedImage> imageCache = new ConcurrentHashMap<>();
+    
+    /**
+     * Get the ComparisonService bean from the application context.
+     * This is a workaround to avoid circular dependencies.
+     *
+     * @return The ComparisonService bean, or null if not found
+     */
+    private Object getComparisonService() {
+        try {
+            return applicationContext.getBean("comparisonService");
+        } catch (Exception e) {
+            log.warn("Failed to get ComparisonService bean: {}", e.getMessage());
+            return null;
+        }
+    }
 
     // Set a maximum size for the cache to avoid memory issues
     private static final int MAX_CACHE_SIZE = 50;
@@ -73,6 +93,19 @@ public class EnhancedVisualMatcher implements VisualMatcher {
 
     @Override
     public List<PagePair> matchPages(PdfDocument baseDocument, PdfDocument compareDocument) throws IOException {
+        return matchPages(baseDocument, compareDocument, null);
+    }
+    
+    /**
+     * Match pages between two documents with progress tracking.
+     *
+     * @param baseDocument The base document
+     * @param compareDocument The document to compare against the base
+     * @param comparisonId The comparison ID for progress tracking (optional)
+     * @return A list of page pairs
+     * @throws IOException If there is an error matching the pages
+     */
+    public List<PagePair> matchPages(PdfDocument baseDocument, PdfDocument compareDocument, String comparisonId) throws IOException {
         log.info("Starting visual matching between documents: {} and {}",
                 baseDocument.getFileId(), compareDocument.getFileId());
 
@@ -83,7 +116,7 @@ public class EnhancedVisualMatcher implements VisualMatcher {
             CompletableFuture<Void> preRenderingFuture = preRenderPages(baseDocument, compareDocument);
 
             // Calculate similarity scores for all page pairs - start this while pages are still rendering
-            Map<String, Double> similarityScores = calculateSimilarityScores(baseDocument, compareDocument);
+            Map<String, Double> similarityScores = calculateSimilarityScores(baseDocument, compareDocument, comparisonId);
 
             // Wait for pre-rendering to complete if it hasn't already
             try {
@@ -143,90 +176,211 @@ public class EnhancedVisualMatcher implements VisualMatcher {
     }
 
     /**
-     * Calculate similarity scores for all page pairs with improved error handling.
+     * Calculate similarity scores for all page pairs with improved error handling and performance.
      *
      * @param baseDocument The base document
      * @param compareDocument The compare document
+     * @param comparisonId The comparison ID for progress tracking (optional)
      * @return A map of page pair keys to similarity scores
      */
-    private Map<String, Double> calculateSimilarityScores(PdfDocument baseDocument, PdfDocument compareDocument) {
+    private Map<String, Double> calculateSimilarityScores(PdfDocument baseDocument, PdfDocument compareDocument, String comparisonId) {
         Map<String, Double> similarityScores = new ConcurrentHashMap<>();
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-
-        // Use a semaphore to limit concurrent comparisons
-        Semaphore semaphore = new Semaphore(maxConcurrentComparisons);
-
+        
         // Track progress for logging
         AtomicInteger completedComparisons = new AtomicInteger(0);
         int totalComparisons = baseDocument.getPageCount() * compareDocument.getPageCount();
-
+        
+        // Create a list of all page pairs to process
+        List<PagePairTask> pagePairTasks = new ArrayList<>();
+        
         // For each page in the base document
         for (int basePageNumber = 1; basePageNumber <= baseDocument.getPageCount(); basePageNumber++) {
-            final int basePageNum = basePageNumber;
-
             // For each page in the compare document
             for (int comparePageNumber = 1; comparePageNumber <= compareDocument.getPageCount(); comparePageNumber++) {
-                final int comparePageNum = comparePageNumber;
-
                 // Create a key for this page pair
-                String key = baseDocument.getFileId() + "_" + basePageNum + "_" +
-                        compareDocument.getFileId() + "_" + comparePageNum;
-
+                String key = baseDocument.getFileId() + "_" + basePageNumber + "_" +
+                        compareDocument.getFileId() + "_" + comparePageNumber;
+                
                 // Check if we already have a similarity score for this page pair
                 if (similarityCache.containsKey(key)) {
                     similarityScores.put(key, similarityCache.get(key));
                     completedComparisons.incrementAndGet();
                     continue;
                 }
-
-                // Submit a task to calculate the similarity score
-                CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
-                    try {
-                        // Acquire permit from semaphore to limit concurrent operations
-                        semaphore.acquire();
-
-                        try {
-                            double similarity = calculateSimilarityWithRetry(baseDocument, compareDocument, basePageNum, comparePageNum);
-
-                            // Cache the score
-                            similarityCache.put(key, similarity);
-                            similarityScores.put(key, similarity);
-
-                            // Log progress periodically
-                            int completed = completedComparisons.incrementAndGet();
-                            if (completed % 10 == 0 || completed == totalComparisons) {
-                                log.info("Comparison progress: {}/{} ({} %)",
-                                        completed, totalComparisons, (completed * 100) / totalComparisons);
-                            }
-                        } finally {
-                            // Always release the permit
-                            semaphore.release();
-                        }
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        log.error("Thread interrupted while waiting for semaphore", e);
-                    } catch (Exception e) {
-                        log.error("Error calculating similarity for pages {} and {}: {}",
-                                basePageNum, comparePageNum, e.getMessage());
-                        // Use a low similarity score as fallback
-                        similarityScores.put(key, 0.0);
-                        completedComparisons.incrementAndGet();
-                    }
-                }, executorService);
-
-                futures.add(future);
+                
+                // Add this page pair to the list of tasks
+                pagePairTasks.add(new PagePairTask(baseDocument, compareDocument, basePageNumber, comparePageNumber, key));
             }
         }
-
-        // Wait for all tasks to complete with timeout handling
+        
+        // Sort tasks by page number to prioritize pages that are likely to match
+        // This helps find matches faster and allows early termination
+        pagePairTasks.sort((a, b) -> {
+            int pageGapA = Math.abs(a.basePageNumber - a.comparePageNumber);
+            int pageGapB = Math.abs(b.basePageNumber - b.comparePageNumber);
+            return Integer.compare(pageGapA, pageGapB);
+        });
+        
+        // Use smaller batch size to avoid memory issues
+        int batchSize = Math.min(50, pagePairTasks.size());
+        int numBatches = (pagePairTasks.size() + batchSize - 1) / batchSize;
+        
+        log.info("Processing {} page pairs in {} batches of size {}", 
+                pagePairTasks.size(), numBatches, batchSize);
+        
+        // Create a CompletableFuture for each batch
+        List<CompletableFuture<Void>> batchFutures = new ArrayList<>();
+        
+        for (int batchIndex = 0; batchIndex < numBatches; batchIndex++) {
+            int startIdx = batchIndex * batchSize;
+            int endIdx = Math.min(startIdx + batchSize, pagePairTasks.size());
+            List<PagePairTask> batchTasks = pagePairTasks.subList(startIdx, endIdx);
+            
+            final int currentBatch = batchIndex + 1;
+            
+            // Process this batch asynchronously
+            CompletableFuture<Void> batchFuture = CompletableFuture.runAsync(() -> {
+                log.info("Processing batch {}/{} with {} tasks", 
+                        currentBatch, numBatches, batchTasks.size());
+                
+                // Process this batch
+                processBatch(batchTasks, similarityScores, completedComparisons, totalComparisons, comparisonId);
+                
+                // Force garbage collection after each batch to free memory
+                if (currentBatch % 2 == 0) {
+                    System.gc();
+                }
+            }, executorService);
+            
+            batchFutures.add(batchFuture);
+        }
+        
+        // Wait for all batches to complete with timeout handling
         try {
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get(2, TimeUnit.MINUTES);
+            CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0]))
+                    .get(3, TimeUnit.MINUTES);
+            log.info("All similarity calculation batches completed successfully");
         } catch (Exception e) {
             log.error("Error or timeout waiting for similarity calculations to complete", e);
             // Continue with partial results rather than failing completely
         }
-
+        
         return similarityScores;
+    }
+    
+    /**
+     * Process a batch of page pair tasks.
+     *
+     * @param batchTasks The tasks to process
+     * @param similarityScores The map to store similarity scores
+     * @param completedComparisons Counter for completed comparisons
+     * @param totalComparisons Total number of comparisons
+     * @param comparisonId The comparison ID for progress tracking (optional)
+     */
+    private void processBatch(
+            List<PagePairTask> batchTasks, 
+            Map<String, Double> similarityScores,
+            AtomicInteger completedComparisons,
+            int totalComparisons,
+            String comparisonId) {
+        
+        // Use a semaphore to limit concurrent comparisons
+        Semaphore semaphore = new Semaphore(maxConcurrentComparisons);
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        
+        for (PagePairTask task : batchTasks) {
+            // Submit a task to calculate the similarity score
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                try {
+                    // Acquire permit from semaphore to limit concurrent operations
+                    semaphore.acquire();
+                    
+                    try {
+                        // Calculate similarity with retry
+                        double similarity = calculateSimilarityWithRetry(
+                                task.baseDocument, task.compareDocument, 
+                                task.basePageNumber, task.comparePageNumber);
+                        
+                        // Cache the score
+                        similarityCache.put(task.key, similarity);
+                        similarityScores.put(task.key, similarity);
+                        
+                        // Log progress periodically
+                        int completed = completedComparisons.incrementAndGet();
+                        int progressPercent = (completed * 100) / totalComparisons;
+                        
+                        if (completed % 10 == 0 || completed == totalComparisons) {
+                            log.info("Comparison progress: {}/{} ({}%)",
+                                    completed, totalComparisons, progressPercent);
+                            
+                            // Update progress in the database if we have a comparison ID
+                            if (comparisonId != null) {
+                                try {
+                                    // Use reflection to get the ComparisonService
+                                    // This is a workaround to avoid circular dependencies
+                                    Object comparisonService = getComparisonService();
+                                    if (comparisonService != null) {
+                                        java.lang.reflect.Method updateMethod = comparisonService.getClass()
+                                                .getMethod("updateComparisonProgress", 
+                                                        String.class, int.class, int.class, String.class);
+                                        
+                                        updateMethod.invoke(comparisonService, 
+                                                comparisonId, completed, totalComparisons, 
+                                                "Calculating visual similarity scores");
+                                    }
+                                } catch (Exception e) {
+                                    log.warn("Failed to update comparison progress: {}", e.getMessage());
+                                    // Don't rethrow - this is non-critical functionality
+                                }
+                            }
+                        }
+                    } finally {
+                        // Always release the permit
+                        semaphore.release();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.error("Thread interrupted while waiting for semaphore", e);
+                } catch (Exception e) {
+                    log.error("Error calculating similarity for pages {} and {}: {}",
+                            task.basePageNumber, task.comparePageNumber, e.getMessage());
+                    // Use a low similarity score as fallback
+                    similarityScores.put(task.key, 0.0);
+                    completedComparisons.incrementAndGet();
+                }
+            }, executorService);
+            
+            futures.add(future);
+        }
+        
+        // Wait for all tasks in this batch to complete with timeout handling
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .get(2, TimeUnit.MINUTES);
+        } catch (Exception e) {
+            log.error("Error or timeout waiting for similarity calculations to complete in batch", e);
+            // Continue with partial results rather than failing completely
+        }
+    }
+    
+    /**
+     * Class to represent a page pair comparison task.
+     */
+    private static class PagePairTask {
+        final PdfDocument baseDocument;
+        final PdfDocument compareDocument;
+        final int basePageNumber;
+        final int comparePageNumber;
+        final String key;
+        
+        PagePairTask(PdfDocument baseDocument, PdfDocument compareDocument, 
+                     int basePageNumber, int comparePageNumber, String key) {
+            this.baseDocument = baseDocument;
+            this.compareDocument = compareDocument;
+            this.basePageNumber = basePageNumber;
+            this.comparePageNumber = comparePageNumber;
+            this.key = key;
+        }
     }
 
     /**

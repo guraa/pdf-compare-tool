@@ -60,9 +60,12 @@ public class SmartDocumentMatcher implements DocumentMatchingStrategy {
 
         // Check if parallel processing is enabled
         boolean parallelProcessing = options != null && Boolean.TRUE.equals(options.get("parallelProcessing"));
+        
+        // Get the comparison ID if provided
+        String comparisonId = options != null ? (String) options.get("comparisonId") : null;
 
         // Match pages using visual matching
-        List<PagePair> visualMatches = matchPagesVisually(baseDocument, compareDocument, parallelProcessing);
+        List<PagePair> visualMatches = matchPagesVisually(baseDocument, compareDocument, parallelProcessing, comparisonId);
 
         // Calculate confidence level
         calculateConfidenceLevel(visualMatches);
@@ -89,12 +92,14 @@ public class SmartDocumentMatcher implements DocumentMatchingStrategy {
      * @param baseDocument The base document
      * @param compareDocument The document to compare against the base
      * @param parallelProcessing Whether to use parallel processing
+     * @param comparisonId The comparison ID for progress tracking (optional)
      * @return A list of page pairs
      * @throws IOException If there is an error matching the pages
      */
-    private List<PagePair> matchPagesVisually(PdfDocument baseDocument, PdfDocument compareDocument, boolean parallelProcessing) throws IOException {
-        // Use the visual matcher to match pages
-        return visualMatcher.matchPages(baseDocument, compareDocument);
+    private List<PagePair> matchPagesVisually(PdfDocument baseDocument, PdfDocument compareDocument, 
+                                             boolean parallelProcessing, String comparisonId) throws IOException {
+        // Use the visual matcher to match pages with progress tracking
+        return visualMatcher.matchPages(baseDocument, compareDocument, comparisonId);
     }
 
     /**
