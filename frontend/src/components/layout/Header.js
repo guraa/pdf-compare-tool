@@ -22,7 +22,7 @@ const Header = () => {
           <svg className="logo-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path d="M7 3C5.9 3 5 3.9 5 5v14c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2H7zm0 2h10v14H7V5zm2 2v2h6V7H9zm0 4v2h6v-2H9zm0 4v2h6v-2H9z" />
           </svg>
-          <span className="logo-text">PDF Compare</span>
+          <span className="logo-text">Doctechtive</span>
         </div>
         
         <div className="header-actions">
