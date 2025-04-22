@@ -38,13 +38,13 @@ public class PDFComparisonEngine {
     private ComparisonService comparisonService;
 
     // Maximum number of concurrent page comparisons
-    private static final int MAX_CONCURRENT_PAGE_COMPARISONS = 8;
+    private static final int MAX_CONCURRENT_PAGE_COMPARISONS = 16;
 
     // Cache for comparison results to avoid redundant comparisons
     private final Map<String, ComparisonResult> comparisonCache = new ConcurrentHashMap<>();
 
     // Maximum cache size
-    private static final int MAX_CACHE_SIZE = 10;
+    private static final int MAX_CACHE_SIZE = 5;
 
     /**
      * Constructor with qualifier to specify which executor service to use.
@@ -87,7 +87,7 @@ public class PDFComparisonEngine {
     @Value("${app.comparison.cache-enabled:true}")
     private boolean cacheEnabled;
 
-    @Value("${app.comparison.batch-size:4}")
+    @Value("${app.comparison.batch-size:12}")
     private int batchSize;
 
     /**

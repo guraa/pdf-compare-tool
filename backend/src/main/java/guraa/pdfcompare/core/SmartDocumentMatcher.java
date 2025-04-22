@@ -37,8 +37,8 @@ public class SmartDocumentMatcher implements DocumentMatchingStrategy {
     @Value("${app.matching.max-page-gap:5}")
     private int maxPageGap = 5;
 
-    @Value("${app.matching.match-timeout-seconds:180}")
-    private int matchTimeoutSeconds = 180;
+    @Value("${app.matching.match-timeout-seconds:300}")
+    private int matchTimeoutSeconds = 300;
 
     private double confidenceLevel;
 

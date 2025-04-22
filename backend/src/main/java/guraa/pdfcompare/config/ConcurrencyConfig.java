@@ -93,7 +93,7 @@ public class ConcurrencyConfig {
     private int calculateOptimalComparisonThreads() {
         // PDF comparison is CPU and memory intensive, but we can use more processors
         // Increase the number of threads to handle more concurrent operations
-        return Math.max(6, (int)(availableProcessors * 0.9));
+        return Math.max(8, (int)(availableProcessors * 1.2));
     }
 
     /**
@@ -104,7 +104,7 @@ public class ConcurrencyConfig {
     private int calculateOptimalPageProcessingThreads() {
         // Page processing can be parallelized more
         // Increase the number of threads to handle more concurrent operations
-        return Math.max(6, (int)(availableProcessors * 1.25));
+        return Math.max(8, (int)(availableProcessors * 1.5));
     }
 
     /**
@@ -115,7 +115,7 @@ public class ConcurrencyConfig {
     private int calculateOptimalRenderingThreads() {
         // Rendering is memory-intensive but we can optimize it
         // Increase the number of threads to handle more concurrent operations
-        return Math.max(4, (int)(availableProcessors * 0.75));
+        return Math.max(6, (int)(availableProcessors * 1.0));
     }
 
     /**

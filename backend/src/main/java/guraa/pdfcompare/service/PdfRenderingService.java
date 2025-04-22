@@ -53,7 +53,7 @@ public class PdfRenderingService {
     private final ConcurrentHashMap<String, CompletableFuture<File>> renderingTasks = new ConcurrentHashMap<>();
 
     // Configuration parameters
-    @Value("${app.rendering.dpi:300}")
+    @Value("${app.rendering.dpi:150}")
     private float renderingDpi;
 
     @Value("${app.rendering.thumbnail-dpi:72}")
@@ -74,24 +74,24 @@ public class PdfRenderingService {
     @Value("${app.rendering.fast-mode:true}")
     private boolean fastMode;
 
-    @Value("${app.rendering.fast-mode-dpi:150}")
+    @Value("${app.rendering.fast-mode-dpi:50}")
     private float fastModeDpi;
 
-    @Value("${app.rendering.compression-quality:0.9}")
-    private float compressionQuality = 0.9f;
+    @Value("${app.rendering.compression-quality:0.6}")
+    private float compressionQuality = 0.6f;
 
-    @Value("${app.rendering.max-retries:3}")
-    private int maxRetries = 3;
+    @Value("${app.rendering.max-retries:4}")
+    private int maxRetries = 4;
 
-    @Value("${app.rendering.retry-delay-ms:100}")
-    private int retryDelayMs = 100;
+    @Value("${app.rendering.retry-delay-ms:50}")
+    private int retryDelayMs = 50;
 
-    @Value("${app.rendering.timeout-seconds:15}")
-    private int timeoutSeconds = 15;
+    @Value("${app.rendering.timeout-seconds:30}")
+    private int timeoutSeconds = 30;
 
-    // Concurrent processing parameters
-    private static final int MAX_CACHED_DOCUMENTS = 5;
-    private static final int MAX_RENDERING_THREADS = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
+    // Concurrent processing parameters - reduce concurrency to prevent resource contention
+    private static final int MAX_CACHED_DOCUMENTS = 3;
+    private static final int MAX_RENDERING_THREADS = Math.max(2, Runtime.getRuntime().availableProcessors() / 4);
 
     // Counter for active rendering tasks
     private final AtomicInteger activeRenderingTasks = new AtomicInteger(0);
