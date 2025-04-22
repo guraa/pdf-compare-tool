@@ -772,101 +772,117 @@ public class EnhancedVisualMatcher implements VisualMatcher {
     /**
      * Calculate similarity with retry mechanism and turbo mode optimizations.
      * Enhanced with better fallback handling for rendering failures.
+     * Retries if image loading or similarity calculation fails.
      */
     private double calculateSimilarityWithRetry(
             PdfDocument baseDocument, PdfDocument compareDocument,
             int basePageNum, int comparePageNum) {
 
-        IOException lastException = null;
+        Exception lastException = null; // Store the last exception encountered
 
         for (int attempt = 0; attempt < retryCount; attempt++) {
             BufferedImage baseImage = null;
             BufferedImage compareImage = null;
-            
-            try {
-                // In turbo mode, use a very short timeout
-                int timeout = turboMode ? 5 : 10;
+            boolean success = false;
 
-                // Get the rendered page images with a short timeout
+            try {
+                // In turbo mode, use a very short timeout for image loading
+                int timeout = turboMode ? 5 : 10;
+                log.trace("Attempt {}/{}: Loading images for pages {}/{} with timeout {}s",
+                        attempt + 1, retryCount, basePageNum, comparePageNum, timeout);
+
+                // --- Attempt to load both images ---
                 try {
                     baseImage = getPageImage(baseDocument, basePageNum, timeout);
                 } catch (Exception e) {
-                    log.warn("Failed to load base image for page {}: {}", basePageNum, e.getMessage());
-                    // Continue with fallback handling below
-                }
-                
-                try {
-                    compareImage = getPageImage(compareDocument, comparePageNum, timeout);
-                } catch (Exception e) {
-                    log.warn("Failed to load compare image for page {}: {}", comparePageNum, e.getMessage());
-                    // Continue with fallback handling below
+                    log.warn("Attempt {}/{}: Failed to load base image for page {}: {}",
+                             attempt + 1, retryCount, basePageNum, e.getMessage());
+                    lastException = e; // Store exception
+                    // Do not proceed to compareImage loading if base failed, continue to retry logic
+                    // Fall through to the outer catch/retry logic
                 }
 
-                // If either image failed to load, use a fallback approach
-                if (baseImage == null || compareImage == null) {
-                    // For exact page number matches, assume moderate similarity
-                    if (basePageNum == comparePageNum) {
-                        log.info("Using fallback similarity for exact page number match {}/{}", 
-                                basePageNum, comparePageNum);
-                        return 0.7; // Moderate similarity for same page numbers
-                    } else {
-                        // For non-exact matches, use a lower similarity
-                        double fallbackSimilarity = 0.5 - (Math.abs(basePageNum - comparePageNum) * 0.05);
-                        fallbackSimilarity = Math.max(0.2, fallbackSimilarity); // Don't go below 0.2
-                        
-                        log.info("Using fallback similarity for pages {}/{}: {}", 
-                                basePageNum, comparePageNum, fallbackSimilarity);
-                        return fallbackSimilarity;
-                    }
-                }
-
-                // Both images loaded successfully, calculate similarity
-                // In turbo mode, use a faster but less accurate comparison
-                if (fastSimilarityMetrics || turboMode) {
-                    return calculateFastSimilarity(baseImage, compareImage);
-                } else {
-                    // Use the more accurate SSIM calculator
-                    return ssimCalculator.calculate(baseImage, compareImage);
-                }
-            } catch (Exception e) {
-                lastException = e instanceof IOException ? (IOException)e : new IOException(e);
-                log.debug("Attempt {} failed for pages {} and {}: {}",
-                        attempt + 1, basePageNum, comparePageNum, e.getMessage());
-
-                if (attempt < retryCount - 1) {
-                    // Sleep before retrying with exponential backoff
-                    try {
-                        Thread.sleep(retryDelayMs * (1 << attempt)); // Exponential backoff
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break; // Stop retrying if interrupted
-                    }
-                }
-            } finally {
-                // Explicit resource cleanup to help GC
+                // Only attempt to load compare image if base image loaded successfully
                 if (baseImage != null) {
-                    cleanupImage(baseImage);
+                    try {
+                        compareImage = getPageImage(compareDocument, comparePageNum, timeout);
+                    } catch (Exception e) {
+                        log.warn("Attempt {}/{}: Failed to load compare image for page {}: {}",
+                                 attempt + 1, retryCount, comparePageNum, e.getMessage());
+                        lastException = e; // Store exception
+                        // Fall through to the outer catch/retry logic
+                    }
                 }
-                if (compareImage != null) {
-                    cleanupImage(compareImage);
-                }
-            }
-        }
 
-        // All retries failed - use a very basic fallback
-        log.warn("All similarity calculation attempts failed for pages {}/{}. Using fallback similarity.",
-                basePageNum, comparePageNum);
-                
-        // For exact page number matches, assume moderate similarity
+                // --- Calculate Similarity if Both Images Loaded ---
+                if (baseImage != null && compareImage != null) {
+                    log.trace("Attempt {}/{}: Both images loaded for pages {}/{}. Calculating similarity.",
+                            attempt + 1, retryCount, basePageNum, comparePageNum);
+                    double similarity;
+                    // In turbo mode, use a faster but less accurate comparison
+                    if (fastSimilarityMetrics || turboMode) {
+                        similarity = calculateFastSimilarity(baseImage, compareImage);
+                    } else {
+                        // Use the more accurate SSIM calculator
+                        similarity = ssimCalculator.calculate(baseImage, compareImage);
+                    }
+                    log.trace("Attempt {}/{}: Similarity for pages {}/{} = {}",
+                            attempt + 1, retryCount, basePageNum, comparePageNum, similarity);
+                    success = true; // Mark attempt as successful
+                    return similarity; // Return successful calculation
+                }
+                // If we reach here within the try block, at least one image failed to load.
+                // The warning is logged above. Let the loop proceed to retry logic.
+
+            } catch (Exception e) {
+                // Catch exceptions from similarity calculation (e.g., ssimCalculator.calculate)
+                lastException = e;
+                log.warn("Attempt {}/{} failed during similarity calculation for pages {}/{}: {}",
+                        attempt + 1, retryCount, basePageNum, comparePageNum, e.getMessage());
+                // Fall through to retry logic
+            } finally {
+                // Explicit resource cleanup for this attempt
+                cleanupImage(baseImage); // Safe even if null
+                cleanupImage(compareImage); // Safe even if null
+            }
+
+            // --- Retry Logic ---
+            if (!success && attempt < retryCount - 1) {
+                // If the attempt failed and more retries are left
+                try {
+                    long delay = retryDelayMs * (1L << attempt); // Exponential backoff
+                    log.debug("Attempt {}/{} failed for pages {}/{}. Waiting {}ms before retry.",
+                             attempt + 1, retryCount, basePageNum, comparePageNum, delay);
+                    Thread.sleep(delay);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Thread interrupted during retry delay for pages {}/{}. Stopping retries.",
+                             basePageNum, comparePageNum);
+                    lastException = ie; // Store interruption exception
+                    break; // Stop retrying if interrupted
+                }
+            } else if (success) {
+                 // Should not happen due to return statement, but included for completeness
+                 break;
+            }
+
+        } // End of retry loop
+
+        // --- Final Fallback ---
+        // If loop finishes without returning, all retries failed or were interrupted.
+        log.warn("All similarity calculation attempts failed for pages {}/{}. Using fallback similarity. Last exception: {}",
+                basePageNum, comparePageNum, lastException != null ? lastException.getMessage() : "N/A");
+
+        // Use fallback score based on page distance
         if (basePageNum == comparePageNum) {
-            return 0.65; // Slightly lower than normal fallback for exact matches
+            return 0.65; // Moderate fallback for exact page matches after all retries failed
         } else {
-            // For non-exact matches, use a lower similarity based on page distance
+            // Lower fallback for non-exact matches based on page distance
             double fallbackSimilarity = 0.4 - (Math.abs(basePageNum - comparePageNum) * 0.05);
-            return Math.max(0.1, fallbackSimilarity); // Don't go below 0.1
+            return Math.max(0.1, fallbackSimilarity); // Ensure minimum fallback score
         }
     }
-    
+
     /**
      * Get a rendered page image with timeout.
      */
@@ -886,10 +902,13 @@ public class EnhancedVisualMatcher implements VisualMatcher {
         // Render the page with timeout
         Future<BufferedImage> renderFuture = executorService.submit(() -> {
             try {
-                File renderedPage = pdfRenderingService.renderPage(document, pageNumber);
+                // Wait for the rendering future to complete and get the file
+                File renderedPage = pdfRenderingService.renderPage(document, pageNumber).join();
                 return ImageIO.read(renderedPage);
             } catch (Exception e) {
-                throw new IOException("Error rendering page " + pageNumber + ": " + e.getMessage(), e);
+                // Handle potential CompletionException from join()
+                Throwable cause = (e instanceof CompletionException) ? e.getCause() : e;
+                throw new IOException("Error rendering or reading page " + pageNumber + ": " + cause.getMessage(), cause);
             }
         });
 

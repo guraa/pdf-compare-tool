@@ -45,15 +45,8 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
-        <!-- iText 7 Core -->
-        <dependency>
-            <groupId>com.itextpdf</groupId>
-            <artifactId>itext7-core</artifactId>
-            <version>7.2.5</version>
-            <type>pom</type>
-        </dependency>
 
-        <!-- For community edition, use these individual artifacts -->
+        <!-- iText 7 Dependencies -->
         <dependency>
             <groupId>com.itextpdf</groupId>
             <artifactId>kernel</artifactId>
@@ -113,8 +106,9 @@
             <groupId>com.itextpdf</groupId>
             <artifactId>itext7-core</artifactId>
             <version>${itext.version}</version>
-            <type>pom</type>
+            <type>pom</type> <!-- Using the BOM (Bill of Materials) is often cleaner -->
         </dependency>
+        <!-- Removed pdfrender dependency as it was not found -->
 
         <!-- OCR Support for extracting text from images -->
         <dependency>

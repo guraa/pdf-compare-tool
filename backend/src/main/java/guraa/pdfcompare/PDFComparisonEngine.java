@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -32,6 +33,9 @@ public class PDFComparisonEngine {
     private final FontComparisonService fontComparisonService;
     private final ExecutorService executorService;
     private final PerformanceMonitoringService monitoringService;
+
+    // Mark ComparisonService with @Lazy
+    @Lazy
     private ComparisonService comparisonService;
 
     // Reduced maximum concurrent page comparisons to prevent resource exhaustion
@@ -74,7 +78,7 @@ public class PDFComparisonEngine {
      * Setter for ComparisonService to break circular dependency.
      */
     @Autowired
-    public void setComparisonService(ComparisonService comparisonService) {
+    public void setComparisonService(@Lazy ComparisonService comparisonService) {
         this.comparisonService = comparisonService;
     }
 

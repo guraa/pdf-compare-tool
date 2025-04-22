@@ -3,9 +3,11 @@ package guraa.pdfcompare;
 import guraa.pdfcompare.model.ComparisonResult;
 import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.perf.EnhancedPerformanceMonitor;
+import guraa.pdfcompare.service.ComparisonService;
 import guraa.pdfcompare.service.PagePair;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -23,12 +25,24 @@ public class InstrumentedPDFComparisonEngine {
     private final PDFComparisonEngine actualEngine;
     private final EnhancedPerformanceMonitor performanceMonitor;
 
+    // ComparisonService is now lazily injected
+    @Lazy
+    private ComparisonService comparisonService;
+
     @Autowired
     public InstrumentedPDFComparisonEngine(
             PDFComparisonEngine actualEngine,
             EnhancedPerformanceMonitor performanceMonitor) {
         this.actualEngine = actualEngine;
         this.performanceMonitor = performanceMonitor;
+    }
+
+    /**
+     * Setter for ComparisonService to break circular dependency.
+     */
+    @Autowired
+    public void setComparisonService(@Lazy ComparisonService comparisonService) {
+        this.comparisonService = comparisonService;
     }
 
     /**
