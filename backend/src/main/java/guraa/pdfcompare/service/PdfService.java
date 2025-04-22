@@ -1,7 +1,5 @@
 package guraa.pdfcompare.service;
 
-import guraa.pdfcompare.PDFComparisonEngine;
-import guraa.pdfcompare.model.ComparisonResult;
 import com.itextpdf.kernel.pdf.PdfDate;
 import com.itextpdf.kernel.pdf.PdfDocumentInfo;
 import com.itextpdf.kernel.pdf.PdfReader;
@@ -12,7 +10,6 @@ import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.repository.PdfRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
-// Removed: import org.apache.pdfbox.pdmodel.PDDocument;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -47,10 +44,10 @@ public class PdfService {
     private final PdfRepository pdfRepository;
     private final ExecutorService executorService;
     private final PDFComparisonEngine comparisonEngine;
-    
+
     /**
      * Constructor with qualifier to specify which executor service to use.
-     * 
+     *
      * @param pdfRepository The PDF repository
      * @param executorService The executor service for comparison operations
      * @param comparisonEngine The PDF comparison engine
@@ -280,54 +277,54 @@ public class PdfService {
      * Extract metadata from a document.
      *
      * @param document The document
- * @return The updated document
- */
-private PdfDocument extractMetadata(PdfDocument document) {
-    try {
-        // Use ReaderProperties to handle potential encryption without a password
-        ReaderProperties readerProperties = new ReaderProperties();
-        // If you need to handle password-protected files, you'd set the password here:
-        // readerProperties.setPassword("password".getBytes());
+     * @return The updated document
+     */
+    private PdfDocument extractMetadata(PdfDocument document) {
+        try {
+            // Use ReaderProperties to handle potential encryption without a password
+            ReaderProperties readerProperties = new ReaderProperties();
+            // If you need to handle password-protected files, you'd set the password here:
+            // readerProperties.setPassword("password".getBytes());
 
-        PdfReader reader = new PdfReader(document.getFilePath(), readerProperties);
-        // Use try-with-resources for the iText PdfDocument
-        try (com.itextpdf.kernel.pdf.PdfDocument iTextPdfDocument = new com.itextpdf.kernel.pdf.PdfDocument(reader)) {
-            // Set the page count
-            document.setPageCount(iTextPdfDocument.getNumberOfPages());
+            PdfReader reader = new PdfReader(document.getFilePath(), readerProperties);
+            // Use try-with-resources for the iText PdfDocument
+            try (com.itextpdf.kernel.pdf.PdfDocument iTextPdfDocument = new com.itextpdf.kernel.pdf.PdfDocument(reader)) {
+                // Set the page count
+                document.setPageCount(iTextPdfDocument.getNumberOfPages());
 
-            // Extract metadata
-            PdfDocumentInfo info = iTextPdfDocument.getDocumentInfo();
-            if (info != null) {
-                document.setTitle(info.getTitle());
-                document.setAuthor(info.getAuthor());
-                document.setSubject(info.getSubject());
-                document.setKeywords(info.getKeywords());
-                document.setCreator(info.getCreator());
-                document.setProducer(info.getProducer());
+                // Extract metadata
+                PdfDocumentInfo info = iTextPdfDocument.getDocumentInfo();
+                if (info != null) {
+                    document.setTitle(info.getTitle());
+                    document.setAuthor(info.getAuthor());
+                    document.setSubject(info.getSubject());
+                    document.setKeywords(info.getKeywords());
+                    document.setCreator(info.getCreator());
+                    document.setProducer(info.getProducer());
 
-                // Format dates properly using iText's PdfDate utility and standard keys
-                document.setCreationDate(
-                        formatCalendarDate(PdfDate.decode(info.getMoreInfo("CreationDate")))
-                );
-                document.setModificationDate(
-                        formatCalendarDate(PdfDate.decode(info.getMoreInfo("ModDate"))) // ModDate is the standard key
-                );
-                // No need for fallback, getMoreInfo handles missing keys returning null
+                    // Format dates properly using iText's PdfDate utility and standard keys
+                    document.setCreationDate(
+                            formatCalendarDate(PdfDate.decode(info.getMoreInfo("CreationDate")))
+                    );
+                    document.setModificationDate(
+                            formatCalendarDate(PdfDate.decode(info.getMoreInfo("ModDate"))) // ModDate is the standard key
+                    );
+                    // No need for fallback, getMoreInfo handles missing keys returning null
+                }
+
+                // Check encryption status via the reader
+                document.setEncrypted(reader.isEncrypted());
             }
-
-            // Check encryption status via the reader
-            document.setEncrypted(reader.isEncrypted());
+        } catch (IOException e) {
+            // Log specific iText exceptions if needed, e.g., BadPasswordException
+            log.error("Error extracting metadata using iText: {}", e.getMessage(), e);
+        } catch (Exception e) {
+            // Catch broader exceptions during iText processing
+            log.error("Unexpected error during iText metadata extraction: {}", e.getMessage(), e);
         }
-    } catch (IOException e) {
-        // Log specific iText exceptions if needed, e.g., BadPasswordException
-        log.error("Error extracting metadata using iText: {}", e.getMessage(), e);
-    } catch (Exception e) {
-        // Catch broader exceptions during iText processing
-        log.error("Unexpected error during iText metadata extraction: {}", e.getMessage(), e);
-    }
 
-    return document;
-}
+        return document;
+    }
 
     /**
      * Save a document.

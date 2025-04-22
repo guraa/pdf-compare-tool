@@ -22,18 +22,4 @@ public interface VisualMatcher {
      * @throws IOException If there is an error matching the pages
      */
     List<PagePair> matchPages(PdfDocument baseDocument, PdfDocument compareDocument) throws IOException;
-    
-    /**
-     * Match pages between two documents with progress tracking.
-     *
-     * @param baseDocument The base document
-     * @param compareDocument The document to compare against the base
-     * @param comparisonId The comparison ID for progress tracking (optional)
-     * @return A list of page pairs
-     * @throws IOException If there is an error matching the pages
-     */
-    default List<PagePair> matchPages(PdfDocument baseDocument, PdfDocument compareDocument, String comparisonId) throws IOException {
-        // Default implementation just calls the original method
-        return matchPages(baseDocument, compareDocument);
-    }
 }

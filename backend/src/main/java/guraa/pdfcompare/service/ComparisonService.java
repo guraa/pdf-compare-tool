@@ -94,7 +94,7 @@ public class ComparisonService {
                         .orElseThrow(() -> new IllegalArgumentException("Compare document not found"));
 
                 // Perform the actual comparison
-                ComparisonResult result = comparisonEngine.compareDocuments(baseDoc, compareDoc, comparisonId);
+                ComparisonResult result = comparisonEngine.compareDocuments(baseDoc, compareDoc);
                 log.info("Comparison completed for ID: {}", comparisonId);
 
                 // Store the result
@@ -165,54 +165,6 @@ public class ComparisonService {
         } catch (Exception e) {
             log.error("Error updating comparison status: {}", e.getMessage(), e);
             throw e;
-        }
-    }
-    
-    /**
-     * Update the progress of a comparison.
-     *
-     * @param comparisonId The comparison ID
-     * @param completedOperations The number of completed operations
-     * @param totalOperations The total number of operations
-     * @param currentPhase The current phase of the comparison
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void updateComparisonProgress(String comparisonId, int completedOperations, int totalOperations, String currentPhase) {
-        try {
-            log.debug("Updating comparison {} progress: {}/{} in phase {}", 
-                    comparisonId, completedOperations, totalOperations, currentPhase);
-            
-            Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
-            if (comparisonOpt.isPresent()) {
-                Comparison comparison = comparisonOpt.get();
-                
-                // Only update if the comparison is still in progress
-                if (comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
-                        comparison.getStatus() == Comparison.ComparisonStatus.PENDING) {
-                    
-                    comparison.setCompletedOperations(completedOperations);
-                    comparison.setTotalOperations(totalOperations);
-                    comparison.setCurrentPhase(currentPhase);
-                    
-                    // Calculate progress percentage
-                    int progress = 0;
-                    if (totalOperations > 0) {
-                        progress = (int) ((completedOperations * 100.0) / totalOperations);
-                    }
-                    comparison.setProgress(progress);
-                    
-                    comparison.setUpdatedAt(LocalDateTime.now());
-                    comparisonRepository.saveAndFlush(comparison);
-                    
-                    if (completedOperations % 10 == 0 || completedOperations == totalOperations) {
-                        log.info("Comparison {} progress: {}% ({}/{}) in phase {}", 
-                                comparisonId, progress, completedOperations, totalOperations, currentPhase);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.error("Error updating comparison progress: {}", e.getMessage(), e);
-            // Don't throw the exception, just log it to avoid interrupting the comparison process
         }
     }
 
