@@ -1,40 +1,35 @@
 package guraa.pdfcompare.controller;
 
-import guraa.pdfcompare.perf.EnhancedPerformanceMonitor;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
  * Controller for accessing performance metrics.
+ * Note: Performance monitoring has been disabled.
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/diagnostics")
-@RequiredArgsConstructor
 public class PerformanceController {
-
-    private final EnhancedPerformanceMonitor performanceMonitor;
 
     /**
      * Get the current performance metrics.
+     * Note: This is a placeholder as performance monitoring has been disabled.
      *
      * @return Performance metrics
      */
     @GetMapping("/performance")
     public ResponseEntity<?> getPerformanceMetrics() {
         try {
-            List<EnhancedPerformanceMonitor.PerformanceReport> reports =
-                    performanceMonitor.getPerformanceReport();
-
             Map<String, Object> response = new HashMap<>();
-            response.put("metrics", reports);
+            response.put("metrics", new ArrayList<>());
             response.put("timestamp", System.currentTimeMillis());
+            response.put("message", "Performance monitoring has been disabled");
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -46,16 +41,15 @@ public class PerformanceController {
 
     /**
      * Reset the performance metrics.
+     * Note: This is a placeholder as performance monitoring has been disabled.
      *
      * @return Success or error response
      */
     @PostMapping("/performance/reset")
     public ResponseEntity<?> resetPerformanceMetrics() {
         try {
-            performanceMonitor.resetMetrics();
-
             return ResponseEntity.ok(Map.of(
-                    "message", "Performance metrics reset successfully",
+                    "message", "Performance monitoring has been disabled",
                     "timestamp", System.currentTimeMillis()));
         } catch (Exception e) {
             log.error("Error resetting performance metrics: {}", e.getMessage(), e);

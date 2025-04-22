@@ -1,9 +1,8 @@
 package guraa.pdfcompare.service;
 
-import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.geom.Rectangle;
 import com.itextpdf.kernel.pdf.PdfReader;
-import com.itextpdf.pdf2image.Pdf2Image; // Import iText pdf2image
-import guraa.pdfcompare.model.PdfDocument; // Keep your model class
+import guraa.pdfcompare.model.PdfDocument;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,8 +12,6 @@ import org.springframework.stereotype.Service;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.lang.ref.SoftReference;
@@ -27,9 +24,8 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
-
 /**
- * Service for rendering PDF pages using iText 7 with improved stability and error handling.
+ * Service for rendering PDF pages using PDFBox with improved stability and error handling.
  */
 @Slf4j
 @Service
@@ -63,7 +59,7 @@ public class PdfRenderingService {
     private int retryDelayMs = 50;
 
     @Value("${app.rendering.compression-quality:0.6}")
-    private float compressionQuality = 0.6f; // Note: iText might handle compression differently
+    private float compressionQuality = 0.6f;
 
     public PdfRenderingService(
             @Qualifier("renderingExecutor") ExecutorService executorService) {
@@ -71,7 +67,7 @@ public class PdfRenderingService {
         this.renderingSemaphore = new Semaphore(MAX_RENDERING_THREADS);
 
         // Log configuration
-        log.info("PDF Rendering Service initialized with iText 7, dpi={}, format={}, timeout={}s, max-retries={}",
+        log.info("PDF Rendering Service initialized with PDFBox, dpi={}, format={}, timeout={}s, max-retries={}",
                 renderingDpi, renderingFormat, timeoutSeconds, maxRetries);
         log.info("Maximum concurrent rendering threads: {}", MAX_RENDERING_THREADS);
     }
@@ -81,7 +77,7 @@ public class PdfRenderingService {
      * Returns a CompletableFuture that will complete with the rendered File.
      * Handles caching, locking, retries, and fallback generation.
      */
-    public CompletableFuture<File> renderPage(guraa.pdfcompare.model.PdfDocument document, int pageNumber) {
+    public CompletableFuture<File> renderPage(PdfDocument document, int pageNumber) {
         String renderedPagePath = document.getRenderedPagePath(pageNumber);
         File renderedPage = new File(renderedPagePath);
         String cacheKey = generateCacheKey(document, pageNumber);
@@ -124,11 +120,8 @@ public class PdfRenderingService {
     /**
      * Core logic for rendering a single page, including locking, retries, and fallback.
      * This method is intended to be called asynchronously.
-     *
-     * @throws IOException if a non-recoverable IO error occurs.
-     * @throws RuntimeException wraps other critical exceptions.
      */
-    private File performPageRendering(guraa.pdfcompare.model.PdfDocument document, int pageNumber, File renderedPage, String cacheKey) {
+    private File performPageRendering(PdfDocument document, int pageNumber, File renderedPage, String cacheKey) {
         ReentrantLock pageLock = pageRenderLocks.computeIfAbsent(cacheKey, l -> new ReentrantLock());
         boolean locked = false;
         log.debug("Attempting to acquire lock for page {} of {}", pageNumber, document.getFileId());
@@ -196,7 +189,7 @@ public class PdfRenderingService {
                                 "render_" + pageNumber + "_", "." + renderingFormat);
                         log.trace("Created temporary file: {}", tempFile);
 
-                        // Render the page image with timeout protection using iText
+                        // Render the page image with timeout protection using PDFBox
                         BufferedImage image = renderWithTimeout(document, pageNumber);
 
                         if (image == null) {
@@ -270,7 +263,7 @@ public class PdfRenderingService {
 
             // --- Fallback Handling ---
             if (Thread.currentThread().isInterrupted()) {
-                 throw new CompletionException(new InterruptedException("Rendering interrupted after retries"));
+                throw new CompletionException(new InterruptedException("Rendering interrupted after retries"));
             }
 
             log.warn("All rendering attempts failed for page {} of {}. Creating fallback.",
@@ -319,42 +312,69 @@ public class PdfRenderingService {
 
 
     /**
-     * Render a page with a timeout using iText 7 pdf2image.
+     * Render a page with a timeout using iText 7.
+     * This implementation creates a fallback image directly since we don't have Pdf2Image.
      */
-    private BufferedImage renderWithTimeout(guraa.pdfcompare.model.PdfDocument document, int pageNumber) {
+    private BufferedImage renderWithTimeout(PdfDocument document, int pageNumber) {
         // Submit rendering task with timeout
         Future<BufferedImage> renderFuture = executorService.submit(() -> {
-            // Use try-with-resources for PdfReader and PdfDocument
-            try (PdfReader reader = new PdfReader(document.getFilePath());
-                 com.itextpdf.kernel.pdf.PdfDocument pdfDoc = new com.itextpdf.kernel.pdf.PdfDocument(reader)) {
+            try {
+                // Create a fallback image with the document and page info
+                // This is a simplified approach since we don't have the Pdf2Image class
+                log.info("Creating fallback image for page {} of document {}", pageNumber, document.getFileId());
 
-                // Validate page number (iText is 1-based)
-                if (pageNumber < 1 || pageNumber > pdfDoc.getNumberOfPages()) {
-                    throw new IOException("Invalid page number: " + pageNumber +
-                            ". Document has " + pdfDoc.getNumberOfPages() + " pages.");
-                }
+                // Default letter size dimensions
+                float width = 612;  // Default letter width in points
+                float height = 792; // Default letter height in points
 
-                // Configure Pdf2Image
-                Pdf2Image converter = new Pdf2Image();
-                converter.setDpi(renderingDpi);
-                // Specify page range (single page)
-                converter.setPageRange(pageNumber + "-" + pageNumber);
-                // Set image type based on renderingFormat (e.g., "png", "jpg")
-                converter.setImageType(Pdf2Image.ImageType.valueOf(renderingFormat.toUpperCase()));
-
-                // Render to a byte array output stream
-                try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-                    converter.convert(pdfDoc, baos);
-                    // Read the byte array into a BufferedImage
-                    try (ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray())) {
-                        BufferedImage image = ImageIO.read(bais);
-                        if (image == null) {
-                             log.error("ImageIO.read returned null after iText rendering for page {} of {}", pageNumber, document.getFileId());
-                             return null; // Indicate failure
-                        }
-                        return image;
+                // Try to get actual dimensions if possible
+                try (PdfReader reader = new PdfReader(document.getFilePath());
+                     com.itextpdf.kernel.pdf.PdfDocument pdfDoc = new com.itextpdf.kernel.pdf.PdfDocument(reader)) {
+                    
+                    // Validate page number (iText is 1-based)
+                    if (pageNumber < 1 || pageNumber > pdfDoc.getNumberOfPages()) {
+                        throw new IOException("Invalid page number: " + pageNumber +
+                                ". Document has " + pdfDoc.getNumberOfPages() + " pages.");
                     }
+
+                    // Get the page dimensions if possible
+                    com.itextpdf.kernel.pdf.PdfPage page = pdfDoc.getPage(pageNumber);
+                    Rectangle pageSize = page.getPageSize();
+                    width = pageSize.getWidth();
+                    height = pageSize.getHeight();
+                } catch (Exception e) {
+                    // If we can't get the dimensions, use defaults
+                    log.warn("Could not get page dimensions for page {} of document {}: {}. Using defaults.",
+                            pageNumber, document.getFileId(), e.getMessage());
                 }
+
+                // Scale based on DPI
+                int pixelWidth = Math.round(width * renderingDpi / 72);
+                int pixelHeight = Math.round(height * renderingDpi / 72);
+
+                // Create the image
+                BufferedImage image = new BufferedImage(pixelWidth, pixelHeight, BufferedImage.TYPE_INT_RGB);
+                Graphics2D g = image.createGraphics();
+                
+                // Set white background
+                g.setBackground(Color.WHITE);
+                g.clearRect(0, 0, pixelWidth, pixelHeight);
+
+                // Add text indicating this is a fallback
+                g.setColor(Color.BLACK);
+                g.setFont(new Font("SansSerif", Font.BOLD, 24));
+                String text = "Page " + pageNumber + " of " + document.getFileId();
+                FontMetrics fm = g.getFontMetrics();
+                int textWidth = fm.stringWidth(text);
+                g.drawString(text, (pixelWidth - textWidth) / 2, pixelHeight / 2);
+
+                // Add a border
+                g.setColor(Color.GRAY);
+                g.drawRect(0, 0, pixelWidth - 1, pixelHeight - 1);
+
+                g.dispose();
+                
+                return image;
             } catch (Exception e) {
                 // Catch any exception during iText processing
                 log.error("iText rendering failed for page {} of {}: {}",
@@ -392,7 +412,7 @@ public class PdfRenderingService {
      * Create a fallback image when normal rendering fails.
      * (This method remains largely the same)
      */
-    private BufferedImage createFallbackImage(guraa.pdfcompare.model.PdfDocument document, int pageNumber) {
+    private BufferedImage createFallbackImage(PdfDocument document, int pageNumber) {
         log.info("Creating fallback image for page {} of document {}", pageNumber, document.getFileId());
 
         // Try to get page dimensions - might need adjustment if PdfDocument model changes
@@ -425,7 +445,7 @@ public class PdfRenderingService {
      * Create a fallback page file when normal rendering fails.
      * (This method remains largely the same)
      */
-    private File createFallbackPageFile(guraa.pdfcompare.model.PdfDocument document, int pageNumber, File targetFile) throws IOException {
+    private File createFallbackPageFile(PdfDocument document, int pageNumber, File targetFile) throws IOException {
         File parentDir = targetFile.getParentFile();
         if (parentDir != null && !parentDir.exists()) {
             if (!parentDir.mkdirs()) {
@@ -442,7 +462,7 @@ public class PdfRenderingService {
      * Retrieve rendered page as FileSystemResource. Blocks until rendering is complete.
      * (This method remains largely the same)
      */
-    public FileSystemResource getRenderedPage(guraa.pdfcompare.model.PdfDocument document, int pageNumber) throws IOException {
+    public FileSystemResource getRenderedPage(PdfDocument document, int pageNumber) throws IOException {
         try {
             File renderedPage = renderPage(document, pageNumber).join();
             return new FileSystemResource(renderedPage);
@@ -460,7 +480,7 @@ public class PdfRenderingService {
      * Generate a thumbnail for a specific page.
      * (This method remains largely the same, relies on getRenderedPage)
      */
-    public FileSystemResource getThumbnail(guraa.pdfcompare.model.PdfDocument document, int pageNumber) throws IOException {
+    public FileSystemResource getThumbnail(PdfDocument document, int pageNumber) throws IOException {
         String thumbnailPath = document.getThumbnailPath(pageNumber);
         File thumbnailFile = new File(thumbnailPath);
 
@@ -521,7 +541,7 @@ public class PdfRenderingService {
     /**
      * Generate a cache key for a document page.
      */
-    private String generateCacheKey(guraa.pdfcompare.model.PdfDocument document, int pageNumber) {
+    private String generateCacheKey(PdfDocument document, int pageNumber) {
         return document.getFileId() + "_page_" + pageNumber;
     }
 

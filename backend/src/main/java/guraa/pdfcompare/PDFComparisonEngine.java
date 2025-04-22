@@ -1,12 +1,18 @@
 package guraa.pdfcompare;
 
-import guraa.pdfcompare.core.SmartDocumentMatcher;
+import guraa.pdfcompare.core.DocumentMatchingStrategy;
 import guraa.pdfcompare.model.ComparisonResult;
 import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.model.difference.Difference;
+import guraa.pdfcompare.model.difference.FontDifference;
 import guraa.pdfcompare.model.difference.ImageDifference;
 import guraa.pdfcompare.model.difference.TextDifference;
-import guraa.pdfcompare.service.*;
+import guraa.pdfcompare.service.ComparisonService;
+import guraa.pdfcompare.service.FontComparisonService;
+import guraa.pdfcompare.service.ImageComparisonService;
+import guraa.pdfcompare.service.PageLevelComparisonSummary;
+import guraa.pdfcompare.service.PagePair;
+import guraa.pdfcompare.service.TextElementComparisonService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -27,14 +33,13 @@ import java.util.stream.Collectors;
 @Service
 public class PDFComparisonEngine {
 
-    private final SmartDocumentMatcher documentMatcher;
+    private final DocumentMatchingStrategy documentMatcher;
     private final TextElementComparisonService textComparisonService;
     private final ImageComparisonService imageComparisonService;
     private final FontComparisonService fontComparisonService;
     private final ExecutorService executorService;
-    private final PerformanceMonitoringService monitoringService;
 
-    // Mark ComparisonService with @Lazy
+    // Mark ComparisonService with @Lazy to prevent circular dependency
     @Lazy
     private ComparisonService comparisonService;
 
@@ -60,18 +65,16 @@ public class PDFComparisonEngine {
      * Constructor with qualifier to specify which executor service to use.
      */
     public PDFComparisonEngine(
-            SmartDocumentMatcher documentMatcher,
+            DocumentMatchingStrategy documentMatcher,
             TextElementComparisonService textComparisonService,
             ImageComparisonService imageComparisonService,
             FontComparisonService fontComparisonService,
-            @Qualifier("comparisonExecutor") ExecutorService executorService,
-            PerformanceMonitoringService monitoringService) {
+            @Qualifier("comparisonExecutor") ExecutorService executorService) {
         this.documentMatcher = documentMatcher;
         this.textComparisonService = textComparisonService;
         this.imageComparisonService = imageComparisonService;
         this.fontComparisonService = fontComparisonService;
         this.executorService = executorService;
-        this.monitoringService = monitoringService;
     }
 
     /**
@@ -151,10 +154,6 @@ public class PDFComparisonEngine {
             long endTime = System.currentTimeMillis();
             long duration = endTime - startTime;
             log.info(logPrefix + "Completed comparison between documents in {}ms", duration);
-
-            if (monitoringService != null) {
-                monitoringService.comparisonPerformed(duration);
-            }
 
             return result;
         } catch (Exception e) {
@@ -293,8 +292,14 @@ public class PDFComparisonEngine {
                                             baseDocument, compareDocument,
                                             pagePair.getBasePageNumber(), pagePair.getComparePageNumber());
                                     allDifferences.addAll(imageDiffs);
+
+                                    // Font comparison for initial pages
+                                    List<FontDifference> fontDiffs = fontComparisonService.compareFonts(
+                                            baseDocument, compareDocument,
+                                            pagePair.getBasePageNumber(), pagePair.getComparePageNumber());
+                                    allDifferences.addAll(fontDiffs);
                                 } catch (Exception e) {
-                                    log.warn("Error comparing images: {}", e.getMessage());
+                                    log.warn("Error comparing images or fonts: {}", e.getMessage());
                                 }
                             }
 
@@ -344,11 +349,6 @@ public class PDFComparisonEngine {
                         batchIndex + 1, batches.size(), e.getMessage());
                 // Continue with next batch rather than failing completely
             }
-
-            // Force garbage collection between batches to free memory
-            if (batchIndex % 3 == 2) {
-                System.gc();
-            }
         }
 
         return differencesByPage;
@@ -371,8 +371,8 @@ public class PDFComparisonEngine {
     /**
      * Create a page difference from a difference.
      */
-    private PageDifference createPageDifference(Difference difference) {
-        return PageDifference.builder()
+    private guraa.pdfcompare.service.PageDifference createPageDifference(Difference difference) {
+        return guraa.pdfcompare.service.PageDifference.builder()
                 .id(UUID.randomUUID().toString())
                 .type(difference.getType())
                 .severity(difference.getSeverity())
