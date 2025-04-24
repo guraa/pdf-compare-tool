@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Service for storing and retrieving comparison results with improved robustness.
+ * Service for storing and retrieving comparison results with robust ID management.
  */
 @Slf4j
 @Service
@@ -31,12 +31,47 @@ public class ComparisonResultStorage {
     // Locks for file operations to prevent concurrent writes
     private final ConcurrentHashMap<String, ReentrantLock> fileLocks = new ConcurrentHashMap<>();
 
-    // Maximum cache size (adjust based on memory considerations)
+    // Maximum cache size
     private static final int MAX_CACHE_SIZE = 20;
 
-    // Retry parameters for robust file operations
-    private static final int RETRY_COUNT = 3;
-    private static final int RETRY_DELAY_MS = 100;
+
+    /**
+     * Delete a comparison result.
+     *
+     * @param comparisonId The comparison ID
+     * @return true if the result was deleted, false otherwise
+     */
+    public boolean deleteResult(String comparisonId) {
+        if (comparisonId == null) {
+            return false;
+        }
+
+        // Remove from memory cache
+        resultCache.remove(comparisonId);
+
+        File resultFile = getResultFile(comparisonId);
+        if (!resultFile.exists()) {
+            return true; // Already deleted
+        }
+
+        ReentrantLock fileLock = fileLocks.computeIfAbsent(comparisonId, k -> new ReentrantLock());
+
+        // Acquire lock for deletion
+        fileLock.lock();
+        try {
+            boolean deleted = resultFile.delete();
+            if (deleted) {
+                // Remove the lock from the map
+                fileLocks.remove(comparisonId);
+                log.debug("Deleted comparison result for ID: {}", comparisonId);
+            } else {
+                log.warn("Failed to delete comparison result file for ID: {}", comparisonId);
+            }
+            return deleted;
+        } finally {
+            fileLock.unlock();
+        }
+    }
 
     /**
      * Constructor with storage location and object mapper.
@@ -69,7 +104,7 @@ public class ComparisonResultStorage {
     }
 
     /**
-     * Store a comparison result with improved error handling and atomicity.
+     * Store a comparison result with improved ID validation.
      *
      * @param comparisonId The comparison ID
      * @param result The comparison result
@@ -78,6 +113,22 @@ public class ComparisonResultStorage {
     public void storeResult(String comparisonId, ComparisonResult result) throws IOException {
         if (comparisonId == null || result == null) {
             throw new IllegalArgumentException("Comparison ID and result cannot be null");
+        }
+
+        // Ensure the result ID matches the comparison ID
+        if (!comparisonId.equals(result.getId())) {
+            log.warn("Result ID '{}' differs from comparison ID '{}'. Fixing result ID.",
+                    result.getId(), comparisonId);
+
+            // Create a new result object with the correct ID
+            result = ComparisonResult.builder()
+                    .id(comparisonId)
+                    .baseDocumentId(result.getBaseDocumentId())
+                    .compareDocumentId(result.getCompareDocumentId())
+                    .pagePairs(result.getPagePairs())
+                    .summary(result.getSummary())
+                    .differencesByPage(result.getDifferencesByPage())
+                    .build();
         }
 
         // Add to memory cache first
@@ -129,7 +180,7 @@ public class ComparisonResultStorage {
     }
 
     /**
-     * Retrieve a comparison result with caching and retry mechanism.
+     * Retrieve a comparison result with proper ID validation.
      *
      * @param comparisonId The comparison ID
      * @return The comparison result, or null if not found
@@ -142,6 +193,24 @@ public class ComparisonResultStorage {
         // Check memory cache first
         ComparisonResult cachedResult = resultCache.get(comparisonId);
         if (cachedResult != null) {
+            // Validate cached result ID
+            if (!comparisonId.equals(cachedResult.getId())) {
+                log.warn("Cached result ID '{}' differs from requested ID '{}'. Fixing result ID.",
+                        cachedResult.getId(), comparisonId);
+
+                // Fix the ID and update cache
+                cachedResult = ComparisonResult.builder()
+                        .id(comparisonId)
+                        .baseDocumentId(cachedResult.getBaseDocumentId())
+                        .compareDocumentId(cachedResult.getCompareDocumentId())
+                        .pagePairs(cachedResult.getPagePairs())
+                        .summary(cachedResult.getSummary())
+                        .differencesByPage(cachedResult.getDifferencesByPage())
+                        .build();
+
+                resultCache.put(comparisonId, cachedResult);
+            }
+
             log.debug("Retrieved comparison result from memory cache for ID: {}", comparisonId);
             return cachedResult;
         }
@@ -154,74 +223,32 @@ public class ComparisonResultStorage {
 
         ReentrantLock fileLock = fileLocks.computeIfAbsent(comparisonId, k -> new ReentrantLock());
 
-        // Try with retry mechanism for file system issues
-        for (int attempt = 0; attempt < RETRY_COUNT; attempt++) {
-            // Acquire lock for reading to prevent concurrent modifications
-            fileLock.lock();
-            try {
-                ComparisonResult result = objectMapper.readValue(resultFile, ComparisonResult.class);
-
-                // Cache the result for future retrievals
-                resultCache.put(comparisonId, result);
-
-                return result;
-            } catch (IOException e) {
-                log.warn("Attempt {} failed to read comparison result for ID {}: {}",
-                        attempt + 1, comparisonId, e.getMessage());
-
-                if (attempt == RETRY_COUNT - 1) {
-                    log.error("All attempts to read comparison result failed for ID {}", comparisonId, e);
-                } else {
-                    // Wait before retry
-                    try {
-                        Thread.sleep(RETRY_DELAY_MS * (attempt + 1));
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        log.warn("Interrupted while waiting to retry reading result");
-                        break;
-                    }
-                }
-            } finally {
-                fileLock.unlock();
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Delete a comparison result.
-     *
-     * @param comparisonId The comparison ID
-     * @return true if the result was deleted, false otherwise
-     */
-    public boolean deleteResult(String comparisonId) {
-        if (comparisonId == null) {
-            return false;
-        }
-
-        // Remove from memory cache
-        resultCache.remove(comparisonId);
-
-        File resultFile = getResultFile(comparisonId);
-        if (!resultFile.exists()) {
-            return true; // Already deleted
-        }
-
-        ReentrantLock fileLock = fileLocks.computeIfAbsent(comparisonId, k -> new ReentrantLock());
-
-        // Acquire lock for deletion
+        // Acquire lock for reading to prevent concurrent modifications
         fileLock.lock();
         try {
-            boolean deleted = resultFile.delete();
-            if (deleted) {
-                // Remove the lock from the map
-                fileLocks.remove(comparisonId);
-                log.debug("Deleted comparison result for ID: {}", comparisonId);
-            } else {
-                log.warn("Failed to delete comparison result file for ID: {}", comparisonId);
+            ComparisonResult result = objectMapper.readValue(resultFile, ComparisonResult.class);
+
+            // Ensure result ID matches comparison ID
+            if (!comparisonId.equals(result.getId())) {
+                log.warn("Retrieved result ID '{}' doesn't match comparison ID '{}'. Fixing ID.",
+                        result.getId(), comparisonId);
+                result = ComparisonResult.builder()
+                        .id(comparisonId)
+                        .baseDocumentId(result.getBaseDocumentId())
+                        .compareDocumentId(result.getCompareDocumentId())
+                        .pagePairs(result.getPagePairs())
+                        .summary(result.getSummary())
+                        .differencesByPage(result.getDifferencesByPage())
+                        .build();
             }
-            return deleted;
+
+            // Cache the result for future retrievals
+            resultCache.put(comparisonId, result);
+
+            return result;
+        } catch (IOException e) {
+            log.error("Failed to read comparison result for ID {}: {}", comparisonId, e.getMessage(), e);
+            return null;
         } finally {
             fileLock.unlock();
         }
