@@ -47,7 +47,7 @@ const PDFRenderer = ({
         setRenderError(null);
         console.log(`Fetching page ${page} for fileId ${fileId.substring(0, 8)}...`);
         
-        const blob = await getDocumentPage(fileId, page, { format: 'png', dpi: 150 });
+        const blob = await getDocumentPage(fileId, page, { format: 'png', dpi: 72 });
         const url = URL.createObjectURL(blob);
         setImageUrl(url);
         
@@ -214,7 +214,7 @@ const PDFRenderer = ({
       
       // The backend renders the PDF at 150 DPI in fast mode (which is what we're requesting), but the coordinates are in PDF points
       // So we need to apply a DPI correction factor
-      const backendDpi = 150; // This should match the DPI we're requesting in getDocumentPage
+      const backendDpi = 72; // This should match the DPI we're requesting in getDocumentPage
       const pdfPointsPerInch = 72;
       const dpiCorrectionFactor = backendDpi / pdfPointsPerInch; // = 4.1667
       

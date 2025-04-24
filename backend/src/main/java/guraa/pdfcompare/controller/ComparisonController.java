@@ -2,7 +2,10 @@ package guraa.pdfcompare.controller;
 
 import guraa.pdfcompare.model.Comparison;
 import guraa.pdfcompare.model.ComparisonResult;
+import guraa.pdfcompare.model.DocumentPair;
+import guraa.pdfcompare.model.PdfDocument;
 import guraa.pdfcompare.repository.ComparisonRepository;
+import guraa.pdfcompare.repository.PdfRepository;
 import guraa.pdfcompare.service.ComparisonResultStorage;
 import guraa.pdfcompare.service.ComparisonService;
 import lombok.RequiredArgsConstructor;
@@ -14,51 +17,50 @@ import org.springframework.web.bind.annotation.*;
 import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
-/**
- * Controller for PDF comparison operations with improved status handling.
- */
-@Slf4j
 @RestController
-@RequestMapping("/api/pdfs")
+@RequestMapping("/api/pdfs/")
+@Slf4j
 @RequiredArgsConstructor
 public class ComparisonController {
-
     private final ComparisonService comparisonService;
-    private final ComparisonRepository comparisonRepository;
     private final ComparisonResultStorage resultStorage;
+    private final ComparisonRepository comparisonRepository;
+    private final PdfRepository pdfRepository;
+
+    // Custom exception for resource not found
+    private static class ResourceNotFoundException extends RuntimeException {
+        public ResourceNotFoundException(String message) {
+            super(message);
+        }
+    }
 
     @PostConstruct
     public void init() {
         log.info("ComparisonController initialized with base paths: /api/pdfs and /api/pdfs/comparison");
     }
 
-    /**
-     * Initiate a comparison between two PDF documents.
-     *
-     * @param request The comparison request
-     * @return Response with comparison ID
-     */
+
     @PostMapping("/compare")
-    public ResponseEntity<?> comparePdfs(@RequestBody CompareRequest request) {
+    public ResponseEntity<?> compareDocuments(@RequestBody CompareRequest request) {
         try {
             log.info("Received comparison request: baseFileId={}, compareFileId={}",
                     request.getBaseFileId(), request.getCompareFileId());
 
             // Validate input
             if (request.getBaseFileId() == null || request.getCompareFileId() == null) {
-                return ResponseEntity.badRequest().body(Map.of(
-                        "error", "Both baseFileId and compareFileId are required"));
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Both baseFileId and compareFileId are required"));
             }
 
             // Create the comparison
             Comparison comparison = comparisonService.createComparison(
-                    request.getBaseFileId(), request.getCompareFileId());
+                    request.getBaseFileId(),
+                    request.getCompareFileId()
+            );
 
-            // Return the comparison ID
+            // Prepare response
             Map<String, Object> response = new HashMap<>();
             response.put("comparisonId", comparison.getId());
             response.put("status", comparison.getStatus().name());
@@ -68,9 +70,12 @@ public class ComparisonController {
             return ResponseEntity.accepted().body(response);
         } catch (Exception e) {
             log.error("Failed to initiate comparison: {}", e.getMessage(), e);
-            Map<String, Object> response = new HashMap<>();
-            response.put("error", "Failed to compare PDFs: " + e.getMessage());
-            return ResponseEntity.internalServerError().body(response);
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "error", "Failed to compare PDFs",
+                            "message", e.getMessage()
+                    ));
         }
     }
 
@@ -211,108 +216,138 @@ public class ComparisonController {
         }
     }
 
-    /**
-     * Get comparison result with improved consistency checking.
-     *
-     * @param comparisonId The comparison ID
-     * @return The comparison result
-     */
-    @GetMapping("/comparison/{comparisonId}")
-    public ResponseEntity<?> getComparisonResult(@PathVariable String comparisonId) {
-        log.info("Getting result for comparison: {}", comparisonId);
 
+    @GetMapping("/{comparisonId}/progress")
+    public ResponseEntity<?> getComparisonProgress(@PathVariable String comparisonId) {
         try {
-            // First check if result exists, which is the most reliable indicator
-            if (resultStorage.resultExists(comparisonId)) {
-                log.info("Result exists for comparison: {}", comparisonId);
+            Comparison comparison = comparisonRepository.findById(comparisonId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Comparison not found"));
 
-                // Ensure database status is consistent
-                Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
-                if (comparisonOpt.isPresent() &&
-                        comparisonOpt.get().getStatus() != Comparison.ComparisonStatus.COMPLETED) {
+            Map<String, Object> progressResponse = new HashMap<>();
+            progressResponse.put("comparisonId", comparisonId);
+            progressResponse.put("status", comparison.getStatus().name());
+            progressResponse.put("progress", comparison.getProgress());
+            progressResponse.put("completedOperations", comparison.getCompletedOperations());
+            progressResponse.put("totalOperations", comparison.getTotalOperations());
+            progressResponse.put("currentPhase", comparison.getCurrentPhase());
 
-                    log.info("Fixing inconsistent status for comparison {}", comparisonId);
-                    comparisonService.updateComparisonStatus(comparisonId,
-                            Comparison.ComparisonStatus.COMPLETED, null);
-                }
-
-                // Get the result - should never be null at this point
-                ComparisonResult result = resultStorage.retrieveResult(comparisonId);
-
-                if (result == null) {
-                    // This should never happen if resultExists returned true
-                    log.error("Critical error: Result exists but could not be retrieved for {}", comparisonId);
-                    return ResponseEntity.internalServerError().body(Map.of(
-                            "error", "Result exists but could not be retrieved"));
-                }
-
-                return ResponseEntity.ok(result);
-            }
-
-            // Check if comparison exists
-            Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
-            if (comparisonOpt.isEmpty()) {
-                log.warn("Comparison not found: {}", comparisonId);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(Map.of("error", "Comparison not found", "comparisonId", comparisonId));
-            }
-
-            Comparison comparison = comparisonOpt.get();
-
-            // Check status and return appropriate response
-            if (comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
-                    comparison.getStatus() == Comparison.ComparisonStatus.PENDING) {
-                log.info("Comparison {} is still processing ({})", comparisonId, comparison.getStatus());
-
-                LocalDateTime now = LocalDateTime.now();
-                Duration duration = Duration.between(comparison.getCreatedAt(), now);
-
-                Map<String, Object> response = new HashMap<>();
-                response.put("status", comparison.getStatus().name());
-                response.put("message", "Comparison still processing");
-                response.put("comparisonId", comparisonId);
-                response.put("elapsedTimeSeconds", duration.getSeconds());
-                response.put("startedAt", comparison.getCreatedAt());
-
-                // Flag as potentially stuck if running for too long
-                boolean potentiallyStuck = duration.toMinutes() > 5; // 5 minutes
-                response.put("potentiallyStuck", potentiallyStuck);
-
-                return ResponseEntity.accepted().body(response);
-
-            } else if (comparison.getStatus() == Comparison.ComparisonStatus.FAILED) {
-                log.warn("Comparison {} failed: {}", comparisonId, comparison.getErrorMessage());
-                Map<String, Object> response = new HashMap<>();
-                response.put("status", "FAILED");
-                response.put("error", "Comparison failed: " + comparison.getErrorMessage());
-                response.put("comparisonId", comparisonId);
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-            }
-
-            // Should be COMPLETED at this point, try to get the result
-            ComparisonResult result = resultStorage.retrieveResult(comparisonId);
-
-            if (result == null) {
-                log.error("Comparison {} is marked as COMPLETED but result not found", comparisonId);
-                Map<String, Object> response = new HashMap<>();
-                response.put("status", "ERROR");
-                response.put("error", "Comparison result not available");
-                response.put("comparisonId", comparisonId);
-
-                // Mark as failed since result is missing
-                comparisonService.updateComparisonStatus(comparisonId,
-                        Comparison.ComparisonStatus.FAILED, "Result is missing");
-
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-            }
-
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            log.error("Error getting comparison result for {}: {}", comparisonId, e.getMessage(), e);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("error", "Failed to get comparison result: " + e.getMessage());
-            return ResponseEntity.internalServerError().body(response);
+            return ResponseEntity.ok(progressResponse);
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.notFound().build();
         }
     }
+
+    @GetMapping("/{comparisonId}/documents")
+    public ResponseEntity<?> getDocumentPairs(@PathVariable String comparisonId) {
+        try {
+            Comparison comparison = comparisonRepository.findById(comparisonId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Comparison not found"));
+
+            // Fetch result to get additional details
+            ComparisonResult result = comparisonService.getComparisonResult(comparisonId);
+
+            if (result == null) {
+                return ResponseEntity.status(HttpStatus.ACCEPTED)
+                        .body(createProcessingResponse(comparison));
+            }
+
+            // Create document pairs
+            List<DocumentPair> documentPairs = createDocumentPairs(comparison, result);
+
+            return ResponseEntity.ok(documentPairs);
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("Error retrieving document pairs", e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to retrieve document pairs"));
+        }
+    }
+
+    @GetMapping("/{comparisonId}")
+    public ResponseEntity<?> getComparisonResult(@PathVariable String comparisonId) {
+        try {
+            Comparison comparison = comparisonRepository.findById(comparisonId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Comparison not found"));
+
+            // Check comparison status
+            if (comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING) {
+                return ResponseEntity.accepted()
+                        .body(createProcessingResponse(comparison));
+            }
+
+            ComparisonResult result = comparisonService.getComparisonResult(comparisonId);
+
+            if (result == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // Enhance result with additional metadata
+            Map<String, Object> enhancedResult = new HashMap<>();
+            enhancedResult.put("id", result.getId());
+            enhancedResult.put("baseDocumentId", result.getBaseDocumentId());
+            enhancedResult.put("compareDocumentId", result.getCompareDocumentId());
+
+            // Total differences
+            enhancedResult.put("totalDifferences", result.getTotalDifferences());
+
+            // Page pair information
+            enhancedResult.put("pagePairs", result.getPagePairs());
+
+            // Differences by page
+            enhancedResult.put("differencesByPage", result.getDifferencesByPage());
+
+            // Summary information
+            enhancedResult.put("summary", result.getSummary());
+
+            // Overall similarity score
+            enhancedResult.put("overallSimilarityScore",
+                    result.getSummary() != null ? result.getSummary().getOverallSimilarityScore() : null);
+
+            return ResponseEntity.ok(enhancedResult);
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("Error retrieving comparison result", e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to retrieve comparison result"));
+        }
+    }
+    private Map<String, Object> createProcessingResponse(Comparison comparison) {
+        Map<String, Object> processingResponse = new HashMap<>();
+        processingResponse.put("status", "PROCESSING");
+        processingResponse.put("progress", comparison.getProgress());
+        processingResponse.put("currentPhase", comparison.getCurrentPhase());
+        processingResponse.put("completedOperations", comparison.getCompletedOperations());
+        processingResponse.put("totalOperations", comparison.getTotalOperations());
+        return processingResponse;
+    }
+
+    private List<DocumentPair> createDocumentPairs(Comparison comparison, ComparisonResult result) {
+        PdfDocument baseDocument = pdfRepository.findById(comparison.getBaseDocumentId())
+                .orElseThrow(() -> new ResourceNotFoundException("Base document not found"));
+
+        PdfDocument compareDocument = pdfRepository.findById(comparison.getCompareDocumentId())
+                .orElseThrow(() -> new ResourceNotFoundException("Compare document not found"));
+
+        DocumentPair pair = DocumentPair.builder()
+                .pairIndex(0)
+                .matched(true)
+                .baseStartPage(1)
+                .baseEndPage(baseDocument.getPageCount())
+                .basePageCount(baseDocument.getPageCount())
+                .compareStartPage(1)
+                .compareEndPage(compareDocument.getPageCount())
+                .comparePageCount(compareDocument.getPageCount())
+                .hasBaseDocument(true)
+                .hasCompareDocument(true)
+                .baseDocumentId(baseDocument.getFileId())
+                .compareDocumentId(compareDocument.getFileId())
+                .similarityScore(result.getOverallSimilarityScore())
+                .totalDifferences(result.getTotalDifferences())
+                .build();
+
+        return Collections.singletonList(pair);
+    }
+
 }

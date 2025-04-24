@@ -561,10 +561,9 @@ public class ComparisonService {
     public List<DocumentPair> getDocumentPairs(String comparisonId) {
         ComparisonResult result = getComparisonResult(comparisonId);
         if (result == null) {
-            return null;
+            return new ArrayList<>(); // Return empty list instead of null
         }
 
-        // Implementation details
         List<DocumentPair> pairs = new ArrayList<>();
         DocumentPair pair = DocumentPair.builder()
                 .pairIndex(0)
@@ -577,13 +576,12 @@ public class ComparisonService {
                 .comparePageCount(result.getPagePairs().size())
                 .hasBaseDocument(true)
                 .hasCompareDocument(true)
-                .similarityScore(0.85)
+                .similarityScore(result.getOverallSimilarityScore())
                 .build();
 
         pairs.add(pair);
         return pairs;
     }
-
     /**
      * Get page details for a specific page in a document pair.
      *

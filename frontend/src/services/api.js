@@ -153,7 +153,7 @@ export const compareDocuments = async (baseFileId, compareFileId, options = {}) 
 export const getComparisonResult = async (comparisonId) => {
   try {
     // Use a longer timeout for this specific request as it might take time
-    const response = await api.get(`/pdfs/comparison/${comparisonId}`, {
+    const response = await api.get(`/pdfs/${comparisonId}`, {
       timeout: 120000, // 2 minutes timeout for comparison results
       validateStatus: function (status) {
         // Accept 202 Accepted as a valid response (still processing)
@@ -208,10 +208,10 @@ export const getComparisonDetails = async (comparisonId, page, filters = {}) => 
     const pageNumber = parseInt(page) || 1;
     
     // Debug logging
-    console.log(`Making API request to: /pdfs/comparison/${comparisonId}/page/${pageNumber} with params:`, params);
+    console.log(`Making API request to: /pdfs/${comparisonId}/page/${pageNumber} with params:`, params);
     
     try {
-      const response = await api.get(`/pdfs/comparison/${comparisonId}/page/${pageNumber}`, { 
+      const response = await api.get(`/pdfs/${comparisonId}/page/${pageNumber}`, { 
         params,
         timeout: 120000,
         validateStatus: function (status) {
@@ -252,7 +252,7 @@ export const getComparisonDetails = async (comparisonId, page, filters = {}) => 
 // Get document pairs for smart comparison
 export const getDocumentPairs = async (comparisonId) => {
   try {
-    const response = await api.get(`/pdfs/comparison/${comparisonId}/documents`, {
+    const response = await api.get(`/pdfs/${comparisonId}/documents`, {
       timeout: 120000,
       validateStatus: function (status) {
         // Accept 202 Accepted as a valid response (still processing)
@@ -280,7 +280,7 @@ export const getDocumentPairs = async (comparisonId) => {
 // Get comparison result for a specific document pair
 export const getDocumentPairResult = async (comparisonId, pairIndex) => {
   try {
-    const response = await api.get(`/pdfs/comparison/${comparisonId}/documents/${pairIndex}`, {
+    const response = await api.get(`/pdfs/${comparisonId}/documents/${pairIndex}`, {
       timeout: 120000, // 2 minutes timeout
       validateStatus: function (status) {
         // Accept 202 Accepted as a valid response (still processing)
@@ -329,7 +329,7 @@ export const getDocumentPageDetails = async (comparisonId, pairIndex, pageNumber
   
   try {
     const response = await api.get(
-      `/pdfs/comparison/${comparisonId}/documents/${pairIndex}/page/${pageNumber}`, 
+      `/pdfs/${comparisonId}/documents/${pairIndex}/page/${pageNumber}`, 
       { 
         params,
         // Accept 404 responses
@@ -409,7 +409,7 @@ export const getDocumentPage = async (fileId, page, options = {}) => {
 
 // Report generation functions
 export const generateReport = async (comparisonId, format = 'pdf', options = {}) => {
-  const response = await api.post(`/pdfs/comparison/${comparisonId}/report`, {
+  const response = await api.post(`/pdfs/${comparisonId}/report`, {
     format,
     options
   }, {
@@ -436,7 +436,7 @@ export const downloadBlob = (blob, filename) => {
 // This can be used for polling without fetching the full result
 export const checkComparisonStatus = async (comparisonId) => {
   try {
-    const response = await api.head(`/pdfs/comparison/${comparisonId}`);
+    const response = await api.head(`/pdfs/${comparisonId}`);
     return response.status === 200;
   } catch (error) {
     return false;
@@ -446,7 +446,7 @@ export const checkComparisonStatus = async (comparisonId) => {
 // Get the progress of a comparison
 export const getComparisonProgress = async (comparisonId) => {
   try {
-    const response = await api.get(`/pdfs/comparison/${comparisonId}/progress`);
+    const response = await api.get(`/pdfs/${comparisonId}/progress`);
     return response.data;
   } catch (error) {
     console.error(`Error fetching comparison progress for ${comparisonId}:`, error);
