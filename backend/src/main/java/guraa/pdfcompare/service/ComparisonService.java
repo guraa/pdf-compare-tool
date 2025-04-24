@@ -2,19 +2,26 @@ package guraa.pdfcompare.service;
 
 import guraa.pdfcompare.PDFComparisonEngine;
 import guraa.pdfcompare.model.*;
+import guraa.pdfcompare.model.difference.Difference;
 import guraa.pdfcompare.repository.ComparisonRepository;
 import guraa.pdfcompare.repository.PdfRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /**
  * Service for managing PDF comparisons with robust transaction handling.
@@ -28,6 +35,16 @@ public class ComparisonService {
     private final PDFComparisonEngine comparisonEngine;
     private final ExecutorService executorService;
     private final ComparisonResultStorage resultStorage;
+    private final ImageComparisonService imageComparisonService;
+
+    // Map to track active comparison tasks
+    private final Map<String, CompletableFuture<Void>> activeComparisonTasks = new ConcurrentHashMap<>();
+
+    // Map to track cancellation tokens for comparisons
+    private final Map<String, AtomicBoolean> cancellationTokens = new ConcurrentHashMap<>();
+
+    @Value("${app.comparison.max-processing-minutes:15}")
+    private int maxProcessingMinutes = 15;
 
     /**
      * Constructor with dependencies.
@@ -37,12 +54,14 @@ public class ComparisonService {
             ComparisonRepository comparisonRepository,
             PDFComparisonEngine comparisonEngine,
             @Qualifier("comparisonExecutor") ExecutorService executorService,
-            ComparisonResultStorage resultStorage) {
+            ComparisonResultStorage resultStorage,
+            ImageComparisonService imageComparisonService) {
         this.pdfRepository = pdfRepository;
         this.comparisonRepository = comparisonRepository;
         this.comparisonEngine = comparisonEngine;
         this.executorService = executorService;
         this.resultStorage = resultStorage;
+        this.imageComparisonService = imageComparisonService;
     }
 
     /**
@@ -73,6 +92,10 @@ public class ComparisonService {
                 .baseDocumentId(baseDocumentId)
                 .compareDocumentId(compareDocumentId)
                 .status(Comparison.ComparisonStatus.PROCESSING)
+                .progress(0)
+                .totalOperations(100)
+                .completedOperations(0)
+                .currentPhase("Initializing")
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -82,19 +105,62 @@ public class ComparisonService {
         final String comparisonId = comparison.getId();
         log.info("Created comparison with ID: {} in PROCESSING state", comparisonId);
 
-        // Execute comparison asynchronously
-        CompletableFuture.runAsync(() -> {
+        // Create cancellation token
+        AtomicBoolean cancellationToken = new AtomicBoolean(false);
+        cancellationTokens.put(comparisonId, cancellationToken);
+
+        // Execute comparison asynchronously with timeout
+        CompletableFuture<Void> comparisonTask = CompletableFuture.runAsync(() -> {
             try {
                 log.info("Starting asynchronous comparison for ID: {}", comparisonId);
+                updateComparisonPhase(comparisonId, "Loading documents", 5);
 
                 // Load documents in a new transaction
-                PdfDocument baseDoc = pdfRepository.findById(baseDocumentId)
-                        .orElseThrow(() -> new IllegalArgumentException("Base document not found"));
-                PdfDocument compareDoc = pdfRepository.findById(compareDocumentId)
-                        .orElseThrow(() -> new IllegalArgumentException("Compare document not found"));
+                PdfDocument baseDoc;
+                PdfDocument compareDoc;
+                try {
+                    baseDoc = pdfRepository.findById(baseDocumentId)
+                            .orElseThrow(() -> new IllegalArgumentException("Base document not found"));
+                    updateComparisonProgress(comparisonId, 10);
 
-                // Perform the actual comparison
-                ComparisonResult result = comparisonEngine.compareDocuments(baseDoc, compareDoc);
+                    compareDoc = pdfRepository.findById(compareDocumentId)
+                            .orElseThrow(() -> new IllegalArgumentException("Compare document not found"));
+                    updateComparisonProgress(comparisonId, 15);
+                } catch (Exception e) {
+                    log.error("Error loading documents for comparison {}: {}", comparisonId, e.getMessage());
+                    updateComparisonStatus(comparisonId, Comparison.ComparisonStatus.FAILED,
+                            "Error loading documents: " + e.getMessage());
+                    return;
+                }
+
+                // Check if cancelled
+                if (cancellationToken.get()) {
+                    log.info("Comparison {} was cancelled before processing", comparisonId);
+                    updateComparisonStatus(comparisonId, Comparison.ComparisonStatus.CANCELLED, "Comparison was cancelled");
+                    return;
+                }
+
+                updateComparisonPhase(comparisonId, "Comparing documents", 20);
+
+                // Perform the actual comparison with timeout and cancellation handling
+                ComparisonResult result;
+                try {
+                    // Perform the comparison with a timeout
+                    result = comparisonEngine.compareDocuments(baseDoc, compareDoc);
+                    updateComparisonProgress(comparisonId, 85);
+                } catch (Exception e) {
+                    log.error("Error during comparison process for ID {}: {}", comparisonId, e.getMessage(), e);
+                    updateComparisonStatus(comparisonId, Comparison.ComparisonStatus.FAILED,
+                            "Error during comparison: " + e.getMessage());
+                    return;
+                }
+
+                // Check if cancelled
+                if (cancellationToken.get()) {
+                    log.info("Comparison {} was cancelled after processing", comparisonId);
+                    updateComparisonStatus(comparisonId, Comparison.ComparisonStatus.CANCELLED, "Comparison was cancelled");
+                    return;
+                }
 
                 // Ensure result ID matches comparison ID
                 if (!comparisonId.equals(result.getId())) {
@@ -110,10 +176,22 @@ public class ComparisonService {
                 }
 
                 log.info("Comparison completed successfully for ID: {}", comparisonId);
+                updateComparisonPhase(comparisonId, "Saving results", 90);
 
                 // Store the result
-                resultStorage.storeResult(comparisonId, result);
-                log.info("Stored comparison result for ID: {}", comparisonId);
+                try {
+                    resultStorage.storeResult(comparisonId, result);
+                    log.info("Stored comparison result for ID: {}", comparisonId);
+                    updateComparisonProgress(comparisonId, 95);
+                } catch (Exception e) {
+                    log.error("Error storing result for comparison {}: {}", comparisonId, e.getMessage(), e);
+                    updateComparisonStatus(comparisonId, Comparison.ComparisonStatus.FAILED,
+                            "Error storing result: " + e.getMessage());
+                    return;
+                }
+
+                // Final update - completed
+                updateComparisonPhase(comparisonId, "Completed", 100);
 
                 // Update status to COMPLETED - this must be done in a new transaction
                 updateComparisonStatus(comparisonId, Comparison.ComparisonStatus.COMPLETED, null);
@@ -130,8 +208,39 @@ public class ComparisonService {
                     log.error("Failed to update status for failed comparison {}: {}",
                             comparisonId, ex.getMessage(), ex);
                 }
+            } finally {
+                // Always clean up the cancellation token
+                cancellationTokens.remove(comparisonId);
+                activeComparisonTasks.remove(comparisonId);
             }
         }, executorService);
+
+        // Add timeout to the task
+        comparisonTask = comparisonTask.orTimeout(maxProcessingMinutes, TimeUnit.MINUTES)
+                .exceptionally(ex -> {
+                    if (ex instanceof TimeoutException) {
+                        log.error("Comparison {} timed out after {} minutes", comparisonId, maxProcessingMinutes);
+
+                        // Cancel ongoing operations
+                        cancellationToken.set(true);
+                        imageComparisonService.cancelAllComparisons();
+
+                        // Update status to FAILED
+                        try {
+                            updateComparisonStatus(comparisonId, Comparison.ComparisonStatus.FAILED,
+                                    "Comparison timed out after " + maxProcessingMinutes + " minutes");
+                        } catch (Exception e) {
+                            log.error("Failed to update status for timed out comparison {}: {}",
+                                    comparisonId, e.getMessage());
+                        }
+                    } else {
+                        log.error("Unexpected error in comparison {}: {}", comparisonId, ex.getMessage(), ex);
+                    }
+                    return null;
+                });
+
+        // Store task for tracking
+        activeComparisonTasks.put(comparisonId, comparisonTask);
 
         return comparison;
     }
@@ -161,6 +270,13 @@ public class ComparisonService {
             comparison.setErrorMessage(errorMessage);
             comparison.setUpdatedAt(LocalDateTime.now());
 
+            // If completed, ensure progress is 100%
+            if (status == Comparison.ComparisonStatus.COMPLETED) {
+                comparison.setProgress(100);
+                comparison.setCompletedOperations(comparison.getTotalOperations());
+                comparison.setCurrentPhase("Completed");
+            }
+
             // Save and flush immediately to ensure it's written to the database
             comparisonRepository.saveAndFlush(comparison);
             log.info("Successfully updated comparison {} status from {} to {}",
@@ -172,12 +288,73 @@ public class ComparisonService {
     }
 
     /**
+     * Update the phase of a comparison.
+     *
+     * @param comparisonId The comparison ID
+     * @param phase The current phase
+     * @param progress The progress percentage (0-100)
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void updateComparisonPhase(String comparisonId, String phase, int progress) {
+        try {
+            Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
+            if (comparisonOpt.isEmpty()) {
+                log.error("Cannot update phase - comparison {} not found", comparisonId);
+                return;
+            }
+
+            Comparison comparison = comparisonOpt.get();
+            comparison.setCurrentPhase(phase);
+            comparison.setProgress(progress);
+            comparison.setCompletedOperations(progress * comparison.getTotalOperations() / 100);
+            comparison.setUpdatedAt(LocalDateTime.now());
+
+            comparisonRepository.saveAndFlush(comparison);
+            log.debug("Updated comparison {} to phase: {} ({}%)", comparisonId, phase, progress);
+        } catch (Exception e) {
+            log.error("Error updating comparison {} phase: {}", comparisonId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Update the progress of a comparison.
+     *
+     * @param comparisonId The comparison ID
+     * @param progress The progress percentage (0-100)
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void updateComparisonProgress(String comparisonId, int progress) {
+        try {
+            Optional<Comparison> comparisonOpt = comparisonRepository.findById(comparisonId);
+            if (comparisonOpt.isEmpty()) {
+                return;
+            }
+
+            Comparison comparison = comparisonOpt.get();
+            comparison.setProgress(progress);
+            comparison.setCompletedOperations(progress * comparison.getTotalOperations() / 100);
+            comparison.setUpdatedAt(LocalDateTime.now());
+
+            comparisonRepository.saveAndFlush(comparison);
+            log.debug("Updated comparison {} progress: {}%", comparisonId, progress);
+        } catch (Exception e) {
+            log.error("Error updating comparison {} progress: {}", comparisonId, e.getMessage(), e);
+        }
+    }
+
+    /**
      * Check if a comparison is in progress.
      *
      * @param id The comparison ID
      * @return true if the comparison is in progress, false otherwise
      */
     public boolean isComparisonInProgress(String id) {
+        // Check if task is still active
+        CompletableFuture<Void> task = activeComparisonTasks.get(id);
+        if (task != null && !task.isDone()) {
+            return true;
+        }
+
         // Check if result exists (which indicates the comparison is complete)
         if (resultStorage.resultExists(id)) {
             return false;
@@ -192,6 +369,47 @@ public class ComparisonService {
         Comparison comparison = comparisonOpt.get();
         return comparison.getStatus() == Comparison.ComparisonStatus.PROCESSING ||
                 comparison.getStatus() == Comparison.ComparisonStatus.PENDING;
+    }
+
+    /**
+     * Cancel a comparison.
+     *
+     * @param comparisonId The comparison ID
+     * @return true if cancelled successfully, false otherwise
+     */
+    public boolean cancelComparison(String comparisonId) {
+        // Check if the comparison is active
+        if (!isComparisonInProgress(comparisonId)) {
+            log.info("Comparison {} is not in progress, cannot cancel", comparisonId);
+            return false;
+        }
+
+        // Set cancellation token
+        AtomicBoolean token = cancellationTokens.get(comparisonId);
+        if (token != null) {
+            token.set(true);
+            log.info("Cancellation requested for comparison {}", comparisonId);
+
+            // Cancel ongoing image comparisons
+            imageComparisonService.cancelAllComparisons();
+
+            // Try to cancel the task
+            CompletableFuture<Void> task = activeComparisonTasks.get(comparisonId);
+            if (task != null && !task.isDone()) {
+                task.cancel(true);
+            }
+
+            // Update the status to cancelled
+            try {
+                updateComparisonStatus(comparisonId, Comparison.ComparisonStatus.CANCELLED, "Cancelled by user");
+                return true;
+            } catch (Exception e) {
+                log.error("Failed to update status for cancelled comparison {}: {}", comparisonId, e.getMessage());
+                return false;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -366,13 +584,170 @@ public class ComparisonService {
         return pairs;
     }
 
-/**
- * Get page details for a specific page in a document pair.
- *
- * @param comparisonId The comparison ID
- * @param pairIndex The pair index
- * @param pageNumber The page number
- * @param filters Filters to apply to the results
- * @return The page details, or null if not found
- */
+    /**
+     * Get page details for a specific page in a document pair.
+     *
+     * @param comparisonId The comparison ID
+     * @param pairIndex The pair index
+     * @param pageNumber The page number
+     * @param filters Filters to apply to the results
+     * @return The page details, or null if not found
+     */
+    public PageDetails getPageDetailsForPair(String comparisonId, int pairIndex, int pageNumber, Map<String, Object> filters) {
+        ComparisonResult result = getComparisonResult(comparisonId);
+        if (result == null) {
+            log.warn("No result found for comparison ID: {}", comparisonId);
+            return null;
+        }
+
+        // Get document pairs
+        List<DocumentPair> pairs = getDocumentPairs(comparisonId);
+        if (pairs == null || pairs.isEmpty() || pairIndex >= pairs.size()) {
+            log.warn("Invalid pair index {} for comparison ID: {}", pairIndex, comparisonId);
+            return null;
+        }
+
+        DocumentPair pair = pairs.get(pairIndex);
+
+        // Check if page number is within range
+        if (pageNumber < pair.getBaseStartPage() || pageNumber > pair.getBaseEndPage()) {
+            log.warn("Page number {} is out of range for pair index {} in comparison: {}",
+                    pageNumber, pairIndex, comparisonId);
+            return null;
+        }
+
+        // Find the corresponding page pair
+        Optional<PagePair> pagePairOpt = result.getPagePairs().stream()
+                .filter(p -> p.getBasePageNumber() == pageNumber || p.getComparePageNumber() == pageNumber)
+                .findFirst();
+
+        if (pagePairOpt.isEmpty()) {
+            log.warn("No page pair found for page number {} in comparison: {}", pageNumber, comparisonId);
+            return null;
+        }
+
+        PagePair pagePair = pagePairOpt.get();
+
+        // Create page details
+        PageDetails pageDetails = PageDetails.builder()
+                .pageNumber(pageNumber)
+                .pageId(pagePair.getId())
+                .pageExistsInBase(pagePair.getBasePageNumber() > 0)
+                .pageExistsInCompare(pagePair.getComparePageNumber() > 0)
+                .build();
+
+        // Add difference counts
+        if (pagePair.isMatched() && pagePair.hasDifferences()) {
+            pageDetails.setTextDifferenceCount(pagePair.getDifferenceCountByType("text"));
+            pageDetails.setImageDifferenceCount(pagePair.getDifferenceCountByType("image"));
+            pageDetails.setFontDifferenceCount(pagePair.getDifferenceCountByType("font"));
+            pageDetails.setStyleDifferenceCount(pagePair.getDifferenceCountByType("style"));
+
+            // Get differences for this page
+            List<Difference> differences = result.getDifferencesByPage().get(pagePair.getId());
+            if (differences != null && !differences.isEmpty()) {
+                // Process differences
+                List<Difference> baseDiffs = differences.stream()
+                        .filter(d -> d.getBasePageNumber() == pageNumber)
+                        .collect(Collectors.toList());
+
+                List<Difference> compareDiffs = differences.stream()
+                        .filter(d -> d.getComparePageNumber() == pageNumber)
+                        .collect(Collectors.toList());
+
+                pageDetails.setBaseDifferences(baseDiffs);
+                pageDetails.setCompareDifferences(compareDiffs);
+            }
+        }
+
+        // Set extracted text if available
+        try {
+            PdfDocument baseDocument = pdfRepository.findById(result.getBaseDocumentId()).orElse(null);
+            PdfDocument compareDocument = pdfRepository.findById(result.getCompareDocumentId()).orElse(null);
+
+            if (baseDocument != null && pageDetails.isPageExistsInBase()) {
+                String baseExtractedTextPath = baseDocument.getExtractedTextPath(pagePair.getBasePageNumber());
+                File baseTextFile = new File(baseExtractedTextPath);
+                if (baseTextFile.exists()) {
+                    pageDetails.setBaseExtractedText(new String(Files.readAllBytes(baseTextFile.toPath())));
+                }
+            }
+
+            if (compareDocument != null && pageDetails.isPageExistsInCompare()) {
+                String compareExtractedTextPath = compareDocument.getExtractedTextPath(pagePair.getComparePageNumber());
+                File compareTextFile = new File(compareExtractedTextPath);
+                if (compareTextFile.exists()) {
+                    pageDetails.setCompareExtractedText(new String(Files.readAllBytes(compareTextFile.toPath())));
+                }
+            }
+
+            // Set rendered image paths
+            if (baseDocument != null && pageDetails.isPageExistsInBase()) {
+                pageDetails.setBaseRenderedImagePath(baseDocument.getRenderedPagePath(pagePair.getBasePageNumber()));
+                pageDetails.setBaseWidth(getImageWidth(pageDetails.getBaseRenderedImagePath()));
+                pageDetails.setBaseHeight(getImageHeight(pageDetails.getBaseRenderedImagePath()));
+            }
+
+            if (compareDocument != null && pageDetails.isPageExistsInCompare()) {
+                pageDetails.setCompareRenderedImagePath(compareDocument.getRenderedPagePath(pagePair.getComparePageNumber()));
+                pageDetails.setCompareWidth(getImageWidth(pageDetails.getCompareRenderedImagePath()));
+                pageDetails.setCompareHeight(getImageHeight(pageDetails.getCompareRenderedImagePath()));
+            }
+        } catch (Exception e) {
+            log.error("Error setting extracted text or rendered images for page {} in comparison {}: {}",
+                    pageNumber, comparisonId, e.getMessage(), e);
+        }
+
+        // Apply filters if needed
+        applyFilters(pageDetails, filters);
+
+        return pageDetails;
+    }
+    /**
+     * Get image width from file path.
+     *
+     * @param imagePath The image file path
+     * @return The image width, or 0 if unable to determine
+     */
+    private double getImageWidth(String imagePath) {
+        if (imagePath == null) {
+            return 0;
+        }
+
+        try {
+            File imageFile = new File(imagePath);
+            if (imageFile.exists()) {
+                BufferedImage image = ImageIO.read(imageFile);
+                return image != null ? image.getWidth() : 0;
+            }
+        } catch (Exception e) {
+            log.warn("Unable to get image width for {}: {}", imagePath, e.getMessage());
+        }
+
+        return 0;
+    }
+
+    /**
+     * Get image height from file path.
+     *
+     * @param imagePath The image file path
+     * @return The image height, or 0 if unable to determine
+     */
+    private double getImageHeight(String imagePath) {
+        if (imagePath == null) {
+            return 0;
+        }
+
+        try {
+            File imageFile = new File(imagePath);
+            if (imageFile.exists()) {
+                BufferedImage image = ImageIO.read(imageFile);
+                return image != null ? image.getHeight() : 0;
+            }
+        } catch (Exception e) {
+            log.warn("Unable to get image height for {}: {}", imagePath, e.getMessage());
+        }
+
+        return 0;
+    }
 }

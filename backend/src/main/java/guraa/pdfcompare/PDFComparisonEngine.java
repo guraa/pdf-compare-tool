@@ -33,7 +33,7 @@ public class PDFComparisonEngine {
     private final ExecutorService executorService;
 
     // Maximum number of concurrent page comparisons
-    private static final int MAX_CONCURRENT_PAGE_COMPARISONS = 4;
+    private final int MAX_CONCURRENT_PAGE_COMPARISONS;
 
     // Cache for comparison results to avoid redundant comparisons
     private final Map<String, ComparisonResult> comparisonCache = new ConcurrentHashMap<>();
@@ -55,6 +55,9 @@ public class PDFComparisonEngine {
         this.imageComparisonService = imageComparisonService;
         this.fontComparisonService = fontComparisonService;
         this.executorService = executorService;
+
+        // Set max concurrent operations based on available processors
+        this.MAX_CONCURRENT_PAGE_COMPARISONS = Math.min(4, Runtime.getRuntime().availableProcessors());
     }
 
     @Value("${app.comparison.smart-matching-enabled:true}")
@@ -73,7 +76,7 @@ public class PDFComparisonEngine {
     private int pageTimeoutMinutes = 2;
 
     /**
-     * Compare two PDF documents.
+     * Compare two PDF documents with improved completion handling.
      *
      * @param baseDocument    The base document
      * @param compareDocument The document to compare against the base
@@ -209,10 +212,12 @@ public class PDFComparisonEngine {
     }
 
     /**
-     * Compare pages between two documents with reliable completion.
+     * Compare pages between two documents with guaranteed completion.
+     * This method uses a Semaphore to limit concurrent comparisons and ensures
+     * the process always completes within a reasonable time.
      */
     private Map<String, List<Difference>> comparePages(
-            PdfDocument baseDocument, PdfDocument compareDocument, List<PagePair> pagePairs) throws IOException {
+            PdfDocument baseDocument, PdfDocument compareDocument, List<PagePair> pagePairs) {
 
         String logPrefix = "[" + baseDocument.getFileId() + " vs " + compareDocument.getFileId() + "] ";
         Map<String, List<Difference>> differencesByPage = new ConcurrentHashMap<>();
@@ -231,57 +236,56 @@ public class PDFComparisonEngine {
         AtomicInteger processedPairs = new AtomicInteger(0);
         log.info(logPrefix + "Processing {} matched page pairs", totalPairs);
 
-        // Determine if we should use parallel or sequential processing based on configuration
+        // Use a Semaphore to limit concurrent comparisons
+        Semaphore semaphore = new Semaphore(MAX_CONCURRENT_PAGE_COMPARISONS);
+
         if (parallelPageProcessing && totalPairs > 1) {
-            // Parallel processing approach
-            List<CompletableFuture<Void>> pageFutures = new ArrayList<>();
+            // Parallel processing with controlled concurrency
+            CountDownLatch completionLatch = new CountDownLatch(totalPairs);
 
             for (PagePair pagePair : matchedPairs) {
-                CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
-                    try {
-                        processSinglePagePair(baseDocument, compareDocument, pagePair, differencesByPage);
-                        int completed = processedPairs.incrementAndGet();
-                        log.info(logPrefix + "Completed page pair {}/{} - Base: {}, Compare: {}",
-                                completed, totalPairs, pagePair.getBasePageNumber(), pagePair.getComparePageNumber());
-                    } catch (Exception e) {
-                        log.error(logPrefix + "Error processing page pair: Base={}, Compare={}: {}",
-                                pagePair.getBasePageNumber(), pagePair.getComparePageNumber(), e.getMessage());
-                        // Ensure we count this as processed even if it fails
-                        processedPairs.incrementAndGet();
-                    }
-                }, executorService);
+                try {
+                    // Acquire a permit before submitting the task
+                    semaphore.acquire();
 
-                pageFutures.add(future);
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            processSinglePagePair(baseDocument, compareDocument, pagePair, differencesByPage);
+                            int completed = processedPairs.incrementAndGet();
+                            log.info(logPrefix + "Completed page pair {}/{} - Base: {}, Compare: {}",
+                                    completed, totalPairs, pagePair.getBasePageNumber(), pagePair.getComparePageNumber());
+                        } catch (Exception e) {
+                            log.error(logPrefix + "Error processing page pair: Base={}, Compare={}: {}",
+                                    pagePair.getBasePageNumber(), pagePair.getComparePageNumber(), e.getMessage());
+                        } finally {
+                            // Always release the permit and count down the latch
+                            semaphore.release();
+                            completionLatch.countDown();
+                        }
+                    }, executorService);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.error(logPrefix + "Thread interrupted while waiting for semaphore: {}", e.getMessage());
+                    completionLatch.countDown();
+                }
             }
 
-            // Wait for all page processing to complete with a timeout
+            // Wait for all comparisons to complete or timeout
             try {
-                CompletableFuture<Void> allFutures = CompletableFuture.allOf(pageFutures.toArray(new CompletableFuture[0]));
-
-                // Add a timeout to prevent hanging
-                try {
-                    allFutures.get(pageTimeoutMinutes, TimeUnit.MINUTES);
-                    log.info(logPrefix + "All page futures completed successfully");
-                } catch (TimeoutException e) {
-                    log.warn(logPrefix + "Timeout waiting for page comparisons to complete. Processed {}/{} pages.",
-                            processedPairs.get(), totalPairs);
-
-                    // Cancel any unfinished futures
-                    for (CompletableFuture<Void> future : pageFutures) {
-                        if (!future.isDone()) {
-                            future.cancel(true);
-                        }
-                    }
-                } catch (Exception e) {
-                    log.error(logPrefix + "Error waiting for page comparisons: {}", e.getMessage(), e);
+                boolean completed = completionLatch.await(pageTimeoutMinutes, TimeUnit.MINUTES);
+                if (!completed) {
+                    log.warn(logPrefix + "Page comparison timed out after {} minutes. Processed {}/{} pages.",
+                            pageTimeoutMinutes, processedPairs.get(), totalPairs);
                 }
-            } catch (Exception e) {
-                log.error(logPrefix + "Error processing page comparisons: {}", e.getMessage(), e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.error(logPrefix + "Interrupted while waiting for page comparisons to complete: {}", e.getMessage());
             }
 
             log.info(logPrefix + "Completed {}/{} page comparisons", processedPairs.get(), totalPairs);
         } else {
-            // Sequential processing approach - more reliable but potentially slower
+            // Sequential processing - more reliable but potentially slower
+// Sequential processing - more reliable but potentially slower
             for (PagePair pagePair : matchedPairs) {
                 try {
                     processSinglePagePair(baseDocument, compareDocument, pagePair, differencesByPage);
@@ -301,7 +305,7 @@ public class PDFComparisonEngine {
     }
 
     /**
-     * Process a single page pair, finding all differences.
+     * Process a single page pair, finding all differences with a timeout.
      */
     private void processSinglePagePair(
             PdfDocument baseDocument,
@@ -317,34 +321,47 @@ public class PDFComparisonEngine {
 
         List<Difference> allDifferences = new ArrayList<>();
 
-        // Find text differences
-        try {
-            List<TextDifference> textDifferences = textComparisonService.compareText(
-                    baseDocument, compareDocument, basePageNum, comparePageNum);
+        // Measure the start time to limit overall processing time for this page pair
+        long startTime = System.currentTimeMillis();
+        long maxTimeMs = pageTimeoutMinutes * 60 * 1000 / 2; // Half the overall timeout
 
-            if (textDifferences != null) {
-                allDifferences.addAll(textDifferences);
-                log.info(logPrefix + "Found {} text differences for page pair {}/{}",
-                        textDifferences.size(), basePageNum, comparePageNum);
+        // Find text differences with timeout control
+        try {
+            if (System.currentTimeMillis() - startTime < maxTimeMs) {
+                log.info(logPrefix + "Finding text differences for page pair {}/{}", basePageNum, comparePageNum);
+                List<TextDifference> textDifferences = textComparisonService.compareText(
+                        baseDocument, compareDocument, basePageNum, comparePageNum);
+
+                if (textDifferences != null) {
+                    allDifferences.addAll(textDifferences);
+                    log.info(logPrefix + "Found {} text differences for page pair {}/{}",
+                            textDifferences.size(), basePageNum, comparePageNum);
+                }
+            } else {
+                log.warn(logPrefix + "Skipping text comparison due to timeout for page pair {}/{}", basePageNum, comparePageNum);
             }
         } catch (Exception e) {
             log.error(logPrefix + "Error comparing text for page pair {}/{}: {}",
                     basePageNum, comparePageNum, e.getMessage());
         }
 
-        // Find image differences - add more logging and error handling
+        // Find image differences with timeout control
         try {
-            log.info(logPrefix + "Starting image comparison for page pair {}/{}", basePageNum, comparePageNum);
-            List<ImageDifference> imageDifferences = imageComparisonService.compareImages(
-                    baseDocument, compareDocument, basePageNum, comparePageNum);
+            if (System.currentTimeMillis() - startTime < maxTimeMs) {
+                log.info(logPrefix + "Starting image comparison for page pair {}/{}", basePageNum, comparePageNum);
+                List<ImageDifference> imageDifferences = imageComparisonService.compareImages(
+                        baseDocument, compareDocument, basePageNum, comparePageNum);
 
-            if (imageDifferences != null) {
-                allDifferences.addAll(imageDifferences);
-                log.info(logPrefix + "Found {} image differences for page pair {}/{}",
-                        imageDifferences.size(), basePageNum, comparePageNum);
+                if (imageDifferences != null) {
+                    allDifferences.addAll(imageDifferences);
+                    log.info(logPrefix + "Found {} image differences for page pair {}/{}",
+                            imageDifferences.size(), basePageNum, comparePageNum);
+                } else {
+                    log.warn(logPrefix + "Image differences returned null for page pair {}/{}",
+                            basePageNum, comparePageNum);
+                }
             } else {
-                log.warn(logPrefix + "Image differences returned null for page pair {}/{}",
-                        basePageNum, comparePageNum);
+                log.warn(logPrefix + "Skipping image comparison due to timeout for page pair {}/{}", basePageNum, comparePageNum);
             }
         } catch (Exception e) {
             log.error(logPrefix + "Error comparing images for page pair {}/{}: {}",
