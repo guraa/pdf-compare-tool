@@ -3,12 +3,14 @@ package guraa.pdfcompare.visual;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBuffer;
 import java.awt.image.Raster;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Optimized calculator for Structural Similarity Index (SSIM) between images.
@@ -26,6 +28,13 @@ public class SSIMCalculator {
     private static final int WINDOW_SIZE = 8;
     private static final double C1 = Math.pow(255 * K1, 2);
     private static final double C2 = Math.pow(255 * K2, 2);
+
+    // Thresholds for early optimization
+    private static final double QUICK_REJECT_THRESHOLD = 0.1;
+    private static final double QUICK_ACCEPT_THRESHOLD = 0.95;
+
+    // Maximum number of sample points for quick comparison
+    private static final int MAX_SAMPLE_POINTS = 100;
 
     // Thread pool for parallel processing of large images
     private final ExecutorService executor;
@@ -50,7 +59,7 @@ public class SSIMCalculator {
     }
 
     /**
-     * Calculate the SSIM between two images.
+     * Calculate the SSIM between two images with performance optimizations.
      *
      * @param img1 The first image
      * @param img2 The second image
@@ -62,6 +71,19 @@ public class SSIMCalculator {
             img2 = resizeImage(img2, img1.getWidth(), img1.getHeight());
         }
 
+        // Quick check using sample points - can avoid expensive SSIM calculation
+        double quickSimilarity = quickCompare(img1, img2);
+
+        // If images are clearly different, return the quick result
+        if (quickSimilarity < QUICK_REJECT_THRESHOLD) {
+            return quickSimilarity;
+        }
+
+        // If images are almost identical, return the quick result
+        if (quickSimilarity > QUICK_ACCEPT_THRESHOLD) {
+            return quickSimilarity;
+        }
+
         // For small images, or when we have very few processors, use sequential calculation
         if (img1.getWidth() * img1.getHeight() < PARALLEL_THRESHOLD ||
                 Runtime.getRuntime().availableProcessors() <= 2) {
@@ -69,6 +91,66 @@ public class SSIMCalculator {
         } else {
             return calculateSSIMParallel(img1, img2);
         }
+    }
+
+    /**
+     * Quick comparison of two images by sampling pixels.
+     * This is much faster than full SSIM and can quickly identify obviously
+     * similar or different images.
+     *
+     * @param img1 First image
+     * @param img2 Second image
+     * @return A rough similarity score (0.0 to 1.0)
+     */
+    private double quickCompare(BufferedImage img1, BufferedImage img2) {
+        int width = img1.getWidth();
+        int height = img1.getHeight();
+
+        // Calculate step size to sample about MAX_SAMPLE_POINTS pixels
+        int totalPixels = width * height;
+        int step = (int) Math.max(1, Math.sqrt(totalPixels / (double) MAX_SAMPLE_POINTS));
+
+        int matchCount = 0;
+        int totalSamples = 0;
+
+        // Sample pixels in a grid pattern
+        for (int y = 0; y < height; y += step) {
+            for (int x = 0; x < width; x += step) {
+                if (x < width && y < height) {
+                    totalSamples++;
+
+                    int rgb1 = img1.getRGB(x, y);
+                    int rgb2 = img2.getRGB(x, y);
+
+                    // Calculate color similarity
+                    if (colorDistance(rgb1, rgb2) < 50) {
+                        matchCount++;
+                    }
+                }
+            }
+        }
+
+        return totalSamples > 0 ? (double) matchCount / totalSamples : 0.0;
+    }
+
+    /**
+     * Calculate distance between two RGB colors.
+     *
+     * @param rgb1 First color
+     * @param rgb2 Second color
+     * @return Simple Manhattan distance in RGB space (0-765)
+     */
+    private int colorDistance(int rgb1, int rgb2) {
+        int r1 = (rgb1 >> 16) & 0xFF;
+        int g1 = (rgb1 >> 8) & 0xFF;
+        int b1 = rgb1 & 0xFF;
+
+        int r2 = (rgb2 >> 16) & 0xFF;
+        int g2 = (rgb2 >> 8) & 0xFF;
+        int b2 = rgb2 & 0xFF;
+
+        // Simple Manhattan distance
+        return Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
     }
 
     /**
@@ -148,7 +230,7 @@ public class SSIMCalculator {
         // Collect results
         try {
             for (int i = 0; i < numProcessors; i++) {
-                results[i] = tasks[i].get();
+                results[i] = tasks[i].get(2, TimeUnit.SECONDS);
             }
         } catch (Exception e) {
             log.error("Error in parallel SSIM calculation: {}", e.getMessage());
@@ -177,12 +259,16 @@ public class SSIMCalculator {
      */
     private BufferedImage resizeImage(BufferedImage img, int width, int height) {
         BufferedImage resized = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        resized.createGraphics().drawImage(img, 0, 0, width, height, null);
+        Graphics2D g = resized.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.drawImage(img, 0, 0, width, height, null);
+        g.dispose();
         return resized;
     }
 
     /**
      * Convert an image to a luminance (grayscale) array for faster processing.
+     * This optimized version uses direct pixel access for better performance.
      *
      * @param img The image to convert
      * @return The luminance array
@@ -208,16 +294,19 @@ public class SSIMCalculator {
                 }
             }
         } else {
-            // RGB image - use luminance formula
+            // RGB image - use optimized direct pixel access
+            int[] pixels = img.getRGB(0, 0, width, height, null, 0, width);
+            int pixel = 0;
+
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
-                    int rgb = img.getRGB(x, y);
+                    int rgb = pixels[pixel++];
                     int r = (rgb >> 16) & 0xFF;
                     int g = (rgb >> 8) & 0xFF;
                     int b = rgb & 0xFF;
 
-                    // Luminance formula
-                    result[y][x] = 0.299 * r + 0.587 * g + 0.114 * b;
+                    // Luminance formula (optimize with bit shifts)
+                    result[y][x] = (r * 76 + g * 150 + b * 29) >> 8; // Approximates 0.299R + 0.587G + 0.114B
                 }
             }
         }
@@ -248,9 +337,15 @@ public class SSIMCalculator {
         double ssimSum = 0.0;
         int numWindows = 0;
 
-        // Iterate over all windows
-        for (int y = 0; y < numWindowsY; y++) {
-            for (int x = 0; x < numWindowsX; x++) {
+        // Skip some windows to speed up processing for large images
+        int stride = 1;
+        if (width * height > 1000000) { // > 1MP
+            stride = 2; // Skip every other window
+        }
+
+        // Iterate over windows with stride
+        for (int y = 0; y < numWindowsY; y += stride) {
+            for (int x = 0; x < numWindowsX; x += stride) {
                 // Extract window
                 double[] window1 = extractWindow(img1, x, y);
                 double[] window2 = extractWindow(img2, x, y);
@@ -333,6 +428,17 @@ public class SSIMCalculator {
         mean1 /= n;
         mean2 /= n;
 
+        // Quick shortcut for identical windows
+        if (Math.abs(mean1 - mean2) < 1e-6) {
+            boolean identical = true;
+            for (int i = 0; i < n && identical; i++) {
+                if (Math.abs(window1[i] - window2[i]) > 1e-6) {
+                    identical = false;
+                }
+            }
+            if (identical) return 1.0;
+        }
+
         // Compute variances and covariance
         double variance1 = 0, variance2 = 0, covariance = 0;
         for (int i = 0; i < n; i++) {
@@ -356,7 +462,10 @@ public class SSIMCalculator {
         double numerator = (2 * mean1 * mean2 + C1) * (2 * covariance + C2);
         double denominator = (mean1 * mean1 + mean2 * mean2 + C1) * (stdDev1 * stdDev1 + stdDev2 * stdDev2 + C2);
 
-        return numerator / denominator;
+        double ssim = numerator / denominator;
+
+        // Ensure the result is in valid range
+        return Math.max(0.0, Math.min(1.0, ssim));
     }
 
     /**
