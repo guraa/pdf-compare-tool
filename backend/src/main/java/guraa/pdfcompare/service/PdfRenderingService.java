@@ -5,10 +5,9 @@ import guraa.pdfcompare.util.FileUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.rendering.ImageType; // Added import
+import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.stereotype.Service;
 
@@ -22,13 +21,12 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.*; // Added import for locks
-import java.util.concurrent.TimeUnit;
-
+import java.util.concurrent.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Advanced PDF Rendering Service with enhanced error handling,
- * caching, and parallel processing capabilities.
+ * PDF Rendering Service with consistent DPI settings.
+ * This service ensures that all pages are rendered at the same DPI value.
  */
 @Slf4j
 @Service
@@ -37,26 +35,15 @@ public class PdfRenderingService {
     private final ExecutorService executorService;
     private final ConcurrentHashMap<String, PDDocument> documentCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Boolean> renderedPageCache = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Object> pageRenderLocks = new ConcurrentHashMap<>(); // Lock map
+    private final ConcurrentHashMap<String, ReentrantLock> pageRenderLocks = new ConcurrentHashMap<>();
 
-    // Configuration parameters
-    @Value("${app.rendering.dpi:300}")
-    private float renderingDpi;
-
-    @Value("${app.rendering.thumbnail-dpi:72}")
-    private float thumbnailDpi;
-
-    @Value("${app.rendering.image-type:RGB}")
-    private String renderingImageType;
-
-    @Value("${app.rendering.format:png}")
-    private String renderingFormat;
-
-    @Value("${app.rendering.thumbnail-width:200}")
-    private int thumbnailWidth;
-
-    @Value("${app.rendering.thumbnail-height:280}")
-    private int thumbnailHeight;
+    // Fixed configuration parameters
+    private static final float RENDERING_DPI = 150f;
+    private static final float THUMBNAIL_DPI = 72f;
+    private static final String RENDERING_FORMAT = "png";
+    private static final ImageType RENDERING_IMAGE_TYPE = ImageType.RGB;
+    private static final int THUMBNAIL_WIDTH = 200;
+    private static final int THUMBNAIL_HEIGHT = 280;
 
     // Concurrent processing parameters
     private static final int BATCH_SIZE = 4;
@@ -66,10 +53,13 @@ public class PdfRenderingService {
     public PdfRenderingService(
             @Qualifier("renderingExecutor") ExecutorService executorService) {
         this.executorService = executorService;
+
+        log.info("Initialized PdfRenderingService with fixed DPI settings: rendering={}dpi, thumbnail={}dpi",
+                RENDERING_DPI, THUMBNAIL_DPI);
     }
 
     /**
-     * Render a specific page of a PDF document.
+     * Render a specific page of a PDF document with consistent DPI.
      *
      * @param document   The PDF document
      * @param pageNumber The page number (1-based)
@@ -87,10 +77,11 @@ public class PdfRenderingService {
         }
 
         // Get or create lock for this specific page
-        Object pageLock = pageRenderLocks.computeIfAbsent(cacheKey, k -> new Object());
+        ReentrantLock pageLock = pageRenderLocks.computeIfAbsent(cacheKey, k -> new ReentrantLock());
 
         // Synchronize rendering and saving for this page
-        synchronized (pageLock) {
+        pageLock.lock();
+        try {
             // Double-check cache inside synchronized block
             if (renderedPageCache.containsKey(cacheKey) && renderedPage.exists()) {
                 return renderedPage;
@@ -102,17 +93,19 @@ public class PdfRenderingService {
             // Create a temporary file for rendering
             Path tempFile = null;
             try {
-                tempFile = Files.createTempFile(renderedPage.getParentFile().toPath(), "render_", "." + renderingFormat);
+                tempFile = Files.createTempFile(renderedPage.getParentFile().toPath(), "render_", "." + RENDERING_FORMAT);
 
                 try (PDDocument pdDocument = loadDocument(document)) {
                     // Validate page number
                     validatePageNumber(pdDocument, pageNumber);
 
                     PDFRenderer renderer = new PDFRenderer(pdDocument);
-                    BufferedImage image = renderImageSafely(pdDocument, renderer, pageNumber - 1);
+
+                    // Use consistent DPI setting
+                    BufferedImage image = renderImageSafely(pdDocument, renderer, pageNumber - 1, RENDERING_DPI);
 
                     // Write image to temporary file
-                    ImageIO.write(image, renderingFormat, tempFile.toFile());
+                    ImageIO.write(image, RENDERING_FORMAT, tempFile.toFile());
 
                     // Move temporary file to final location
                     Files.move(tempFile, renderedPage.toPath(), StandardCopyOption.REPLACE_EXISTING);
@@ -136,7 +129,9 @@ public class PdfRenderingService {
                 }
                 throw new IOException("Rendering failed", e);
             }
-        } // End synchronized block
+        } finally {
+            pageLock.unlock();
+        }
     }
 
     /**
@@ -200,11 +195,13 @@ public class PdfRenderingService {
             validatePageNumber(pdDocument, pageNumber);
 
             PDFRenderer renderer = new PDFRenderer(pdDocument);
-            BufferedImage originalImage = renderImageSafely(pdDocument, renderer, pageNumber - 1);
+
+            // Use consistent thumbnail DPI
+            BufferedImage originalImage = renderImageSafely(pdDocument, renderer, pageNumber - 1, THUMBNAIL_DPI);
             BufferedImage thumbnailImage = resizeThumbnail(originalImage);
 
             // Write thumbnail
-            ImageIO.write(thumbnailImage, renderingFormat, thumbnailFile);
+            ImageIO.write(thumbnailImage, RENDERING_FORMAT, thumbnailFile);
 
             // Mark as cached
             renderedPageCache.put(cacheKey, true);
@@ -248,30 +245,24 @@ public class PdfRenderingService {
         }
     }
 
-    private BufferedImage renderImageSafely(PDDocument document, PDFRenderer renderer, int pageIndex) throws IOException {
-        ImageType imageType;
+    private BufferedImage renderImageSafely(PDDocument document, PDFRenderer renderer, int pageIndex, float dpi) throws IOException {
         try {
-            imageType = ImageType.valueOf(renderingImageType.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            log.warn("Invalid renderingImageType '{}' configured. Defaulting to RGB.", renderingImageType);
-            imageType = ImageType.RGB;
-        }
-
-        try {
-            return renderer.renderImageWithDPI(pageIndex, renderingDpi, imageType);
+            // Always use the specified DPI and image type for consistency
+            return renderer.renderImageWithDPI(pageIndex, dpi, RENDERING_IMAGE_TYPE);
         } catch (Exception e) {
-            log.warn("Standard rendering failed using ImageType {}, attempting fallback: {}", imageType, e.getMessage());
-            return createFallbackImage(document, pageIndex);
+            log.warn("Standard rendering failed using ImageType {}, attempting fallback: {}",
+                    RENDERING_IMAGE_TYPE, e.getMessage());
+            return createFallbackImage(document, pageIndex, dpi);
         }
     }
 
-    private BufferedImage createFallbackImage(PDDocument document, int pageIndex) throws IOException {
+    private BufferedImage createFallbackImage(PDDocument document, int pageIndex, float dpi) throws IOException {
         PDPage page = document.getPage(pageIndex);
         float width = page.getMediaBox().getWidth();
         float height = page.getMediaBox().getHeight();
 
-        int pixelWidth = Math.round(width * renderingDpi / 72);
-        int pixelHeight = Math.round(height * renderingDpi / 72);
+        int pixelWidth = Math.round(width * dpi / 72);
+        int pixelHeight = Math.round(height * dpi / 72);
 
         BufferedImage image = new BufferedImage(pixelWidth, pixelHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = image.createGraphics();
@@ -283,11 +274,11 @@ public class PdfRenderingService {
     }
 
     private BufferedImage resizeThumbnail(BufferedImage originalImage) {
-        BufferedImage thumbnailImage = new BufferedImage(thumbnailWidth, thumbnailHeight, BufferedImage.TYPE_INT_RGB);
+        BufferedImage thumbnailImage = new BufferedImage(THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = thumbnailImage.createGraphics();
 
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        g.drawImage(originalImage, 0, 0, thumbnailWidth, thumbnailHeight, null);
+        g.drawImage(originalImage, 0, 0, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, null);
         g.dispose();
 
         return thumbnailImage;

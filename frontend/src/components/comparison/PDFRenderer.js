@@ -97,7 +97,7 @@ const PDFRenderer = ({
         const imageRect = image.getBoundingClientRect();
         
         // Calculate the offset of the image within the container
-        const offsetX = imageRect.left - containerRect.left - 80; // Fixed X offset
+        const offsetX = imageRect.left - containerRect.left - 210; // Fixed X offset
         const offsetY = imageRect.top - containerRect.top ; // Fixed Y offset
         
         setContainerOffset({ x: offsetX, y: offsetY });
@@ -214,7 +214,7 @@ const PDFRenderer = ({
       
       // The backend renders the PDF at 150 DPI in fast mode (which is what we're requesting), but the coordinates are in PDF points
       // So we need to apply a DPI correction factor
-      const backendDpi = 72; // This should match the DPI we're requesting in getDocumentPage
+      const backendDpi = 150; // This should match the DPI we're requesting in getDocumentPage
       const pdfPointsPerInch = 72;
       const dpiCorrectionFactor = backendDpi / pdfPointsPerInch; // = 4.1667
       

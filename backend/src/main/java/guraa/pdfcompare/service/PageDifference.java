@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 /**
  * Represents a difference between two pages.
  * This class stores summary information about a difference,
- * such as its type, severity, and description.
+ * such as its type, severity, description, and spatial information.
  */
 @Data
 @Builder
@@ -48,21 +48,25 @@ public class PageDifference {
 
     /**
      * The x-coordinate of the difference.
+     * This is the coordinate for display purposes.
      */
     private double x;
 
     /**
      * The y-coordinate of the difference.
+     * This is the coordinate for display purposes.
      */
     private double y;
 
     /**
      * The width of the difference.
+     * This is the width for display purposes.
      */
     private double width;
 
     /**
      * The height of the difference.
+     * This is the height for display purposes.
      */
     private double height;
 
@@ -136,5 +140,31 @@ public class PageDifference {
      */
     public boolean isMetadataDifference() {
         return "metadata".equals(type);
+    }
+
+    /**
+     * Check if this difference has valid coordinate information.
+     *
+     * @return true if this difference has valid coordinate information, false otherwise
+     */
+    public boolean hasCoordinates() {
+        return width > 0 && height > 0;
+    }
+
+    /**
+     * Set coordinates for this difference.
+     *
+     * @param x The x-coordinate
+     * @param y The y-coordinate
+     * @param width The width
+     * @param height The height
+     * @return This page difference
+     */
+    public PageDifference setCoordinates(double x, double y, double width, double height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        return this;
     }
 }

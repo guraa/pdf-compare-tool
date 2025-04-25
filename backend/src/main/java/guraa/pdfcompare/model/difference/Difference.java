@@ -51,6 +51,30 @@ public abstract class Difference {
     private int comparePageNumber;
 
     /**
+     * The x-coordinate for display purposes.
+     * This represents where the difference should be visualized on the page.
+     */
+    private double x;
+
+    /**
+     * The y-coordinate for display purposes.
+     * This represents where the difference should be visualized on the page.
+     */
+    private double y;
+
+    /**
+     * The width for display purposes.
+     * This represents the width of the visualized difference.
+     */
+    private double width;
+
+    /**
+     * The height for display purposes.
+     * This represents the height of the visualized difference.
+     */
+    private double height;
+
+    /**
      * Check if this difference is an addition.
      *
      * @return true if this difference is an addition, false otherwise
@@ -147,5 +171,31 @@ public abstract class Difference {
      */
     public boolean isMetadataDifference() {
         return "metadata".equals(type);
+    }
+
+    /**
+     * Check if this difference has valid coordinate information for display.
+     *
+     * @return true if the difference has valid coordinates, false otherwise
+     */
+    public boolean hasValidCoordinates() {
+        return width > 0 && height > 0;
+    }
+
+    /**
+     * Set the display coordinates for this difference.
+     *
+     * @param x The x-coordinate
+     * @param y The y-coordinate
+     * @param width The width
+     * @param height The height
+     * @return This difference
+     */
+    public Difference setDisplayCoordinates(double x, double y, double width, double height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        return this;
     }
 }
